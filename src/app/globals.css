@@ -1,0 +1,199 @@
+@import "tailwindcss";
+
+/* ── GSB SWARM — Cyberpunk / Rothko Dark Theme ──────────────────────────────
+   Deep black canvas. Blood red primary. Molten orange energy. Gold accent.
+   Inspired by: Rothko's field paintings + Blade Runner 2049 terminal UI.
+   Tailwind CSS v4 syntax: @theme + CSS custom properties.
+*/
+
+@theme {
+  /* ── Core palette ─────────────────────────────────────────────────────── */
+  --color-background: hsl(0 0% 4%);          /* #0a0a0a — near-void black */
+  --color-foreground: hsl(30 15% 88%);        /* warm off-white */
+
+  --color-card:            hsl(0 0% 7%);      /* #121212 */
+  --color-card-foreground: hsl(30 15% 88%);
+
+  --color-popover:            hsl(0 0% 7%);
+  --color-popover-foreground: hsl(30 15% 88%);
+
+  --color-primary:            hsl(4 85% 44%);   /* #cd1f1f — blood red */
+  --color-primary-foreground: hsl(0 0% 98%);
+
+  --color-secondary:            hsl(0 0% 12%);  /* dark panel */
+  --color-secondary-foreground: hsl(30 10% 75%);
+
+  --color-muted:            hsl(0 0% 10%);
+  --color-muted-foreground: hsl(0 0% 45%);
+
+  --color-accent:            hsl(32 95% 52%);   /* #f28c28 — molten orange */
+  --color-accent-foreground: hsl(0 0% 4%);
+
+  --color-destructive:            hsl(0 80% 50%);
+  --color-destructive-foreground: hsl(0 0% 98%);
+
+  --color-border: hsl(0 0% 14%);
+  --color-input:  hsl(0 0% 12%);
+  --color-ring:   hsl(4 85% 44%);
+
+  --radius: 0.375rem;
+
+  /* ── Chart / data colors ─────────────────────────────────────────────── */
+  --color-chart-1: hsl(4 85% 44%);    /* blood red */
+  --color-chart-2: hsl(32 95% 52%);   /* molten orange */
+  --color-chart-3: hsl(45 95% 55%);   /* gold */
+  --color-chart-4: hsl(196 60% 50%);  /* terminal cyan */
+  --color-chart-5: hsl(270 50% 60%);  /* deep purple */
+}
+
+/* ── CSS custom properties for runtime use (hsl() calls in inline styles) ── */
+:root {
+  --gsb-red:    4 85% 44%;
+  --gsb-orange: 32 95% 52%;
+  --gsb-gold:   45 95% 55%;
+  --gsb-cyan:   196 60% 50%;
+  --gsb-panel:  0 0% 7%;
+  --gsb-border: 0 0% 14%;
+
+  /* shadcn-compatible CSS vars (used by cn() / class-variance-authority) */
+  --background: 0 0% 4%;
+  --foreground: 30 15% 88%;
+  --card: 0 0% 7%;
+  --card-foreground: 30 15% 88%;
+  --popover: 0 0% 7%;
+  --popover-foreground: 30 15% 88%;
+  --primary: 4 85% 44%;
+  --primary-foreground: 0 0% 98%;
+  --secondary: 0 0% 12%;
+  --secondary-foreground: 30 10% 75%;
+  --muted: 0 0% 10%;
+  --muted-foreground: 0 0% 45%;
+  --accent: 32 95% 52%;
+  --accent-foreground: 0 0% 4%;
+  --destructive: 0 80% 50%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 0 0% 14%;
+  --input: 0 0% 12%;
+  --ring: 4 85% 44%;
+  --radius: 0.375rem;
+
+  --chart-1: 4 85% 44%;
+  --chart-2: 32 95% 52%;
+  --chart-3: 45 95% 55%;
+  --chart-4: 196 60% 50%;
+  --chart-5: 270 50% 60%;
+}
+
+/* ── Base resets ────────────────────────────────────────────────────────── */
+*, *::before, *::after {
+  border-color: hsl(var(--border));
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-feature-settings: "rlig" 1, "calt" 1;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Tabular numbers for financial data ─────────────────────────────────── */
+.tabular { font-variant-numeric: tabular-nums lining-nums; }
+
+/* ── GSB Glow effects ────────────────────────────────────────────────────── */
+.glow-red {
+  box-shadow: 0 0 12px hsl(4 85% 44% / 0.3), 0 0 1px hsl(4 85% 44% / 0.6);
+}
+.glow-orange {
+  box-shadow: 0 0 12px hsl(32 95% 52% / 0.25);
+}
+.glow-gold {
+  box-shadow: 0 0 10px hsl(45 95% 55% / 0.2);
+}
+.text-glow-red {
+  text-shadow: 0 0 12px hsl(4 85% 44% / 0.6);
+}
+.text-glow-gold {
+  text-shadow: 0 0 10px hsl(45 95% 55% / 0.5);
+}
+
+/* ── Status pulse dot ───────────────────────────────────────────────────── */
+.status-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.status-dot.active {
+  background: hsl(var(--gsb-red));
+  box-shadow: 0 0 6px hsl(4 85% 44% / 0.9);
+  animation: pulse-red 1.8s infinite;
+}
+.status-dot.idle   { background: hsl(var(--gsb-gold)); }
+.status-dot.error  { background: hsl(0 80% 50%); }
+
+@keyframes pulse-red {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.6; transform: scale(0.8); }
+}
+
+/* ── Agent card border glow on hover ────────────────────────────────────── */
+.agent-card {
+  transition: box-shadow 220ms ease, border-color 220ms ease;
+}
+.agent-card:hover {
+  border-color: hsl(4 85% 44% / 0.5) !important;
+  box-shadow: 0 0 20px hsl(4 85% 44% / 0.12), 0 0 1px hsl(4 85% 44% / 0.4);
+}
+
+/* ── Scrollbar ────────────────────────────────────────────────────────────  */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: hsl(0 0% 20%); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: hsl(4 85% 44% / 0.5); }
+
+/* ── Mono utility ─────────────────────────────────────────────────────────  */
+.mono {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+  font-size: 0.82em;
+  letter-spacing: -0.01em;
+}
+
+/* ── Scan-line texture overlay for cyberpunk feel ──────────────────────── */
+.scanlines::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    hsl(0 0% 0% / 0.04) 2px,
+    hsl(0 0% 0% / 0.04) 4px
+  );
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+/* ── Log timeline entry ──────────────────────────────────────────────────  */
+.log-line {
+  border-left: 2px solid hsl(var(--gsb-border));
+  padding-left: 12px;
+  position: relative;
+}
+.log-line::before {
+  content: '';
+  position: absolute;
+  left: -5px; top: 7px;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: hsl(var(--gsb-border));
+}
+.log-line.job    ::before { background: hsl(var(--gsb-red)); }
+.log-line.alert  ::before { background: hsl(var(--gsb-gold)); }
+.log-line.payout ::before { background: hsl(var(--gsb-orange)); }
+.log-line.config ::before { background: hsl(0 0% 35%); }

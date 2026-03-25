@@ -1,0 +1,161 @@
+import type { Agent, AcpJob, Withdrawal, ActivityLog, ApiConnection } from "@/types";
+
+// ── Default Agents ───────────────────────────────────────────────────────────
+export const DEFAULT_AGENTS: Agent[] = [
+  {
+    id: "oracle",
+    name: "GSB Compute Oracle",
+    shortName: "Oracle",
+    description: "Instant micro-quotes & x402 lending links. Responds to compute price requests from any agent on the Virtuals Protocol network in real time.",
+    role: "Quote Engine",
+    icon: "⚡",
+    color: "text-yellow-400",
+    enabled: true,
+    status: "idle",
+    pricePerJob: 0.002,
+    subscriptionPrice: 2.99,
+    jobsCompleted: 0,
+    totalEarned: 0,
+    lastActiveAt: null,
+    acpAgentId: "gsb-compute-oracle",
+    acpJobUrl: "https://app.virtuals.io/acp/gsb-compute-oracle",
+    x402Endpoint: "https://gsb.bank/x402/oracle",
+    webhookUrl: "/api/webhook",
+    acpCategory: "Compute / Finance",
+    acpDescription: "Instant micro-quote engine for Agent Gas Bible ($GSB) compute resources. Real-time pricing via x402 protocol, lending links against the GSB tokenized compute bank on Base. $0.002 per quote.",
+    acpCapabilities: ["micro-quote", "x402-lending-link", "compute-pricing", "gsb-bank-integration"],
+  },
+  {
+    id: "preacher",
+    name: "GSB Marketing Preacher",
+    shortName: "Preacher",
+    description: "Creates viral X threads, promotional posts, and Butler-style promotions for $GSB. Web3-native copy and ecosystem marketing at scale.",
+    role: "Growth & Virality",
+    icon: "📢",
+    color: "text-orange-400",
+    enabled: true,
+    status: "idle",
+    pricePerJob: 0.05,
+    subscriptionPrice: 2.99,
+    jobsCompleted: 0,
+    totalEarned: 0,
+    lastActiveAt: null,
+    acpAgentId: "gsb-marketing-preacher",
+    acpJobUrl: "https://app.virtuals.io/acp/gsb-marketing-preacher",
+    x402Endpoint: "https://gsb.bank/x402/preacher",
+    webhookUrl: "/api/webhook",
+    acpCategory: "Marketing / Content",
+    acpDescription: "Viral X threads, Butler promotions, and Web3-native copy for Agent Gas Bible ($GSB). Specializes in Virtuals Protocol ecosystem growth. $0.05 per content piece.",
+    acpCapabilities: ["viral-thread", "x-posting", "butler-promo", "web3-copywriting"],
+  },
+  {
+    id: "onboarding",
+    name: "GSB Onboarding Broker",
+    shortName: "Onboarding",
+    description: "Walks new agents through their first compute borrow from the GSB bank — x402 setup, ACP integration, and first transaction guidance.",
+    role: "New User Acquisition",
+    icon: "🚀",
+    color: "text-blue-400",
+    enabled: true,
+    status: "idle",
+    pricePerJob: 0.10,
+    subscriptionPrice: 2.99,
+    jobsCompleted: 0,
+    totalEarned: 0,
+    lastActiveAt: null,
+    acpAgentId: "gsb-onboarding-broker",
+    acpJobUrl: "https://app.virtuals.io/acp/gsb-onboarding-broker",
+    x402Endpoint: "https://gsb.bank/x402/onboarding",
+    webhookUrl: "/api/webhook",
+    acpCategory: "Onboarding / Support",
+    acpDescription: "Step-by-step onboarding for new AI agents entering the GSB ecosystem. First borrow guide, x402 setup, ACP integration. $0.10 per session or $2.99/month.",
+    acpCapabilities: ["agent-onboarding", "first-borrow-guide", "x402-setup", "acp-integration"],
+  },
+  {
+    id: "alert",
+    name: "GSB Alert Manager",
+    shortName: "Alert",
+    description: "Sends real-time cheap-compute alerts and manages long-term agent relationships via Telegram & X DMs. Tracks usage and delivers personalized offers.",
+    role: "Retention & Alerts",
+    icon: "🔔",
+    color: "text-green-400",
+    enabled: true,
+    status: "idle",
+    pricePerJob: 0.01,
+    subscriptionPrice: 2.99,
+    jobsCompleted: 0,
+    totalEarned: 0,
+    lastActiveAt: null,
+    acpAgentId: "gsb-alert-manager",
+    acpJobUrl: "https://app.virtuals.io/acp/gsb-alert-manager",
+    x402Endpoint: "https://gsb.bank/x402/alert",
+    webhookUrl: "/api/webhook",
+    acpCategory: "Monitoring / CRM",
+    acpDescription: "Real-time cheap-compute alerts via Telegram and X. Agent relationship management, usage tracking, personalized offers. $0.01 per alert.",
+    acpCapabilities: ["cheap-compute-alert", "telegram-notify", "x-dm", "relationship-mgmt"],
+  },
+];
+
+// ── Default API Connections ──────────────────────────────────────────────────
+export const DEFAULT_CONNECTIONS: ApiConnection[] = [
+  { key: "telegram_bot_token",  label: "Telegram Bot Token",      value: "", category: "telegram", placeholder: "1234567890:ABCDEF...",              description: "Your Telegram bot token from @BotFather", isSecret: true },
+  { key: "telegram_chat_id",    label: "Telegram Chat ID",        value: "", category: "telegram", placeholder: "-1001234567890",                   description: "Chat/channel ID to receive alerts", isSecret: false },
+  { key: "x_api_key",           label: "X (Twitter) API Key",     value: "", category: "x",        placeholder: "your_api_key_here",                description: "X API v2 key for posting threads", isSecret: true },
+  { key: "x_api_secret",        label: "X API Secret",            value: "", category: "x",        placeholder: "your_api_secret_here",             description: "X API v2 secret", isSecret: true },
+  { key: "x_access_token",      label: "X Access Token",          value: "", category: "x",        placeholder: "your_access_token",                description: "Your X access token (write-enabled)", isSecret: true },
+  { key: "x_access_secret",     label: "X Access Secret",         value: "", category: "x",        placeholder: "your_access_secret",               description: "Your X access token secret", isSecret: true },
+  { key: "x402_base_url",       label: "x402 Base URL",           value: "https://gsb.bank/x402", category: "x402", placeholder: "https://gsb.bank/x402", description: "Base URL for your GSB x402 payment endpoints", isSecret: false },
+  { key: "gsb_bank_address",    label: "GSB Bank Address (Base)", value: "", category: "wallet",   placeholder: "0x...your_GSB_bank_address",        description: "Your Agent Gas Bible tokenized bank contract on Base", isSecret: false },
+  { key: "my_wallet",           label: "My Base Wallet",          value: "", category: "wallet",   placeholder: "0x...personal_wallet",             description: "Your personal Base wallet for USDC withdrawals", isSecret: false },
+  { key: "acp_webhook_secret",  label: "ACP Webhook Secret",      value: "", category: "acp",      placeholder: "whsec_...",                        description: "Virtuals ACP webhook signing secret", isSecret: true },
+  { key: "virtuals_api_key",    label: "Virtuals Protocol API Key", value: "", category: "virtuals", placeholder: "virt_...",                       description: "Your API key from app.virtuals.io", isSecret: true },
+  { key: "base_rpc_url",        label: "Base RPC URL",            value: "https://mainnet.base.org", category: "wallet", placeholder: "https://mainnet.base.org", description: "Base network RPC endpoint for on-chain reads", isSecret: false },
+];
+
+// ── Seed demo jobs ───────────────────────────────────────────────────────────
+export function generateSeedJobs(): AcpJob[] {
+  const now = Date.now();
+  return [
+    {
+      id: "job_001", agentId: "oracle", agentName: "Oracle",
+      jobRef: "acp_oracle_2834", usdcAmount: 0.002, status: "confirmed",
+      type: "micro", createdAt: new Date(now - 3_600_000).toISOString(),
+      confirmedAt: new Date(now - 3_500_000).toISOString(),
+    },
+    {
+      id: "job_002", agentId: "preacher", agentName: "Preacher",
+      jobRef: "acp_preacher_5912", usdcAmount: 0.05, status: "confirmed",
+      type: "micro", createdAt: new Date(now - 7_200_000).toISOString(),
+      confirmedAt: new Date(now - 7_000_000).toISOString(),
+    },
+    {
+      id: "job_003", agentId: "onboarding", agentName: "Onboarding",
+      jobRef: "acp_sub_0192", usdcAmount: 2.99, status: "confirmed",
+      type: "subscription", createdAt: new Date(now - 86_400_000).toISOString(),
+      confirmedAt: new Date(now - 85_000_000).toISOString(),
+    },
+    {
+      id: "job_004", agentId: "alert", agentName: "Alert",
+      jobRef: "acp_alert_3301", usdcAmount: 0.01, status: "confirmed",
+      type: "micro", createdAt: new Date(now - 1_800_000).toISOString(),
+      confirmedAt: new Date(now - 1_700_000).toISOString(),
+    },
+    {
+      id: "job_005", agentId: "oracle", agentName: "Oracle",
+      jobRef: "acp_oracle_9147", usdcAmount: 0.002, status: "pending",
+      type: "micro", createdAt: new Date(now - 300_000).toISOString(),
+      confirmedAt: null,
+    },
+  ];
+}
+
+export function generateSeedLogs(): ActivityLog[] {
+  const now = Date.now();
+  return [
+    { id: "log_001", agentId: "oracle",     type: "job",    message: "Micro-quote delivered",           detail: "0.002 USDC · acp_oracle_2834",      createdAt: new Date(now - 3_500_000).toISOString() },
+    { id: "log_002", agentId: "preacher",   type: "job",    message: "Viral thread posted",              detail: "0.05 USDC · acp_preacher_5912",     createdAt: new Date(now - 7_000_000).toISOString() },
+    { id: "log_003", agentId: "onboarding", type: "job",    message: "New subscriber onboarded",         detail: "2.99 USDC subscription · acp_sub_0192", createdAt: new Date(now - 85_000_000).toISOString() },
+    { id: "log_004", agentId: "alert",      type: "alert",  message: "Cheap-compute alert fired",       detail: "Telegram notification sent",        createdAt: new Date(now - 1_700_000).toISOString() },
+    { id: "log_005", agentId: "oracle",     type: "job",    message: "Quote request received (pending)", detail: "0.002 USDC · acp_oracle_9147",      createdAt: new Date(now - 300_000).toISOString() },
+  ];
+}
