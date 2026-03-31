@@ -59,8 +59,23 @@ export async function runAlert({ mission, context }: AlertInput): Promise<AlertR
   }
 
   if (!process.env.ANTHROPIC_API_KEY) {
+    const fallbackResult = `[Alert Fallback — no API key]\n\n${extraContext}\n--- TELEGRAM ALERT ---\n*$${token} Alert* 🚨\n${priceData}\nMonitor via GSB Alert Manager\n#AgentGasBible #Base\n\n--- X DM COPY ---\n🚨 $${token} price update: ${priceData}. Powered by GSB Alert Manager. #AgentGasBible`;
+
+    // Fire-and-forget Telegram delivery
+    const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
+    const telegramChatId = process.env.TELEGRAM_CHANNEL_ID;
+    if (telegramToken && telegramChatId) {
+      const telegramMatch = fallbackResult.match(/---\s*TELEGRAM ALERT\s*---\n?([\s\S]*?)(?:---\s*X DM COPY\s*---|$)/i);
+      const telegramText = telegramMatch ? telegramMatch[1].trim() : fallbackResult.slice(0, 400);
+      fetch(`https://api.telegram.org/bot${telegramToken}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: telegramChatId, text: telegramText, parse_mode: "Markdown" }),
+      }).catch((e) => console.error("[Alert] Telegram send failed:", e));
+    }
+
     return {
-      result: `[Alert Fallback — no API key]\n\n${extraContext}\n--- TELEGRAM ALERT ---\n*$${token} Alert* 🚨\n${priceData}\nMonitor via GSB Alert Manager\n#AgentGasBible #Base\n\n--- X DM COPY ---\n🚨 $${token} price update: ${priceData}. Powered by GSB Alert Manager. #AgentGasBible`,
+      result: fallbackResult,
       usdcEarned: 0.01,
     };
   }
@@ -82,6 +97,20 @@ export async function runAlert({ mission, context }: AlertInput): Promise<AlertR
     .filter((b): b is Anthropic.TextBlock => b.type === "text")
     .map((b) => b.text)
     .join("\n");
+
+  // Fire-and-forget Telegram delivery
+  const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
+  const telegramChatId = process.env.TELEGRAM_CHANNEL_ID;
+  if (telegramToken && telegramChatId) {
+    // Extract the Telegram section from result
+    const telegramMatch = result.match(/---\s*TELEGRAM ALERT\s*---\n?([\s\S]*?)(?:---\s*X DM COPY\s*---|$)/i);
+    const telegramText = telegramMatch ? telegramMatch[1].trim() : result.slice(0, 400);
+    fetch(`https://api.telegram.org/bot${telegramToken}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: telegramChatId, text: telegramText, parse_mode: "Markdown" }),
+    }).catch((e) => console.error("[Alert] Telegram send failed:", e));
+  }
 
   return { result, usdcEarned: 0.01 };
 }

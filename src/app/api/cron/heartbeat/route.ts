@@ -60,6 +60,21 @@ export async function GET(request: NextRequest) {
     });
     completeJob(alertJobId, alertOut.result, alertOut.usdcEarned);
     results.alert = { status: "ok", result: alertOut.result.slice(0, 200) };
+
+    // Fire-and-forget Telegram alert from cron
+    const cronTelegramToken = process.env.TELEGRAM_BOT_TOKEN;
+    const cronTelegramChatId = process.env.TELEGRAM_CHANNEL_ID;
+    if (cronTelegramToken && cronTelegramChatId && alertOut.result) {
+      const telegramMatch = alertOut.result.match(/---\s*TELEGRAM ALERT\s*---\n?([\s\S]*?)(?:---\s*X DM COPY\s*---|$)/i);
+      const telegramText = telegramMatch ? telegramMatch[1].trim() : alertOut.result.slice(0, 400);
+      if (telegramText.length > 10) {
+        fetch(`https://api.telegram.org/bot${cronTelegramToken}/sendMessage`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chat_id: cronTelegramChatId, text: telegramText, parse_mode: "Markdown" }),
+        }).catch((e) => console.error("[Cron] Telegram send failed:", e));
+      }
+    }
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     failJob(alertJobId, msg);
