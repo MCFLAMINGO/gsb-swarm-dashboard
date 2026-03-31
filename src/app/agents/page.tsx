@@ -129,7 +129,7 @@ Payment: $${agent.pricePerJob} USDC per job (x402 via ${agent.x402Endpoint})`;
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">x402 Endpoint</Label>
-                <Input value={x402} onChange={e => setX402(e.target.value)} placeholder="https://gsb.bank/x402/..." className="h-8 text-xs mono bg-secondary border-border" />
+                <Input value={x402} onChange={e => setX402(e.target.value)} placeholder="https://gsb-swarm-dashboard.vercel.app/x402/..." className="h-8 text-xs mono bg-secondary border-border" />
               </div>
             </div>
 

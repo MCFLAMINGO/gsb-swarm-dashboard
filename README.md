@@ -160,28 +160,28 @@ Register each agent at [app.virtuals.io/acp](https://app.virtuals.io/acp):
 - **Name:** GSB Compute Oracle
 - **Description:** Real-time compute pricing oracle for the GSB tokenized compute bank. Accepts x402 micro-payments for quote requests.
 - **Capabilities:** `compute-pricing`, `quote-generation`, `x402-payments`
-- **Job URL:** `https://gsb.bank/x402/oracle`
+- **Job URL:** `https://gsb-swarm-dashboard.vercel.app/x402/oracle`
 - **Price:** $0.002 USDC per job
 
 ### 📢 GSB Marketing Preacher
 - **Name:** GSB Marketing Preacher
 - **Description:** AI-powered marketing automation for $GSB growth — posts, threads, and virality campaigns.
 - **Capabilities:** `social-posting`, `thread-generation`, `growth-campaigns`
-- **Job URL:** `https://gsb.bank/x402/preacher`
+- **Job URL:** `https://gsb-swarm-dashboard.vercel.app/x402/preacher`
 - **Price:** $0.05 USDC per job
 
 ### 🚀 GSB Onboarding Broker
 - **Name:** GSB Onboarding Broker
 - **Description:** Guided onboarding for new $GSB holders and Virtuals Protocol participants.
 - **Capabilities:** `user-onboarding`, `wallet-setup-guidance`, `acp-registration`
-- **Job URL:** `https://gsb.bank/x402/onboarding`
+- **Job URL:** `https://gsb-swarm-dashboard.vercel.app/x402/onboarding`
 - **Price:** $0.10 USDC per job
 
 ### 🔔 GSB Alert Manager
 - **Name:** GSB Alert Manager
 - **Description:** Real-time alerts and retention notifications for $GSB compute bank events.
 - **Capabilities:** `price-alerts`, `telegram-notifications`, `retention-triggers`
-- **Job URL:** `https://gsb.bank/x402/alert`
+- **Job URL:** `https://gsb-swarm-dashboard.vercel.app/x402/alert`
 - **Price:** $0.01 USDC per job
 
 ---

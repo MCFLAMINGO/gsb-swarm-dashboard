@@ -512,7 +512,7 @@ export default function SettingsPage() {
                 { label: "Network",    value: "Base (Mainnet)" },
                 { label: "Protocol",   value: "Virtuals ACP" },
                 { label: "Token",      value: "$GSB" },
-                { label: "x402 Base",  value: "gsb.bank/x402" },
+                { label: "x402 Base",  value: "gsb-swarm-dashboard.vercel.app/x402" },
               ].map(({ label, value }) => (
                 <div key={label} className="flex justify-between items-center px-3 py-2 rounded-lg bg-secondary">
                   <span className="text-muted-foreground">{label}</span>
