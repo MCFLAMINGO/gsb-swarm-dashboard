@@ -1,19 +1,40 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Header from "@/components/layout/Header";
 import { useStore } from "@/store/useStore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Play, Save, ChevronDown, ChevronUp, Copy, Check } from "lucide-react";
+import { Play, Save, ChevronDown, ChevronUp, Copy, Check, Send, Loader2, Radio } from "lucide-react";
 import { toast } from "sonner";
 import type { Agent } from "@/types";
 
-function AgentDetailCard({ agent }: { agent: Agent }) {
+// ── Types for live feed ─────────────────────────────────────────────────────
+interface LiveJob {
+  jobId: string;
+  agentId: string;
+  mission: string;
+  status: string;
+  result?: string;
+  usdcEarned?: number;
+  createdAt: string;
+  completedAt?: string;
+}
+
+// ── Agent Detail Card (existing) ────────────────────────────────────────────
+function AgentDetailCard({ agent, onDispatch }: { agent: Agent; onDispatch: (agentId: string) => void }) {
   const { updateAgent, simulateJob } = useStore();
   const [expanded, setExpanded] = useState(false);
   const [price, setPrice] = useState(String(agent.pricePerJob));
@@ -91,7 +112,7 @@ Payment: $${agent.pricePerJob} USDC per job (x402 via ${agent.x402Endpoint})`;
               <div className="space-y-1.5">
                 <Label className="text-xs">Per-Job Price (USDC)</Label>
                 <Input value={price} onChange={e => setPrice(e.target.value)} type="number" min="0.002" max="0.25" step="0.001" className="h-8 text-sm tabular bg-secondary border-border" data-testid={`input-price-${agent.id}`} />
-                <p className="text-[10px] text-muted-foreground">Range: $0.002 – $0.25</p>
+                <p className="text-[10px] text-muted-foreground">Range: $0.002 - $0.25</p>
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Subscription/mo (USDC)</Label>
@@ -123,6 +144,12 @@ Payment: $${agent.pricePerJob} USDC per job (x402 via ${agent.x402Endpoint})`;
               >
                 <Play size={11} /> Simulate Job
               </Button>
+              <Button size="sm" variant="outline" className="gap-1.5 text-xs h-8 hover:border-orange-400/50 hover:text-orange-400"
+                onClick={() => onDispatch(agent.id)}
+                disabled={!agent.enabled}
+              >
+                <Send size={11} /> Dispatch
+              </Button>
             </div>
 
             {/* ACP Registration text */}
@@ -143,8 +170,264 @@ Payment: $${agent.pricePerJob} USDC per job (x402 via ${agent.x402Endpoint})`;
   );
 }
 
+// ── Dispatch Modal ──────────────────────────────────────────────────────────
+function DispatchModal({
+  agentId,
+  open,
+  onOpenChange,
+}: {
+  agentId: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [mission, setMission] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const [jobId, setJobId] = useState<string | null>(null);
+
+  const agentNames: Record<string, string> = {
+    oracle: "GSB Compute Oracle",
+    preacher: "GSB Marketing Preacher",
+    onboarding: "GSB Onboarding Broker",
+    alert: "GSB Alert Manager",
+  };
+
+  const dispatch = async () => {
+    if (!mission.trim()) return;
+    setLoading(true);
+    setResult(null);
+    setJobId(null);
+
+    try {
+      const res = await fetch("/api/dispatch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentId, mission: mission.trim() }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setResult(`Error: ${data.error}`);
+        setLoading(false);
+        return;
+      }
+
+      setJobId(data.jobId);
+      toast.success(`Job dispatched: ${data.jobId}`);
+
+      // Poll for result
+      let attempts = 0;
+      const poll = setInterval(async () => {
+        attempts++;
+        try {
+          const jobRes = await fetch(`/api/jobs/${data.jobId}`);
+          const job = await jobRes.json();
+          if (job.status === "completed" || job.status === "failed") {
+            clearInterval(poll);
+            setResult(job.result || "No result returned");
+            setLoading(false);
+          } else if (attempts > 60) {
+            clearInterval(poll);
+            setResult("Timeout — job is still running. Check /api/jobs/" + data.jobId);
+            setLoading(false);
+          }
+        } catch {
+          // Keep polling
+        }
+      }, 1000);
+    } catch (err) {
+      setResult(`Network error: ${err instanceof Error ? err.message : "Unknown"}`);
+      setLoading(false);
+    }
+  };
+
+  // Reset state when modal closes
+  useEffect(() => {
+    if (!open) {
+      setMission("");
+      setResult(null);
+      setJobId(null);
+      setLoading(false);
+    }
+  }, [open]);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Dispatch Mission</DialogTitle>
+          <DialogDescription>
+            Send a real mission to <strong>{agentNames[agentId] || agentId}</strong>
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Mission</Label>
+            <Textarea
+              value={mission}
+              onChange={e => setMission(e.target.value)}
+              placeholder={
+                agentId === "oracle" ? "Get a compute quote for running GPT-4 inference on Base..." :
+                agentId === "preacher" ? "Write a viral X thread about $GSB hitting new ATH..." :
+                agentId === "onboarding" ? "Write a cold email to a DeFi protocol founder about GSB..." :
+                "Generate a $GSB price alert for Telegram and X..."
+              }
+              className="text-sm bg-secondary border-border"
+              rows={3}
+              disabled={loading}
+            />
+          </div>
+
+          {jobId && (
+            <p className="text-[10px] text-muted-foreground font-mono">Job ID: {jobId}</p>
+          )}
+
+          {result && (
+            <div className="rounded-md border border-border bg-secondary/40 p-3 max-h-64 overflow-y-auto">
+              <pre className="text-xs text-foreground whitespace-pre-wrap leading-relaxed">{result}</pre>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button
+            size="sm"
+            className="gap-1.5"
+            onClick={dispatch}
+            disabled={loading || !mission.trim()}
+          >
+            {loading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+            {loading ? "Running..." : "Dispatch"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Time ago helper ─────────────────────────────────────────────────────────
+function timeAgo(dateStr: string): string {
+  const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+// ── Live Feed ───────────────────────────────────────────────────────────────
+function LiveFeed() {
+  const [jobs, setJobs] = useState<LiveJob[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const agentIcons: Record<string, string> = {
+    oracle: "\u26A1",
+    preacher: "\uD83D\uDCE2",
+    onboarding: "\uD83D\uDE80",
+    alert: "\uD83D\uDD14",
+  };
+
+  const fetchJobs = useCallback(async () => {
+    try {
+      const res = await fetch("/api/webhook/jobs");
+      const data = await res.json();
+      setJobs(data.jobs || []);
+    } catch {
+      // Silent fail
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchJobs();
+    const interval = setInterval(fetchJobs, 30000);
+    return () => clearInterval(interval);
+  }, [fetchJobs]);
+
+  const agentNames: Record<string, string> = {
+    oracle: "Oracle",
+    preacher: "Preacher",
+    onboarding: "Onboarding",
+    alert: "Alert",
+  };
+
+  if (loading) {
+    return (
+      <div className="rounded-lg border border-border bg-card p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Radio size={14} className="text-primary animate-pulse" />
+          <span className="text-sm font-bold">Live Feed</span>
+        </div>
+        <p className="text-xs text-muted-foreground">Loading...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-4">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Radio size={14} className="text-primary" />
+          <span className="text-sm font-bold">Live Feed</span>
+          <span className="text-[10px] text-muted-foreground">Auto-refreshes every 30s</span>
+        </div>
+        <span className="text-[10px] text-muted-foreground tabular">{jobs.length} jobs</span>
+      </div>
+
+      {jobs.length === 0 ? (
+        <p className="text-xs text-muted-foreground py-4 text-center">
+          No jobs yet. Dispatch a mission to see it here.
+        </p>
+      ) : (
+        <div className="space-y-1.5">
+          {jobs.slice(0, 10).map(job => (
+            <div key={job.jobId} className="flex items-start gap-2 p-2 rounded-md bg-secondary/30 hover:bg-secondary/50 transition-colors">
+              <span className="text-sm mt-0.5">
+                {agentIcons[job.agentId] || "\u2753"}
+              </span>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold">{agentNames[job.agentId] || job.agentId}</span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                    job.status === "completed" ? "bg-green-500/10 text-green-400" :
+                    job.status === "failed" ? "bg-red-500/10 text-red-400" :
+                    "bg-yellow-500/10 text-yellow-400"
+                  }`}>
+                    {job.status}
+                  </span>
+                  {job.usdcEarned != null && job.usdcEarned > 0 && (
+                    <span className="text-[10px] text-primary font-semibold tabular">
+                      +${job.usdcEarned.toFixed(4)}
+                    </span>
+                  )}
+                  <span className="text-[10px] text-muted-foreground ml-auto">
+                    {timeAgo(job.completedAt || job.createdAt)}
+                  </span>
+                </div>
+                <p className="text-[10px] text-muted-foreground truncate">
+                  {job.mission.slice(0, 60)}{job.mission.length > 60 ? "..." : ""}
+                </p>
+                {job.result && (
+                  <p className="text-[10px] text-foreground/70 truncate mt-0.5">
+                    {job.result.slice(0, 100)}{job.result.length > 100 ? "..." : ""}
+                  </p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main Page ───────────────────────────────────────────────────────────────
 export default function AgentsPage() {
   const agents = useStore(s => s.agents);
+  const [dispatchAgent, setDispatchAgent] = useState<string | null>(null);
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -156,14 +439,28 @@ export default function AgentsPage() {
         {/* Pricing reference */}
         <div className="rounded-md border px-4 py-3 text-xs flex items-start gap-3"
           style={{ background: "hsl(4 85% 44% / 0.06)", borderColor: "hsl(4 85% 44% / 0.2)", color: "hsl(30 15% 88%)" }}>
-          <span className="text-xl">💰</span>
+          <span className="text-xl">&#x1F4B0;</span>
           <div>
             <div className="font-semibold mb-0.5">GSB Micro-Pricing Strategy</div>
-            <p className="text-muted-foreground">Keep per-job prices <strong className="text-foreground">$0.002–$0.25</strong> and subscriptions at <strong className="text-foreground">$2.99/month</strong>. Low friction = more volume = more USDC flowing to your GSB bank. Expand any card below to configure it, then click "ACP Registration Text" to get copy-paste text for <a href="https://app.virtuals.io/acp" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">app.virtuals.io/acp</a>.</p>
+            <p className="text-muted-foreground">Keep per-job prices <strong className="text-foreground">$0.002-$0.25</strong> and subscriptions at <strong className="text-foreground">$2.99/month</strong>. Low friction = more volume = more USDC flowing to your GSB bank. Expand any card below to configure it, then click &quot;ACP Registration Text&quot; to get copy-paste text for <a href="https://app.virtuals.io/acp" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">app.virtuals.io/acp</a>.</p>
           </div>
         </div>
 
-        {agents.map(a => <AgentDetailCard key={a.id} agent={a} />)}
+        {agents.map(a => (
+          <AgentDetailCard key={a.id} agent={a} onDispatch={setDispatchAgent} />
+        ))}
+
+        {/* Live Feed */}
+        <LiveFeed />
+
+        {/* Dispatch Modal */}
+        {dispatchAgent && (
+          <DispatchModal
+            agentId={dispatchAgent}
+            open={!!dispatchAgent}
+            onOpenChange={(open) => { if (!open) setDispatchAgent(null); }}
+          />
+        )}
       </main>
     </div>
   );

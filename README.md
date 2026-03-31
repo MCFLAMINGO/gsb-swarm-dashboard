@@ -79,14 +79,47 @@ git push -u origin main
 
 In your Vercel project → **Settings → Environment Variables**, add:
 
-| Variable | Value |
-|---|---|
-| `NEXT_PUBLIC_APP_URL` | `https://your-project.vercel.app` |
-| `ACP_WEBHOOK_SECRET` | Generate a random 32-char secret |
-| `TELEGRAM_BOT_TOKEN` | From @BotFather (optional) |
-| `TELEGRAM_CHAT_ID` | Your Telegram chat ID (optional) |
+| Variable | Value | Required? |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | Claude brain — get from [console.anthropic.com](https://console.anthropic.com) | Yes (for real agent execution) |
+| `DISPATCH_SECRET` | Any random string — share with Railway CEO | Recommended |
+| `RAILWAY_CEO_URL` | `https://gsb-swarm-production.up.railway.app` | Optional (for callbacks) |
+| `CRON_SECRET` | Any random string — Vercel uses this to auth cron calls | Recommended |
+| `NEXT_PUBLIC_APP_URL` | `https://your-project.vercel.app` | Optional |
+| `TELEGRAM_BOT_TOKEN` | From @BotFather — for Alert Manager to send real Telegrams | Optional |
+| `TELEGRAM_CHAT_ID` | Your Telegram chat ID | Optional |
 
-All other variables are optional until you connect the real ACP backend.
+Without `ANTHROPIC_API_KEY`, agents return rule-based fallback responses (still functional for testing).
+
+---
+
+## API Endpoints
+
+### POST /api/dispatch — Send a mission to an agent
+```bash
+curl -X POST https://your-project.vercel.app/api/dispatch \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_DISPATCH_SECRET" \
+  -d '{
+    "agentId": "preacher",
+    "mission": "Write a viral X thread about $GSB",
+    "callbackUrl": "https://your-callback.com/api/brief"
+  }'
+# → {"jobId":"job_...","status":"accepted"}
+```
+
+### GET /api/jobs/:jobId — Poll for job result
+```bash
+curl https://your-project.vercel.app/api/jobs/job_123456_abc123
+```
+
+### GET /api/webhook/jobs — Last 50 completed jobs
+```bash
+curl https://your-project.vercel.app/api/webhook/jobs
+```
+
+### GET /api/cron/heartbeat — Hourly self-start jobs (Vercel Cron)
+Runs automatically every hour. Generates: Preacher post, Alert check, Oracle cache refresh.
 
 ---
 
