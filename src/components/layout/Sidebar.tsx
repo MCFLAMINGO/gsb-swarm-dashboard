@@ -4,12 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
-  LayoutDashboard, Bot, DollarSign, Plug, Settings, ChevronLeft, ChevronRight
+  LayoutDashboard, Bot, DollarSign, Plug, Settings, ChevronLeft, ChevronRight, Gauge
 } from "lucide-react";
 import { useState } from "react";
 
 const NAV = [
   { href: "/",            label: "Swarm Overview", icon: LayoutDashboard, tip: "Live status of all 4 broker agents" },
+  { href: "/drivers-seat",label: "Driver's Seat",  icon: Gauge,           tip: "AI operator console — fire jobs, see output" },
   { href: "/agents",      label: "Agents",         icon: Bot,             tip: "Individual agent config & simulate" },
   { href: "/earnings",    label: "Earnings",       icon: DollarSign,      tip: "USDC earned, payouts, withdraw" },
   { href: "/connections", label: "API Connections",icon: Plug,            tip: "Telegram, X, x402, wallet keys" },
