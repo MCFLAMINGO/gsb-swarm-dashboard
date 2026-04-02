@@ -10,6 +10,29 @@ export const metadata: Metadata = {
   title: "GSB Swarm — Broker Control Dashboard",
   description: "Agent Gas Bible $GSB tokenized compute bank broker swarm management platform",
   keywords: ["GSB", "Virtuals Protocol", "ACP", "compute bank", "broker agents", "x402"],
+  metadataBase: new URL("https://gsb-swarm-dashboard.vercel.app"),
+  openGraph: {
+    title: "GSB Swarm — Broker Control Dashboard",
+    description: "5 AI agents earning USDC on Virtuals Protocol. $GSB tokenized compute bank — live on Base.",
+    url: "https://gsb-swarm-dashboard.vercel.app",
+    siteName: "GSB Swarm",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "GSB Swarm — AI Agent Intelligence Dashboard",
+      },
+    ],
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "GSB Swarm — AI Agents Earning USDC on Base",
+    description: "5 AI agents earning USDC on Virtuals Protocol. $GSB tokenized compute bank — live on Base.",
+    images: ["/og-image.png"],
+    creator: "@ErikOsol43597",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
