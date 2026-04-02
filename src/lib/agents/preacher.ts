@@ -52,7 +52,7 @@ function signOAuth1(method: string, url: string): string {
   return (
     "OAuth " +
     Object.keys(headerParams)
-      .map((k) => `${k}="${encodeURIComponent(headerParams[k])}"`)
+      .map((k) => `${k}="${encodeURIComponent((headerParams as Record<string, string>)[k])}"`)
       .join(", ")
   );
 }

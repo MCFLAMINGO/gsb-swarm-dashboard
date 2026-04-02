@@ -4,13 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
-  LayoutDashboard, Bot, DollarSign, Plug, Settings, ChevronLeft, ChevronRight, Gauge
+  LayoutDashboard, Bot, DollarSign, Plug, Settings, ChevronLeft, ChevronRight, Gauge, Activity
 } from "lucide-react";
 import { useState } from "react";
 
 const NAV = [
   { href: "/",            label: "Swarm Overview", icon: LayoutDashboard, tip: "Live status of all 4 broker agents" },
-  { href: "/drivers-seat",label: "Driver's Seat",  icon: Gauge,           tip: "AI operator console — fire jobs, see output" },
+  { href: "/drivers-seat",label: "Driver's Seat",  icon: Gauge,           tip: "Multi-property TV control room — $GSB + bleeding.cash" },
   { href: "/agents",      label: "Agents",         icon: Bot,             tip: "Individual agent config & simulate" },
   { href: "/earnings",    label: "Earnings",       icon: DollarSign,      tip: "USDC earned, payouts, withdraw" },
   { href: "/connections", label: "API Connections",icon: Plug,            tip: "Telegram, X, x402, wallet keys" },
@@ -91,6 +91,22 @@ export default function Sidebar() {
 
       {/* Bottom */}
       <div className="p-2 border-t border-border space-y-1">
+        {/* Properties */}
+        {!collapsed && (
+          <div className="px-3 py-1 text-[10px] uppercase tracking-widest text-muted-foreground">Properties</div>
+        )}
+        <a href="https://www.bleeding.cash" target="_blank" rel="noopener noreferrer"
+          className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors group relative"
+          title="bleeding.cash — AI financial triage"
+        >
+          <Activity size={17} className="shrink-0" />
+          {!collapsed && <span className="text-xs">💊 bleeding.cash</span>}
+          {collapsed && (
+            <span className="absolute left-full ml-2.5 px-2 py-1 text-xs bg-secondary border border-border rounded whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-50 shadow-lg">
+              bleeding.cash
+            </span>
+          )}
+        </a>
         {/* Base network badge */}
         {!collapsed && (
           <div className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] text-muted-foreground">
