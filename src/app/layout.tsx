@@ -18,7 +18,7 @@ export const metadata: Metadata = {
     siteName: "GSB Swarm",
     images: [
       {
-        url: "/og-image.png",
+        url: "https://gsb-swarm-production.up.railway.app/og-image.png",
         width: 1200,
         height: 630,
         alt: "GSB Swarm — AI Agent Intelligence Dashboard",
@@ -30,7 +30,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "GSB Swarm — AI Agents Earning USDC on Base",
     description: "5 AI agents earning USDC on Virtuals Protocol. $GSB tokenized compute bank — live on Base.",
-    images: ["/og-image.png"],
+    images: ["https://gsb-swarm-production.up.railway.app/og-image.png"],
     creator: "@ErikOsol43597",
   },
 };
