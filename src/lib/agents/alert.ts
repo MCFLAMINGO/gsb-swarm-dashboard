@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { callModel } from '@/lib/modelRouter';
 
 const SYSTEM_PROMPT = `You are the GSB Alert Manager. You monitor crypto assets and generate alert messages for Telegram and X. You are concise, data-driven, and urgent when needed.
 
@@ -80,23 +80,9 @@ export async function runAlert({ mission, context }: AlertInput): Promise<AlertR
     };
   }
 
-  const client = new Anthropic();
-  const message = await client.messages.create({
-    model: "claude-3-5-haiku-latest",
-    max_tokens: 512,
-    system: SYSTEM_PROMPT,
-    messages: [
-      {
-        role: "user",
-        content: `${extraContext}\nContext: ${JSON.stringify(context || {})}\n\nMission: ${mission}`,
-      },
-    ],
-  });
+  const messageText = await callModel('alert', SYSTEM_PROMPT, `${extraContext}\nContext: ${JSON.stringify(context || {})}\n\nMission: ${mission}`);
 
-  const result = message.content
-    .filter((b): b is Anthropic.TextBlock => b.type === "text")
-    .map((b) => b.text)
-    .join("\n");
+  const result = messageText;
 
   // Fire-and-forget Telegram delivery
   const telegramToken = process.env.TELEGRAM_BOT_TOKEN;

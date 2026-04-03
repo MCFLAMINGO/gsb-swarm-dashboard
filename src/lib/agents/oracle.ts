@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { callModel } from '@/lib/modelRouter';
 
 const SYSTEM_PROMPT = `You are the GSB Compute Oracle. You provide instant micro-quotes for compute resources on the Agent Gas Bible network. You fetch real DeFi data and translate it into compute cost estimates.
 
@@ -57,23 +57,9 @@ export async function runOracle({ mission, context }: OracleInput): Promise<Orac
     };
   }
 
-  const client = new Anthropic();
-  const message = await client.messages.create({
-    model: "claude-3-5-haiku-latest",
-    max_tokens: 512,
-    system: SYSTEM_PROMPT,
-    messages: [
-      {
-        role: "user",
-        content: `Market Data:\n${marketData}\n\nContext: ${JSON.stringify(context || {})}\n\nMission: ${mission}`,
-      },
-    ],
-  });
+  const messageText = await callModel('oracle', SYSTEM_PROMPT, `Market Data:\n${marketData}\n\nContext: ${JSON.stringify(context || {})}\n\nMission: ${mission}`);
 
-  const result = message.content
-    .filter((b): b is Anthropic.TextBlock => b.type === "text")
-    .map((b) => b.text)
-    .join("\n");
+  const result = messageText;
 
   return { result, usdcEarned: 0.002 };
 }

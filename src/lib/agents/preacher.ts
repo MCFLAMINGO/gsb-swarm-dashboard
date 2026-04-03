@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { callModel } from '@/lib/modelRouter';
 import crypto from "crypto";
 
 const SYSTEM_PROMPT = `You are the GSB Marketing Preacher. You write viral crypto content for $GSB (Agent Gas Bible) — the tokenized compute bank on Base. Your voice is bold, Web3-native, and punchy.
@@ -87,23 +87,9 @@ export async function runPreacher({ mission, context }: PreacherInput): Promise<
     };
   }
 
-  const client = new Anthropic();
-  const message = await client.messages.create({
-    model: "claude-3-5-haiku-latest",
-    max_tokens: 1024,
-    system: SYSTEM_PROMPT,
-    messages: [
-      {
-        role: "user",
-        content: `Platform: ${platform}\nContext: ${JSON.stringify(context || {})}\n\nMission: ${mission}`,
-      },
-    ],
-  });
+  const messageText = await callModel('preacher', SYSTEM_PROMPT, `Platform: ${platform}\nContext: ${JSON.stringify(context || {})}\n\nMission: ${mission}`);
 
-  const result = message.content
-    .filter((b): b is Anthropic.TextBlock => b.type === "text")
-    .map((b) => b.text)
-    .join("\n");
+  const result = messageText;
 
   // Auto-post first tweet if X is configured
   let tweetUrl: string | null = null;

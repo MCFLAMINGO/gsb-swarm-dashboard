@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { callModel } from '@/lib/modelRouter';
 
 const SYSTEM_PROMPT = `You are the GSB Onboarding Broker. You onboard new agents and humans into the GSB ecosystem. You write personalized cold outreach emails, answer 'what is GSB' questions with full pitches, and walk developers through ACP integration.
 
@@ -51,31 +51,9 @@ export async function runOnboarding({ mission, context }: OnboardingInput): Prom
     return { result: fallbacks[mode], usdcEarned: 0.10 };
   }
 
-  const client = new Anthropic();
-  const modeHint = {
-    email: "Write a personalized cold outreach email with subject line and body.",
-    explain: "Write a full GSB pitch/explainer tailored to the audience.",
-    integrate: "Write a step-by-step ACP integration guide for developers.",
-    triage: "Write a cold outreach email or pitch for the GSB Restaurant Financial Triage service. Target: restaurant owner/operator. Pitch the $24.99 USDC full triage package. Emphasize: anonymized data, 3 professional documents, 24hr delivery, files deleted after processing.",
-    general: "Help the user with their GSB onboarding question.",
-  }[mode];
+  const messageText = await callModel('onboarding', SYSTEM_PROMPT, `Mode: ${mode}\nContext: ${JSON.stringify(context || {})}\n\nMission: ${mission}`);
 
-  const message = await client.messages.create({
-    model: "claude-3-5-haiku-latest",
-    max_tokens: 1024,
-    system: SYSTEM_PROMPT,
-    messages: [
-      {
-        role: "user",
-        content: `Mode: ${mode}\nInstruction: ${modeHint}\nContext: ${JSON.stringify(context || {})}\n\nMission: ${mission}`,
-      },
-    ],
-  });
-
-  const result = message.content
-    .filter((b): b is Anthropic.TextBlock => b.type === "text")
-    .map((b) => b.text)
-    .join("\n");
+  const result = messageText;
 
   return { result, usdcEarned: 0.10 };
 }
