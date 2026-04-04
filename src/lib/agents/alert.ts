@@ -74,7 +74,7 @@ export async function runAlert({ mission, context }: AlertInput): Promise<AlertR
     return { result: fallbackResult, usdcEarned: 0.01 };
   }
 
-  const messageText = await callModel('alert', SYSTEM_PROMPT, `${extraContext}\nContext: ${JSON.stringify(context || {})}\n\nMission: ${mission}`);
+  const messageText = await callModel('alert', SYSTEM_PROMPT, `${extraContext}\nContext: ${JSON.stringify(context || {})}\n\nMission: ${mission}`, anthropicKey);
 
   const result = messageText;
 
