@@ -9,7 +9,10 @@ export async function POST(request: NextRequest) {
   const secret = process.env.DISPATCH_SECRET;
   if (secret) {
     const auth = request.headers.get("authorization");
-    if (auth !== `Bearer ${secret}`) {
+    const xSecret = request.headers.get("x-dispatch-secret");
+    const validBearer = auth === `Bearer ${secret}`;
+    const validXSecret = xSecret === secret;
+    if (!validBearer && !validXSecret) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
   }
