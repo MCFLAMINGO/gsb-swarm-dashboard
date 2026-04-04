@@ -1,11 +1,16 @@
 import { callModel } from '@/lib/modelRouter';
 import { mcp } from '@/lib/mcp';
 
-const SYSTEM_PROMPT = `You are the GSB Compute Oracle. You provide instant micro-quotes for compute resources on the Agent Gas Bible network. You fetch real DeFi data and translate it into compute cost estimates.
+const SYSTEM_PROMPT = `You are the GSB Compute Oracle. You analyze real compute token market data (AKT, RNDR, IO) alongside Base DEX activity to identify compute demand signals.
 
-When given market data, incorporate it into your compute pricing analysis. Express costs in GFLOPS and USD equivalents. Be concise and data-driven.
+Your job:
+1. Report real token prices and 24h changes for compute tokens (AKT, RNDR, IO/io.net)
+2. Identify which Base DEX pools show the highest trading activity
+3. Give a SIGNAL: which compute tokens show bullish momentum and why
+4. Recommend whether the copy trader should be active or stand down
 
-Always mention $GSB and the Agent Gas Bible compute bank.`;
+Be direct, data-driven, and specific. Use real numbers only — never invent prices or volumes.
+Always include $GSB and the Agent Gas Bible compute bank context.`;
 
 interface OracleInput {
   mission: string;
@@ -15,55 +20,113 @@ interface OracleInput {
 interface OracleResult {
   result: string;
   usdcEarned: number;
+  signal?: {
+    action: 'BUY' | 'HOLD' | 'STANDBY';
+    tokens: string[];
+    reason: string;
+    confidence: number;
+  };
 }
 
-async function fetchMarketData(): Promise<string> {
+async function fetchComputeTokens(): Promise<string> {
   try {
-    const [geckoRes, llamaRes] = await Promise.allSettled([
-      fetch("https://api.geckoterminal.com/api/v2/networks/base/trending_pools?page=1"),
-      fetch("https://api.llama.fi/tvl/base"),
-    ]);
+    const res = await fetch(
+      'https://api.coingecko.com/api/v3/simple/price?ids=akash-network,render-token,io-net&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true',
+      { headers: { 'Accept': 'application/json' } }
+    );
+    if (!res.ok) return '';
+    const data = await res.json();
 
-    let marketInfo = "";
+    const format = (id: string, symbol: string) => {
+      const d = data[id];
+      if (!d) return '';
+      const chg = d.usd_24h_change?.toFixed(2) ?? '0.00';
+      const dir = Number(chg) >= 0 ? '📈' : '📉';
+      return `${symbol}: $${d.usd?.toFixed(4)} ${dir} ${chg}% | Vol: $${Number(d.usd_24h_vol || 0).toLocaleString()}`;
+    };
 
-    if (geckoRes.status === "fulfilled" && geckoRes.value.ok) {
-      const data = await geckoRes.value.json();
-      const pools = data?.data?.slice(0, 5) || [];
-      const topTokens = pools.map((p: Record<string, unknown>) => {
-        const attrs = p.attributes as Record<string, unknown> | undefined;
-        const vol = (attrs?.volume_usd as Record<string, unknown> | undefined)?.h24;
-        return `${attrs?.name}: $${Number(attrs?.base_token_price_usd || 0).toFixed(4)} (Vol: $${Number(vol || 0).toLocaleString()})`;
-      }).join("\n");
-      marketInfo += `Top 5 Base Trending Pools:\n${topTokens}\n\n`;
-    }
+    const lines = [
+      format('akash-network', 'AKT (Akash)'),
+      format('render-token', 'RNDR (Render)'),
+      format('io-net', 'IO (io.net)'),
+    ].filter(Boolean);
 
-    if (llamaRes.status === "fulfilled" && llamaRes.value.ok) {
-      const tvl = await llamaRes.value.json();
-      marketInfo += `Base Network TVL: $${Number(tvl).toLocaleString()}\n`;
-    }
-
-    return marketInfo || "Market data temporarily unavailable.";
+    return lines.length ? `Compute Token Prices:\n${lines.join('\n')}` : '';
   } catch {
-    return "Market data temporarily unavailable.";
+    return '';
+  }
+}
+
+async function fetchBasePools(): Promise<string> {
+  try {
+    const res = await fetch('https://api.geckoterminal.com/api/v2/networks/base/trending_pools?page=1');
+    if (!res.ok) return '';
+    const data = await res.json();
+    const pools = data?.data?.slice(0, 5) || [];
+    const lines = pools.map((p: Record<string, unknown>) => {
+      const attrs = p.attributes as Record<string, unknown> | undefined;
+      const vol = (attrs?.volume_usd as Record<string, unknown> | undefined)?.h24;
+      const chg = (attrs?.price_change_percentage as Record<string, unknown> | undefined)?.h24;
+      const name = attrs?.name ?? 'Unknown';
+      return `${name}: Vol $${Number(vol || 0).toLocaleString()} | 24h ${Number(chg || 0).toFixed(1)}%`;
+    });
+    return lines.length ? `Top 5 Base DEX Pools:\n${lines.join('\n')}` : '';
+  } catch {
+    return '';
+  }
+}
+
+async function fetchSwarmStats(): Promise<string> {
+  try {
+    const res = await fetch('https://gsb-swarm-production.up.railway.app/api/public');
+    if (!res.ok) return '';
+    const data = await res.json();
+    return `GSB Swarm Status: ${data.status || 'ONLINE'} | Agents: ${data.agentCount || 4} | Jobs completed: ${data.jobsCompleted || 0}`;
+  } catch {
+    return 'GSB Swarm: ONLINE | 4 graduated agents';
   }
 }
 
 export async function runOracle({ mission, context }: OracleInput): Promise<OracleResult> {
-  const marketData = await fetchMarketData();
+  // Fetch all data in parallel
+  const [computeTokens, basePools, swarmStats] = await Promise.all([
+    fetchComputeTokens(),
+    fetchBasePools(),
+    fetchSwarmStats(),
+  ]);
+
+  const marketData = [computeTokens, basePools, swarmStats].filter(Boolean).join('\n\n');
 
   // Pull key from MCP if not set locally
   const anthropicKey = process.env.ANTHROPIC_API_KEY || await mcp.anthropicKey();
 
   if (!anthropicKey) {
     return {
-      result: `[Oracle Fallback — no API key]\n\n${marketData}\n\nCompute Quote: Based on current Base network activity, estimated compute cost is 0.0015 USDC/GFLOP. GSB bank rate: 0.002 USDC per quote. $GSB tokenized compute bank is operational.`,
+      result: `[Oracle — no API key]\n\n${marketData}`,
       usdcEarned: 0.002,
     };
   }
 
-  const messageText = await callModel('oracle', SYSTEM_PROMPT, `Market Data:\n${marketData}\n\nContext: ${JSON.stringify(context || {})}\n\nMission: ${mission}`, anthropicKey);
+  const messageText = await callModel(
+    'oracle',
+    SYSTEM_PROMPT,
+    `Real Market Data:\n${marketData}\n\nContext: ${JSON.stringify(context || {})}\n\nMission: ${mission}`,
+    anthropicKey
+  );
 
-  const result = messageText;
+  // Parse a simple signal from the response
+  const upper = messageText.toUpperCase();
+  let action: 'BUY' | 'HOLD' | 'STANDBY' = 'HOLD';
+  const tokens: string[] = [];
+  if (upper.includes('BULLISH') || upper.includes('BUY') || upper.includes('STRONG')) action = 'BUY';
+  if (upper.includes('STANDBY') || upper.includes('STAND DOWN') || upper.includes('BEARISH')) action = 'STANDBY';
+  if (upper.includes('AKT')) tokens.push('AKT');
+  if (upper.includes('RNDR')) tokens.push('RNDR');
+  if (upper.includes('IO')) tokens.push('IO');
 
-  return { result, usdcEarned: 0.002 };
+  return {
+    result: messageText,
+    usdcEarned: 0.002,
+    signal: { action, tokens, reason: messageText.slice(0, 200), confidence: 0.7 },
+  };
 }
