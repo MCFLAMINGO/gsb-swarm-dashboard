@@ -41,10 +41,10 @@ export function getModelForAgent(agentId: string): AgentModel {
   }
 }
 
-export async function callModel(agentId: string, systemPrompt: string, userPrompt: string): Promise<string> {
+export async function callModel(agentId: string, systemPrompt: string, userPrompt: string, overrideApiKey?: string): Promise<string> {
   const { provider, model, maxTokens } = getModelForAgent(agentId)
   const gatewayKey = process.env.AI_GATEWAY_API_KEY
-  const anthropicKey = process.env.ANTHROPIC_API_KEY
+  const anthropicKey = overrideApiKey || process.env.ANTHROPIC_API_KEY
 
   if (provider === 'gateway' && gatewayKey) {
     // Vercel AI Gateway — OpenAI-compatible endpoint
