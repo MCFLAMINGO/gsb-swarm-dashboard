@@ -27,7 +27,7 @@ export default function DriversSeat() {
   const [activeProperty, setActiveProperty] = useState<'gsb' | 'bleeding'>('gsb')
   const [selectedAgent, setSelectedAgent] = useState('preacher')
   const [command, setCommand] = useState('')
-  const [chatHistory, setChatHistory] = useState<Array<{role: 'user'|'agent', content: string, agent?: string, timestamp: string}>>([])
+  const [chatHistory, setChatHistory] = useState<Array<{role: 'user'|'agent', content: string, agent?: string, timestamp: string, jobId?: string, pending?: boolean}>>([])
   const [outputFeed, setOutputFeed] = useState<Array<{id: string, agent: string, content: string, timestamp: string, canPost: boolean}>>([])
   const [activityLog, setActivityLog] = useState<Array<{time: string, property: string, agent: string, command: string, result: string}>>([])
   const [swarmStatus, setSwarmStatus] = useState<{status: string, agents: number, jobsFired: number} | null>(null)
@@ -89,22 +89,98 @@ export default function DriversSeat() {
         body: JSON.stringify({ agentId: selectedAgent, mission })
       })
       const data = await res.json()
-      const result = data.result || data.output || data.message || `Job accepted: ${data.jobId || 'pending'}`
 
-      setChatHistory(prev => [...prev, { role: 'agent', content: result, agent: selectedAgent, timestamp: new Date().toLocaleTimeString() }])
+      if (!res.ok) {
+        setChatHistory(prev => [...prev, {
+          role: 'agent', content: `Error: ${data.error || 'Agent unavailable'}`,
+          agent: selectedAgent, timestamp: new Date().toLocaleTimeString()
+        }])
+        setIsLoading(false)
+        return
+      }
 
-      const feedItem = { id: Date.now().toString(), agent: selectedAgent, content: result, timestamp: new Date().toLocaleTimeString(), canPost: selectedAgent === 'preacher' }
-      setOutputFeed(prev => [feedItem, ...prev.slice(0, 9)])
+      // Show "thinking" indicator immediately
+      const thinkingMsg = {
+        role: 'agent' as const,
+        content: '\u23F3 Working on it...',
+        agent: selectedAgent,
+        timestamp: new Date().toLocaleTimeString(),
+        jobId: data.jobId,
+        pending: true
+      }
+      setChatHistory(prev => [...prev, thinkingMsg])
+      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
 
-      const logEntry = { time: timestamp, property: activeProperty === 'gsb' ? '$GSB' : 'bleeding.cash', agent: selectedAgent, command: mission.slice(0, 60), result: result.slice(0, 100) }
-      setActivityLog(prev => {
-        const updated = [logEntry, ...prev.slice(0, 29)]
-        localStorage.setItem('gsb_drivers_seat_log', JSON.stringify(updated))
-        return updated
-      })
+      // Poll for result
+      const jobId = data.jobId
+      if (jobId) {
+        let attempts = 0
+        const maxAttempts = 45 // 90 seconds max
+        const poll = setInterval(async () => {
+          attempts++
+          try {
+            const jobRes = await fetch(`/api/jobs/${jobId}`)
+            const job = await jobRes.json()
+
+            if (job.status === 'completed' || job.status === 'failed') {
+              clearInterval(poll)
+              const result = job.result || (job.status === 'failed' ? `Failed: ${job.error}` : 'No result')
+
+              // Replace the thinking message with real result
+              setChatHistory(prev => prev.map(msg =>
+                msg.jobId === jobId
+                  ? { ...msg, content: result, pending: false }
+                  : msg
+              ))
+
+              const feedItem = {
+                id: Date.now().toString(),
+                agent: selectedAgent,
+                content: result,
+                timestamp: new Date().toLocaleTimeString(),
+                canPost: selectedAgent === 'preacher'
+              }
+              setOutputFeed(prev => [feedItem, ...prev.slice(0, 9)])
+
+              const logEntry = {
+                time: timestamp,
+                property: activeProperty === 'gsb' ? '$GSB' : 'bleeding.cash',
+                agent: selectedAgent,
+                command: mission.slice(0, 60),
+                result: result.slice(0, 100)
+              }
+              setActivityLog(prev => {
+                const updated = [logEntry, ...prev.slice(0, 29)]
+                localStorage.setItem('gsb_drivers_seat_log', JSON.stringify(updated))
+                return updated
+              })
+
+              setIsLoading(false)
+              setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
+            } else if (attempts >= maxAttempts) {
+              clearInterval(poll)
+              setChatHistory(prev => prev.map(msg =>
+                msg.jobId === jobId
+                  ? { ...msg, content: 'Timed out waiting for result. Job may still be running.', pending: false }
+                  : msg
+              ))
+              setIsLoading(false)
+            }
+          } catch {
+            // Keep polling on network errors
+          }
+        }, 2000) // poll every 2 seconds
+      } else {
+        // No jobId — show whatever came back directly
+        const result = data.result || data.output || 'Job submitted'
+        setChatHistory(prev => prev.map(msg =>
+          msg.pending ? { ...msg, content: result, pending: false } : msg
+        ))
+        setIsLoading(false)
+        setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
+      }
     } catch {
       setChatHistory(prev => [...prev, { role: 'agent', content: 'Error: Could not reach agent', agent: selectedAgent, timestamp: new Date().toLocaleTimeString() }])
-    } finally {
       setIsLoading(false)
       setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
     }
@@ -197,17 +273,13 @@ export default function DriversSeat() {
               <div key={i} className={`mb-3 flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${msg.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
                   {msg.role === 'agent' && <div className="text-xs text-muted-foreground mb-1 font-medium">{msg.agent} · {msg.timestamp}</div>}
-                  <div className="whitespace-pre-wrap">{msg.content}</div>
+                  {msg.pending
+                    ? <div className="animate-pulse text-muted-foreground">{msg.content}</div>
+                    : <div className="whitespace-pre-wrap">{msg.content}</div>
+                  }
                 </div>
               </div>
             ))}
-            {isLoading && (
-              <div className="flex justify-start mb-3">
-                <div className="bg-muted rounded-lg px-3 py-2 text-sm text-muted-foreground">
-                  <span className="animate-pulse">Agent thinking...</span>
-                </div>
-              </div>
-            )}
             <div ref={chatEndRef} />
           </ScrollArea>
 
