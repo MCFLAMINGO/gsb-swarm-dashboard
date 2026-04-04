@@ -1,18 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createJob, completeJob, failJob } from "@/lib/jobStore";
 import { isValidAgent, runAgent } from "@/lib/agents";
 import type { AgentId } from "@/lib/agents";
+
+export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   // Auth check — skip if DISPATCH_SECRET not set (easy testing)
   const secret = process.env.DISPATCH_SECRET;
   if (secret) {
     const auth = request.headers.get("authorization");
-    const referer = request.headers.get("referer");
-    const host = request.headers.get("host");
-    // Allow same-origin browser calls (referer matches host)
-    const isSameOrigin = referer && host && referer.includes(host);
-    if (!isSameOrigin && auth !== `Bearer ${secret}`) {
+    if (auth !== `Bearer ${secret}`) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
   }
@@ -21,7 +18,6 @@ export async function POST(request: NextRequest) {
     agentId: string;
     mission: string;
     context?: Record<string, unknown>;
-    callbackUrl?: string;
   };
 
   try {
@@ -45,47 +41,26 @@ export async function POST(request: NextRequest) {
   }
 
   const jobId = `job_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  createJob(jobId, body.agentId, body.mission);
-
-  // Run async — don't block the response
   const agentId = body.agentId as AgentId;
-  const { mission, context, callbackUrl } = body;
+  const { mission, context } = body;
 
-  // Use waitUntil-style: start the promise but don't await it
-  const work = (async () => {
-    try {
-      const output = await runAgent(agentId, { mission, context });
-      completeJob(jobId, output.result, output.usdcEarned);
-
-      // POST result to callback URL if provided
-      if (callbackUrl) {
-        try {
-          await fetch(callbackUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              jobId,
-              agentId,
-              result: output.result,
-              usdcEarned: output.usdcEarned,
-              completedAt: new Date().toISOString(),
-            }),
-          });
-        } catch (err) {
-          console.error(`[Dispatch] Callback failed for ${jobId}:`, err);
-        }
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Unknown error";
-      failJob(jobId, msg);
-      console.error(`[Dispatch] Agent ${agentId} failed for ${jobId}:`, msg);
-    }
-  })();
-
-  // In Vercel edge/serverless, the response returns immediately.
-  // The work promise continues in the background.
-  // For robustness, we also catch unhandled rejections.
-  work.catch(() => {});
-
-  return NextResponse.json({ jobId, status: "accepted" }, { status: 202 });
+  // Run synchronously — wait for result and return it directly.
+  // This avoids serverless instance isolation killing async jobs.
+  try {
+    const output = await runAgent(agentId, { mission, context });
+    return NextResponse.json({
+      jobId,
+      status: "completed",
+      result: output.result,
+      usdcEarned: output.usdcEarned,
+      completedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    console.error(`[Dispatch] Agent ${agentId} failed:`, msg);
+    return NextResponse.json(
+      { jobId, status: "failed", result: msg },
+      { status: 500 }
+    );
+  }
 }
