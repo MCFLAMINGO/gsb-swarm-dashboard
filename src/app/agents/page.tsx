@@ -190,6 +190,11 @@ function DispatchModal({
     preacher: "GSB Marketing Preacher",
     onboarding: "GSB Onboarding Broker",
     alert: "GSB Alert Manager",
+    token_analyst: "Token Analyst",
+    wallet_profiler: "Wallet Profiler",
+    alpha_scanner: "Alpha Scanner",
+    thread_writer: "Thread Writer",
+    ceo: "GSB CEO",
   };
 
   const dispatch = async () => {
@@ -327,6 +332,11 @@ function LiveFeed() {
     preacher: "\uD83D\uDCE2",
     onboarding: "\uD83D\uDE80",
     alert: "\uD83D\uDD14",
+    token_analyst: "\uD83D\uDD2C",
+    wallet_profiler: "\uD83D\uDC5B",
+    alpha_scanner: "\uD83D\uDD0D",
+    thread_writer: "\u270D\uFE0F",
+    ceo: "\uD83D\uDC54",
   };
 
   const fetchJobs = useCallback(async () => {
@@ -352,6 +362,11 @@ function LiveFeed() {
     preacher: "Preacher",
     onboarding: "Onboarding",
     alert: "Alert",
+    token_analyst: "Token Analyst",
+    wallet_profiler: "Wallet Profiler",
+    alpha_scanner: "Alpha Scanner",
+    thread_writer: "Thread Writer",
+    ceo: "CEO",
   };
 
   if (loading) {

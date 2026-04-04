@@ -39,11 +39,11 @@ export default function DriversSeat() {
   useEffect(() => {
     const fetchSwarm = async () => {
       try {
-        const res = await fetch('https://gsb-swarm-production.up.railway.app/api/resource/swarm_status')
+        const res = await fetch('https://gsb-swarm-production.up.railway.app/api/public')
         const data = await res.json()
         setSwarmStatus({
           status: data.status || 'ONLINE',
-          agents: data.agents?.length || 4,
+          agents: data.agentCount || 5,
           jobsFired: data.jobsFired || 0
         })
       } catch { /* swarm may be offline */ }
@@ -71,13 +71,25 @@ export default function DriversSeat() {
     setCommand('')
 
     try {
-      const res = await fetch('/api/dispatch', {
+      const railwayAgents = ['token_analyst', 'wallet_profiler', 'alpha_scanner', 'thread_writer']
+      const isRailway = railwayAgents.includes(selectedAgent)
+
+      const url = isRailway
+        ? 'https://gsb-swarm-production.up.railway.app/api/fire-job'
+        : '/api/dispatch'
+
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (isRailway) {
+        headers['x-dispatch-secret'] = 'gsb-dispatch-2026'
+      }
+
+      const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-dispatch-secret': 'gsb-dispatch-2026' },
+        headers,
         body: JSON.stringify({ agentId: selectedAgent, mission })
       })
       const data = await res.json()
-      const result = data.result || data.output || 'No response'
+      const result = data.result || data.output || data.message || `Job accepted: ${data.jobId || 'pending'}`
 
       setChatHistory(prev => [...prev, { role: 'agent', content: result, agent: selectedAgent, timestamp: new Date().toLocaleTimeString() }])
 
@@ -211,6 +223,10 @@ export default function DriversSeat() {
                   <SelectItem value="preacher">🧵 Preacher</SelectItem>
                   <SelectItem value="alert">🚨 Alert</SelectItem>
                   <SelectItem value="onboarding">🚀 Onboarding</SelectItem>
+                  <SelectItem value="token_analyst">🔬 Token Analyst</SelectItem>
+                  <SelectItem value="wallet_profiler">👛 Wallet Profiler</SelectItem>
+                  <SelectItem value="alpha_scanner">🔍 Alpha Scanner</SelectItem>
+                  <SelectItem value="thread_writer">✍️ Thread Writer</SelectItem>
                 </SelectContent>
               </Select>
               <span className="text-xs text-muted-foreground self-center">← select agent then command</span>

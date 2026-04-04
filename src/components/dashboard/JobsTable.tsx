@@ -7,6 +7,8 @@ import { formatDistanceToNow } from "date-fns";
 
 const ICONS: Record<string, string> = {
   oracle: "⚡", preacher: "📢", onboarding: "🚀", alert: "🔔",
+  token_analyst: "🔬", wallet_profiler: "👛", alpha_scanner: "🔍", thread_writer: "✍️",
+  ceo: "👔",
 };
 
 export default function JobsTable({ limit = 10 }: { limit?: number }) {

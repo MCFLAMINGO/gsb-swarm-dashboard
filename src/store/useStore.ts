@@ -3,7 +3,8 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Agent, AcpJob, Withdrawal, ActivityLog, ApiConnection, EarningsSummary } from "@/types";
-import { DEFAULT_AGENTS, DEFAULT_CONNECTIONS, generateSeedJobs, generateSeedLogs } from "@/lib/mockData";
+import { RAILWAY_AGENTS, CEO_AGENT, DEFAULT_CONNECTIONS, generateSeedLogs } from "@/lib/mockData";
+import type { RailwayPublicStatus } from "@/lib/railway";
 
 interface GsbStore {
   // Data
@@ -12,6 +13,11 @@ interface GsbStore {
   withdrawals: Withdrawal[];
   logs: ActivityLog[];
   connections: ApiConnection[];
+
+  // Live Railway data
+  railwayStatus: RailwayPublicStatus | null;
+  railwayJobsFired: number;
+  railwayLastFetched: string | null;
 
   // Computed
   getSummary: () => EarningsSummary;
@@ -24,19 +30,26 @@ interface GsbStore {
   withdraw: (toAddress: string, amount: number, dest: "wallet" | "gsb_bank") => void;
   updateConnection: (key: string, value: string) => void;
   addLog: (log: Omit<ActivityLog, "id" | "createdAt">) => void;
+  setRailwayStatus: (status: RailwayPublicStatus) => void;
 }
 
 export const useStore = create<GsbStore>()(
   persist(
     (set, get) => ({
-      agents: DEFAULT_AGENTS.map(a => ({ ...a })),
-      jobs: generateSeedJobs(),
+      // Initialize with Railway ACP agents + CEO agent (no more fake Vercel agents on main page)
+      agents: [...RAILWAY_AGENTS.map(a => ({ ...a })), { ...CEO_AGENT }],
+      jobs: [],
       withdrawals: [],
       logs: generateSeedLogs(),
       connections: DEFAULT_CONNECTIONS.map(c => ({ ...c })),
 
+      // Live Railway data
+      railwayStatus: null,
+      railwayJobsFired: 0,
+      railwayLastFetched: null,
+
       getSummary: () => {
-        const { jobs, withdrawals } = get();
+        const { jobs } = get();
         const confirmed   = jobs.filter(j => j.status === "confirmed" || j.status === "withdrawn");
         const pending     = jobs.filter(j => j.status === "pending");
         const withdrawn   = jobs.filter(j => j.status === "withdrawn");
@@ -44,7 +57,6 @@ export const useStore = create<GsbStore>()(
         const confirmedBal= jobs.filter(j => j.status === "confirmed").reduce((s, j) => s + j.usdcAmount, 0);
         const pendingAmt  = pending.reduce((s, j) => s + j.usdcAmount, 0);
         const withdrawnAmt= withdrawn.reduce((s, j) => s + j.usdcAmount, 0);
-        // Monthly: jobs from last 30 days
         const cutoff = Date.now() - 30 * 24 * 3600 * 1000;
         const monthly = confirmed
           .filter(j => new Date(j.createdAt).getTime() > cutoff)
@@ -89,7 +101,7 @@ export const useStore = create<GsbStore>()(
             id: `log_${Date.now()}`,
             agentId,
             type: "job",
-            message: `Simulated job: ${job.usdcAmount} USDC`,
+            message: `Job fired on Railway: ${job.usdcAmount} USDC`,
             detail: `ref: ${job.jobRef}`,
             createdAt: new Date().toISOString(),
           }, ...s.logs],
@@ -106,7 +118,6 @@ export const useStore = create<GsbStore>()(
           status: "pending",
           createdAt: new Date().toISOString(),
         };
-        // Mark confirmed jobs as withdrawn (oldest first up to amount)
         let remaining = amount;
         const updatedJobs = [...get().jobs].map(j => {
           if (j.status === "confirmed" && remaining > 0) {
@@ -146,11 +157,16 @@ export const useStore = create<GsbStore>()(
         set(s => ({
           logs: [{ ...log, id: `log_${Date.now()}`, createdAt: new Date().toISOString() }, ...s.logs],
         })),
+
+      setRailwayStatus: (status) =>
+        set(() => ({
+          railwayStatus: status,
+          railwayJobsFired: status.jobsFired ?? status.agentCount ?? 0,
+          railwayLastFetched: new Date().toISOString(),
+        })),
     }),
     {
       name: "gsb-swarm-store",
-      // Don't persist sensitive connection values in plain localStorage in prod
-      // — for production, use server-side env vars
     }
   )
 );
