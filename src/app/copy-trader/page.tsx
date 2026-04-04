@@ -136,6 +136,22 @@ export default function CopyTraderPage() {
     setIsLoading(false)
   }
 
+  const rehuntWallets = async () => {
+    if (!authToken || isLoading) return
+    setIsLoading(true)
+    try {
+      const res = await fetch(`${RAILWAY}/api/copy-trader/rehunt`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${authToken}` }
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setTimeout(fetchStatus, 3000) // Give it 3s to start scanning
+      }
+    } catch {}
+    setIsLoading(false)
+  }
+
   const stopTrader = async () => {
     if (!authToken || isLoading) return
     setIsLoading(true)
@@ -262,7 +278,16 @@ export default function CopyTraderPage() {
                 onClick={startTrader}
               >
                 <Play className="w-4 h-4 mr-2" />
-                Start — Hunt &amp; Copy
+                Start
+              </Button>
+              <Button
+                variant="outline"
+                className="flex-1"
+                disabled={isLoading || !authToken}
+                onClick={rehuntWallets}
+              >
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Re-Hunt Wallets
               </Button>
               <Button
                 variant="destructive"
@@ -271,7 +296,7 @@ export default function CopyTraderPage() {
                 onClick={stopTrader}
               >
                 <Square className="w-4 h-4 mr-2" />
-                Stop Trader
+                Stop
               </Button>
             </div>
 
