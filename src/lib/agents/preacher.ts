@@ -92,7 +92,35 @@ export async function runPreacher({ mission, context }: PreacherInput): Promise<
     };
   }
 
-  const messageText = await callModel('preacher', SYSTEM_PROMPT, `Platform: ${platform}\nContext: ${JSON.stringify(context || {})}\n\nMission: ${mission}`, anthropicKey || undefined);
+  // Fetch real GSB swarm stats before writing
+  let realStats = '';
+  try {
+    const statsRes = await fetch('https://gsb-swarm-production.up.railway.app/api/public');
+    if (statsRes.ok) {
+      const stats = await statsRes.json();
+      realStats = `Real GSB Stats: ${stats.agentCount || 4} graduated agents on Virtuals Protocol. Status: ${stats.status || 'ONLINE'}.`;
+    }
+  } catch { realStats = 'GSB Swarm: 4 graduated agents on Virtuals Protocol (Base chain).'; }
+
+  // Fetch real $GSB token data
+  let tokenData = '';
+  try {
+    const tokenRes = await fetch('https://api.dexscreener.com/latest/dex/tokens/0x6dA1A9793Ebe96975c240501A633ab8B3c83D14A');
+    if (tokenRes.ok) {
+      const td = await tokenRes.json();
+      const pair = td.pairs?.[0];
+      if (pair) {
+        const price = parseFloat(pair.priceUsd || '0').toFixed(8);
+        const vol = Number(pair.volume?.h24 || 0).toLocaleString();
+        const chg = pair.priceChange?.h24 || '0';
+        tokenData = `$GSB Price: $${price} | 24h Vol: $${vol} | 24h Change: ${chg}%`;
+      }
+    }
+  } catch { tokenData = ''; }
+
+  const groundedContext = [realStats, tokenData].filter(Boolean).join('\n');
+
+  const messageText = await callModel('preacher', SYSTEM_PROMPT, `Platform: ${platform}\nReal Data (USE THESE NUMBERS ONLY — do not invent stats):\n${groundedContext}\n\nContext: ${JSON.stringify(context || {})}\n\nMission: ${mission}`, anthropicKey || undefined);
 
   const result = messageText;
 
