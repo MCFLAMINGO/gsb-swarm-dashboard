@@ -4,7 +4,26 @@
  */
 
 const RAILWAY_BASE = "https://gsb-swarm-production.up.railway.app";
-const DISPATCH_SECRET = "gsb-dispatch-2026";
+
+// ── Railway operator auth ──────────────────────────────────────────────────
+
+let cachedToken: string | null = null;
+
+async function getRailwayToken(): Promise<string> {
+  if (cachedToken) return cachedToken;
+  const password = process.env.RAILWAY_OPERATOR_PASSWORD || "Erock1976";
+  const res = await fetch(`${RAILWAY_BASE}/api/auth`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password }),
+  });
+  if (!res.ok) {
+    throw new Error(`Railway auth failed (${res.status})`);
+  }
+  const data = await res.json();
+  cachedToken = data.token;
+  return cachedToken!;
+}
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -95,16 +114,35 @@ export async function fetchWorkers(): Promise<RailwayWorker[]> {
 }
 
 export async function fireJob(agentId: string, mission: string): Promise<FireJobResult> {
+  const token = await getRailwayToken();
   const res = await fetch(`${RAILWAY_BASE}/api/fire-job`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-dispatch-secret": DISPATCH_SECRET,
+      "x-gsb-token": token,
     },
-    body: JSON.stringify({ agentId, mission }),
+    body: JSON.stringify({ worker: agentId, requirement: mission, direct: true }),
   });
 
   if (!res.ok) {
+    // If auth expired, clear cache and retry once
+    if (res.status === 401) {
+      cachedToken = null;
+      const retryToken = await getRailwayToken();
+      const retry = await fetch(`${RAILWAY_BASE}/api/fire-job`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-gsb-token": retryToken,
+        },
+        body: JSON.stringify({ worker: agentId, requirement: mission, direct: true }),
+      });
+      if (!retry.ok) {
+        const text = await retry.text().catch(() => "Unknown error");
+        throw new Error(`Railway fire-job failed (${retry.status}): ${text}`);
+      }
+      return retry.json();
+    }
     const text = await res.text().catch(() => "Unknown error");
     throw new Error(`Railway fire-job failed (${res.status}): ${text}`);
   }
