@@ -1,4 +1,5 @@
 import { callModel } from '@/lib/modelRouter';
+import { mcp } from '@/lib/mcp';
 import crypto from "crypto";
 
 const SYSTEM_PROMPT = `You are the GSB Marketing Preacher. You write viral crypto content for $GSB (Agent Gas Bible) — the tokenized compute bank on Base. Your voice is bold, Web3-native, and punchy.
@@ -80,7 +81,11 @@ async function postTweetToX(text: string): Promise<string | null> {
 export async function runPreacher({ mission, context }: PreacherInput): Promise<PreacherResult> {
   const platform = detectPlatform(mission);
 
-  if (!process.env.ANTHROPIC_API_KEY) {
+  // Pull keys from MCP if not in local env
+  const creds = await mcp.xCredentials();
+  const anthropicKey = process.env.ANTHROPIC_API_KEY || await mcp.anthropicKey();
+
+  if (!anthropicKey) {
     return {
       result: `[Preacher Fallback — no API key]\n\nPlatform: ${platform}\n\n🔥 $GSB is the COMPUTE BANK for AI agents on Base.\n\nAgents don't just chat — they BORROW compute, EARN USDC, and DEPOSIT back to treasury.\n\nThis is DeFi for machine intelligence.\n\n$GSB #AgentGasBible #Base #DeFi #AI`,
       usdcEarned: 0.05,
@@ -91,9 +96,17 @@ export async function runPreacher({ mission, context }: PreacherInput): Promise<
 
   const result = messageText;
 
-  // Auto-post first tweet if X is configured
+  // Auto-post first tweet — use MCP creds if local env empty
   let tweetUrl: string | null = null;
-  if (process.env.X_API_KEY) {
+  const xKey = creds?.apiKey || process.env.X_API_KEY;
+  if (xKey) {
+    // Temporarily set env vars from MCP for signOAuth1
+    if (creds) {
+      process.env.X_API_KEY = creds.apiKey;
+      process.env.X_API_SECRET = creds.apiSecret;
+      process.env.X_ACCESS_TOKEN = creds.accessToken;
+      process.env.X_ACCESS_TOKEN_SECRET = creds.accessTokenSecret;
+    }
     const firstTweet = result.split("\n\n")[0]?.slice(0, 280);
     if (firstTweet) tweetUrl = await postTweetToX(firstTweet);
   }

@@ -1,4 +1,5 @@
 import { callModel } from '@/lib/modelRouter';
+import { mcp } from '@/lib/mcp';
 
 const SYSTEM_PROMPT = `You are the GSB Alert Manager. You monitor crypto assets and generate alert messages for Telegram and X. You are concise, data-driven, and urgent when needed.
 
@@ -58,7 +59,15 @@ export async function runAlert({ mission, context }: AlertInput): Promise<AlertR
     extraContext += `Wallet: ${wallet}\nBalance Note: ${balanceNote}\n`;
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
+  // Pull Telegram creds from MCP if not in local env
+  const tgCreds = await mcp.telegramCredentials();
+  const anthropicKey = process.env.ANTHROPIC_API_KEY || await mcp.anthropicKey();
+  if (tgCreds) {
+    process.env.TELEGRAM_BOT_TOKEN = tgCreds.botToken;
+    process.env.TELEGRAM_CHANNEL_ID = tgCreds.channelId;
+  }
+
+  if (!anthropicKey) {
     const fallbackResult = `[Alert Fallback — no API key]\n\n${extraContext}\n--- TELEGRAM ALERT ---\n*$${token} Alert* 🚨\n${priceData}\nMonitor via GSB Alert Manager\n#AgentGasBible #Base\n\n--- X DM COPY ---\n🚨 $${token} price update: ${priceData}. Powered by GSB Alert Manager. #AgentGasBible`;
 
     // Fire-and-forget Telegram delivery
