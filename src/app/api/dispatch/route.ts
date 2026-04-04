@@ -5,17 +5,7 @@ import type { AgentId } from "@/lib/agents";
 export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
-  // Auth check — skip if DISPATCH_SECRET not set (easy testing)
-  const secret = process.env.DISPATCH_SECRET;
-  if (secret) {
-    const auth = request.headers.get("authorization");
-    const xSecret = request.headers.get("x-dispatch-secret");
-    const validBearer = auth === `Bearer ${secret}`;
-    const validXSecret = xSecret === secret;
-    if (!validBearer && !validXSecret) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-  }
+  // No auth required — dashboard is operator-only, dispatch is internal
 
   let body: {
     agentId: string;
