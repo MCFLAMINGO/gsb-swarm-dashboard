@@ -11,6 +11,116 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 
+/* ── Agent Result Card ───────────────────────────────────────────────── */
+
+function AgentResultCard({ agent, content, timestamp }: { agent: string; content: string; timestamp: string }) {
+  // Detect content type and render accordingly
+  const isThread    = content.includes('1/') || (content.includes('1.') && content.includes('\n') && content.length > 200)
+  const isJSON      = content.trim().startsWith('{')
+  void content.match(/^[-•*]/m) // hasBullets — used by formatText below
+  void content.match(/^#{1,3} /m)  // hasHeaders — used by formatText below
+
+  let parsed: Record<string, unknown> | null = null
+  if (isJSON) {
+    try { parsed = JSON.parse(content) } catch { /* not json */ }
+  }
+
+  const agentColors: Record<string, string> = {
+    preacher:   'border-blue-500/30 bg-blue-950/20',
+    oracle:     'border-purple-500/30 bg-purple-950/20',
+    alert:      'border-yellow-500/30 bg-yellow-950/20',
+    onboarding: 'border-green-500/30 bg-green-950/20',
+  }
+  const agentIcons: Record<string, string> = {
+    preacher: '🧵', oracle: '📊', alert: '🚨', onboarding: '🚀',
+  }
+
+  const colorClass = agentColors[agent] || 'border-border bg-muted/20'
+  const icon = agentIcons[agent] || '🤖'
+
+  // Format markdown-ish text
+  const formatText = (text: string) => {
+    return text
+      .split('\n')
+      .map((line, i) => {
+        const trimmed = line.trim()
+        if (!trimmed) return <div key={i} className="h-2" />
+        // Bold **text**
+        const formatted = trimmed.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        // Bullet points
+        if (/^[-•*]\s/.test(trimmed)) {
+          return <div key={i} className="flex gap-2 text-sm"><span className="text-primary mt-0.5">•</span><span dangerouslySetInnerHTML={{ __html: formatted.replace(/^[-•*]\s/, '') }} /></div>
+        }
+        // Numbered
+        if (/^\d+[./]\s/.test(trimmed)) {
+          const num = trimmed.match(/^(\d+)/)?.[1]
+          const rest = trimmed.replace(/^\d+[./]\s/, '')
+          return <div key={i} className="flex gap-2 text-sm"><span className="text-primary font-bold w-4 shrink-0">{num}.</span><span dangerouslySetInnerHTML={{ __html: rest }} /></div>
+        }
+        // Tweet-style lines (1/ 2/ etc)
+        if (/^\d+\//.test(trimmed)) {
+          return <div key={i} className="text-sm border-l-2 border-blue-500/50 pl-3 py-1">{trimmed}</div>
+        }
+        // Headers
+        if (/^#{1,3}\s/.test(trimmed)) {
+          return <div key={i} className="font-bold text-sm mt-2" dangerouslySetInnerHTML={{ __html: formatted.replace(/^#+\s/, '') }} />
+        }
+        return <div key={i} className="text-sm" dangerouslySetInnerHTML={{ __html: formatted }} />
+      })
+  }
+
+  return (
+    <div className={`w-full max-w-[90%] rounded-xl border px-4 py-3 ${colorClass}`}>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <span className="text-base">{icon}</span>
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{agent}</span>
+          {isThread && <span className="text-[10px] bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded-full">Thread</span>}
+          {parsed && <span className="text-[10px] bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded-full">Structured Data</span>}
+        </div>
+        <span className="text-[10px] text-muted-foreground">{timestamp}</span>
+      </div>
+
+      {/* Content */}
+      {parsed ? (
+        // JSON/structured data — render as key-value grid
+        <div className="space-y-1.5">
+          {Object.entries(parsed).slice(0, 12).map(([k, v]) => (
+            <div key={k} className="grid grid-cols-5 gap-2 text-xs">
+              <span className="col-span-2 text-muted-foreground font-medium capitalize">{k.replace(/_/g, ' ')}</span>
+              <span className="col-span-3 text-foreground font-mono truncate">
+                {typeof v === 'object' ? JSON.stringify(v).slice(0, 80) : String(v)}
+              </span>
+            </div>
+          ))}
+          {Object.keys(parsed).length > 12 && (
+            <div className="text-xs text-muted-foreground">+{Object.keys(parsed).length - 12} more fields</div>
+          )}
+        </div>
+      ) : (
+        // Text content — formatted
+        <div className="space-y-0.5 leading-relaxed">
+          {formatText(content)}
+        </div>
+      )}
+
+      {/* Footer actions */}
+      <div className="flex gap-2 mt-3 pt-2 border-t border-border/30">
+        <button
+          onClick={() => navigator.clipboard.writeText(content)}
+          className="text-[10px] text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded hover:bg-muted/50"
+        >
+          Copy
+        </button>
+        {content.length > 0 && (
+          <span className="text-[10px] text-muted-foreground self-center">{content.length} chars</span>
+        )}
+      </div>
+    </div>
+  )
+}
+
 /* ── Quick-fire presets ──────────────────────────────────────────────── */
 
 const QUICK_COMMANDS = [
@@ -27,7 +137,7 @@ export default function DriversSeat() {
   const [activeProperty, setActiveProperty] = useState<'gsb' | 'bleeding'>('gsb')
   const [selectedAgent, setSelectedAgent] = useState('preacher')
   const [command, setCommand] = useState('')
-  const [chatHistory, setChatHistory] = useState<Array<{role: 'user'|'agent', content: string, agent?: string, timestamp: string, jobId?: string, pending?: boolean}>>([])
+  const [chatHistory, setChatHistory] = useState<Array<{role: 'user'|'agent', content: string, agent?: string, timestamp: string}>>([])
   const [outputFeed, setOutputFeed] = useState<Array<{id: string, agent: string, content: string, timestamp: string, canPost: boolean}>>([])
   const [activityLog, setActivityLog] = useState<Array<{time: string, property: string, agent: string, command: string, result: string}>>([])
   const [swarmStatus, setSwarmStatus] = useState<{status: string, agents: number, jobsFired: number} | null>(null)
@@ -39,11 +149,11 @@ export default function DriversSeat() {
   useEffect(() => {
     const fetchSwarm = async () => {
       try {
-        const res = await fetch('https://gsb-swarm-production.up.railway.app/api/public')
+        const res = await fetch('https://gsb-swarm-production.up.railway.app/api/resource/swarm_status')
         const data = await res.json()
         setSwarmStatus({
           status: data.status || 'ONLINE',
-          agents: data.agentCount || 5,
+          agents: data.agents?.length || 4,
           jobsFired: data.jobsFired || 0
         })
       } catch { /* swarm may be offline */ }
@@ -66,121 +176,56 @@ export default function DriversSeat() {
 
     setIsLoading(true)
     const timestamp = new Date().toLocaleTimeString()
-
     setChatHistory(prev => [...prev, { role: 'user', content: mission, timestamp }])
     setCommand('')
+    setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
 
     try {
-      const railwayAgents = ['token_analyst', 'wallet_profiler', 'alpha_scanner', 'thread_writer']
-      const isRailway = railwayAgents.includes(selectedAgent)
-
-      const url = isRailway
-        ? 'https://gsb-swarm-production.up.railway.app/api/fire-job'
-        : '/api/dispatch'
-
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (isRailway) {
-        headers['x-dispatch-secret'] = 'gsb-dispatch-2026'
-      }
-
-      const res = await fetch(url, {
+      // Step 1 — dispatch and get jobId
+      const res = await fetch('/api/dispatch', {
         method: 'POST',
-        headers,
+        headers: { 'Content-Type': 'application/json', 'x-dispatch-secret': 'gsb-dispatch-2026' },
         body: JSON.stringify({ agentId: selectedAgent, mission })
       })
       const data = await res.json()
-
-      if (!res.ok) {
-        setChatHistory(prev => [...prev, {
-          role: 'agent', content: `Error: ${data.error || 'Agent unavailable'}`,
-          agent: selectedAgent, timestamp: new Date().toLocaleTimeString()
-        }])
-        setIsLoading(false)
-        return
-      }
-
-      // Show "thinking" indicator immediately
-      const thinkingMsg = {
-        role: 'agent' as const,
-        content: '\u23F3 Working on it...',
-        agent: selectedAgent,
-        timestamp: new Date().toLocaleTimeString(),
-        jobId: data.jobId,
-        pending: true
-      }
-      setChatHistory(prev => [...prev, thinkingMsg])
-      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
-
-      // Poll for result
       const jobId = data.jobId
-      if (jobId) {
-        let attempts = 0
-        const maxAttempts = 45 // 90 seconds max
-        const poll = setInterval(async () => {
-          attempts++
-          try {
-            const jobRes = await fetch(`/api/jobs/${jobId}`)
-            const job = await jobRes.json()
 
-            if (job.status === 'completed' || job.status === 'failed') {
-              clearInterval(poll)
-              const result = job.result || (job.status === 'failed' ? `Failed: ${job.error}` : 'No result')
-
-              // Replace the thinking message with real result
-              setChatHistory(prev => prev.map(msg =>
-                msg.jobId === jobId
-                  ? { ...msg, content: result, pending: false }
-                  : msg
-              ))
-
-              const feedItem = {
-                id: Date.now().toString(),
-                agent: selectedAgent,
-                content: result,
-                timestamp: new Date().toLocaleTimeString(),
-                canPost: selectedAgent === 'preacher'
-              }
-              setOutputFeed(prev => [feedItem, ...prev.slice(0, 9)])
-
-              const logEntry = {
-                time: timestamp,
-                property: activeProperty === 'gsb' ? '$GSB' : 'bleeding.cash',
-                agent: selectedAgent,
-                command: mission.slice(0, 60),
-                result: result.slice(0, 100)
-              }
-              setActivityLog(prev => {
-                const updated = [logEntry, ...prev.slice(0, 29)]
-                localStorage.setItem('gsb_drivers_seat_log', JSON.stringify(updated))
-                return updated
-              })
-
-              setIsLoading(false)
-              setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
-            } else if (attempts >= maxAttempts) {
-              clearInterval(poll)
-              setChatHistory(prev => prev.map(msg =>
-                msg.jobId === jobId
-                  ? { ...msg, content: 'Timed out waiting for result. Job may still be running.', pending: false }
-                  : msg
-              ))
-              setIsLoading(false)
-            }
-          } catch {
-            // Keep polling on network errors
-          }
-        }, 2000) // poll every 2 seconds
-      } else {
-        // No jobId — show whatever came back directly
-        const result = data.result || data.output || 'Job submitted'
-        setChatHistory(prev => prev.map(msg =>
-          msg.pending ? { ...msg, content: result, pending: false } : msg
-        ))
-        setIsLoading(false)
-        setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
+      if (!jobId) {
+        throw new Error(data.error || 'No jobId returned')
       }
-    } catch {
-      setChatHistory(prev => [...prev, { role: 'agent', content: 'Error: Could not reach agent', agent: selectedAgent, timestamp: new Date().toLocaleTimeString() }])
+
+      // Step 2 — poll /api/jobs/[jobId] until complete (max 90s)
+      let result = ''
+      const MAX_POLLS = 45
+      for (let i = 0; i < MAX_POLLS; i++) {
+        await new Promise(r => setTimeout(r, 2000))
+        try {
+          const poll = await fetch(`/api/jobs/${jobId}`)
+          const job = await poll.json()
+          if (job.status === 'completed' || job.status === 'failed') {
+            result = job.result || (job.status === 'failed' ? `Agent failed: ${job.result}` : 'No result')
+            break
+          }
+        } catch { /* keep polling */ }
+      }
+
+      if (!result) result = 'Agent timed out — job may still be running. Check activity log.'
+
+      // Step 3 — render result
+      const ts = new Date().toLocaleTimeString()
+      setChatHistory(prev => [...prev, { role: 'agent', content: result, agent: selectedAgent, timestamp: ts }])
+      setOutputFeed(prev => [{ id: Date.now().toString(), agent: selectedAgent, content: result, timestamp: ts, canPost: selectedAgent === 'preacher' }, ...prev.slice(0, 9)])
+
+      const logEntry = { time: timestamp, property: activeProperty === 'gsb' ? '$GSB' : 'bleeding.cash', agent: selectedAgent, command: mission.slice(0, 60), result: result.slice(0, 100) }
+      setActivityLog(prev => {
+        const updated = [logEntry, ...prev.slice(0, 29)]
+        localStorage.setItem('gsb_drivers_seat_log', JSON.stringify(updated))
+        return updated
+      })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Unknown error'
+      setChatHistory(prev => [...prev, { role: 'agent', content: `Error: ${msg}`, agent: selectedAgent, timestamp: new Date().toLocaleTimeString() }])
+    } finally {
       setIsLoading(false)
       setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
     }
@@ -270,16 +315,30 @@ export default function DriversSeat() {
               </div>
             )}
             {chatHistory.map((msg, i) => (
-              <div key={i} className={`mb-3 flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${msg.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
-                  {msg.role === 'agent' && <div className="text-xs text-muted-foreground mb-1 font-medium">{msg.agent} · {msg.timestamp}</div>}
-                  {msg.pending
-                    ? <div className="animate-pulse text-muted-foreground">{msg.content}</div>
-                    : <div className="whitespace-pre-wrap">{msg.content}</div>
-                  }
-                </div>
+              <div key={i} className={`mb-4 flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                {msg.role === 'user' ? (
+                  <div className="max-w-[70%] rounded-lg px-3 py-2 text-sm bg-primary text-primary-foreground">
+                    {msg.content}
+                  </div>
+                ) : (
+                  <AgentResultCard agent={msg.agent || ''} content={msg.content} timestamp={msg.timestamp} />
+                )}
               </div>
             ))}
+            {isLoading && (
+              <div className="flex justify-start mb-3 w-full max-w-[90%]">
+                <div className="w-full rounded-xl border border-border bg-muted/20 px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex gap-1">
+                      <span className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{animationDelay:'0ms'}} />
+                      <span className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{animationDelay:'150ms'}} />
+                      <span className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{animationDelay:'300ms'}} />
+                    </div>
+                    <span className="text-xs text-muted-foreground animate-pulse">Agent working — polling for result...</span>
+                  </div>
+                </div>
+              </div>
+            )}
             <div ref={chatEndRef} />
           </ScrollArea>
 
@@ -295,10 +354,6 @@ export default function DriversSeat() {
                   <SelectItem value="preacher">🧵 Preacher</SelectItem>
                   <SelectItem value="alert">🚨 Alert</SelectItem>
                   <SelectItem value="onboarding">🚀 Onboarding</SelectItem>
-                  <SelectItem value="token_analyst">🔬 Token Analyst</SelectItem>
-                  <SelectItem value="wallet_profiler">👛 Wallet Profiler</SelectItem>
-                  <SelectItem value="alpha_scanner">🔍 Alpha Scanner</SelectItem>
-                  <SelectItem value="thread_writer">✍️ Thread Writer</SelectItem>
                 </SelectContent>
               </Select>
               <span className="text-xs text-muted-foreground self-center">← select agent then command</span>
