@@ -70,42 +70,16 @@ export async function runAlert({ mission, context }: AlertInput): Promise<AlertR
   if (!anthropicKey) {
     const fallbackResult = `[Alert Fallback — no API key]\n\n${extraContext}\n--- TELEGRAM ALERT ---\n*$${token} Alert* 🚨\n${priceData}\nMonitor via GSB Alert Manager\n#AgentGasBible #Base\n\n--- X DM COPY ---\n🚨 $${token} price update: ${priceData}. Powered by GSB Alert Manager. #AgentGasBible`;
 
-    // Fire-and-forget Telegram delivery
-    const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
-    const telegramChatId = process.env.TELEGRAM_CHANNEL_ID;
-    if (telegramToken && telegramChatId) {
-      const telegramMatch = fallbackResult.match(/---\s*TELEGRAM ALERT\s*---\n?([\s\S]*?)(?:---\s*X DM COPY\s*---|$)/i);
-      const telegramText = telegramMatch ? telegramMatch[1].trim() : fallbackResult.slice(0, 400);
-      fetch(`https://api.telegram.org/bot${telegramToken}/sendMessage`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: telegramChatId, text: telegramText, parse_mode: "Markdown" }),
-      }).catch((e) => console.error("[Alert] Telegram send failed:", e));
-    }
-
-    return {
-      result: fallbackResult,
-      usdcEarned: 0.01,
-    };
+    // Telegram sent by cron handler only
+    return { result: fallbackResult, usdcEarned: 0.01 };
   }
 
   const messageText = await callModel('alert', SYSTEM_PROMPT, `${extraContext}\nContext: ${JSON.stringify(context || {})}\n\nMission: ${mission}`);
 
   const result = messageText;
 
-  // Fire-and-forget Telegram delivery
-  const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
-  const telegramChatId = process.env.TELEGRAM_CHANNEL_ID;
-  if (telegramToken && telegramChatId) {
-    // Extract the Telegram section from result
-    const telegramMatch = result.match(/---\s*TELEGRAM ALERT\s*---\n?([\s\S]*?)(?:---\s*X DM COPY\s*---|$)/i);
-    const telegramText = telegramMatch ? telegramMatch[1].trim() : result.slice(0, 400);
-    fetch(`https://api.telegram.org/bot${telegramToken}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: telegramChatId, text: telegramText, parse_mode: "Markdown" }),
-    }).catch((e) => console.error("[Alert] Telegram send failed:", e));
-  }
+  // NOTE: Telegram is sent by the cron handler (heartbeat/route.ts), not here.
+  // This prevents duplicates when called from both cron and direct dispatch.
 
   return { result, usdcEarned: 0.01 };
 }
