@@ -292,7 +292,7 @@ export default function DriversSeat() {
         {/* CENTER — Command center */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Chat */}
-          <ScrollArea className="flex-1 p-4">
+          <div className="flex-1 overflow-y-auto p-4" style={{scrollBehavior:'smooth'}}>
             {chatHistory.length === 0 && (
               <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-sm gap-2 py-20">
                 <Gauge className="w-10 h-10 opacity-20" />
@@ -326,7 +326,7 @@ export default function DriversSeat() {
               </div>
             )}
             <div ref={chatEndRef} />
-          </ScrollArea>
+          </div>
 
           {/* Input */}
           <div className="border-t border-border p-3">
