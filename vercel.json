@@ -4,5 +4,13 @@
       "path": "/api/cron/heartbeat",
       "schedule": "0 * * * *"
     }
-  ]
+  ],
+  "functions": {
+    "src/app/api/dispatch/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/jobs/[jobId]/route.ts": {
+      "maxDuration": 30
+    }
+  }
 }
