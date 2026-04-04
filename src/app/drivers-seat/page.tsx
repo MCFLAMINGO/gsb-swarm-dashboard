@@ -188,28 +188,13 @@ export default function DriversSeat() {
         body: JSON.stringify({ agentId: selectedAgent, mission })
       })
       const data = await res.json()
-      const jobId = data.jobId
-
-      if (!jobId) {
-        throw new Error(data.error || 'No jobId returned')
+      if (data.error) {
+        throw new Error(data.error)
       }
 
-      // Step 2 — poll /api/jobs/[jobId] until complete (max 90s)
-      let result = ''
-      const MAX_POLLS = 45
-      for (let i = 0; i < MAX_POLLS; i++) {
-        await new Promise(r => setTimeout(r, 2000))
-        try {
-          const poll = await fetch(`/api/jobs/${jobId}`)
-          const job = await poll.json()
-          if (job.status === 'completed' || job.status === 'failed') {
-            result = job.result || (job.status === 'failed' ? `Agent failed: ${job.result}` : 'No result')
-            break
-          }
-        } catch { /* keep polling */ }
-      }
-
-      if (!result) result = 'Agent timed out — job may still be running. Check activity log.'
+      // Result comes back directly — synchronous dispatch
+      let result = data.result || 'No response from agent.'
+      if (!result) result = 'No response from agent.'
 
       // Step 3 — render result
       const ts = new Date().toLocaleTimeString()
