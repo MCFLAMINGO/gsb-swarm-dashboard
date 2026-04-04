@@ -23,7 +23,7 @@ export function getModelForAgent(agentId: string): AgentModel {
 
   if (!useGateway) {
     // Fallback: all agents use Haiku (already cheap)
-    return { provider: 'anthropic', model: 'claude-3-5-haiku-20241022', maxTokens: 1500 }
+    return { provider: 'anthropic', model: 'claude-haiku-4-5-20251001', maxTokens: 1500 }
   }
 
   // Gateway routing — cheapest model per agent
@@ -75,7 +75,7 @@ export async function callModel(agentId: string, systemPrompt: string, userPromp
   const Anthropic = (await import('@anthropic-ai/sdk')).default
   const client = new Anthropic({ apiKey: anthropicKey })
   const msg = await client.messages.create({
-    model: 'claude-3-5-haiku-20241022',
+    model: 'claude-haiku-4-5-20251001',
     max_tokens: maxTokens,
     system: systemPrompt,
     messages: [{ role: 'user', content: userPrompt }]
