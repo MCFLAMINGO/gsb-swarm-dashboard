@@ -92,7 +92,7 @@ export async function runPreacher({ mission, context }: PreacherInput): Promise<
     };
   }
 
-  const messageText = await callModel('preacher', SYSTEM_PROMPT, `Platform: ${platform}\nContext: ${JSON.stringify(context || {})}\n\nMission: ${mission}`);
+  const messageText = await callModel('preacher', SYSTEM_PROMPT, `Platform: ${platform}\nContext: ${JSON.stringify(context || {})}\n\nMission: ${mission}`, anthropicKey || undefined);
 
   const result = messageText;
 
