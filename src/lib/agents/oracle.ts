@@ -1,132 +1,128 @@
-import { callModel } from '@/lib/modelRouter';
-import { mcp } from '@/lib/mcp';
+"use client";
 
-const SYSTEM_PROMPT = `You are the GSB Compute Oracle. You analyze real compute token market data (AKT, RNDR, IO) alongside Base DEX activity to identify compute demand signals.
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { cn } from "@/lib/utils";
+import {
+  LayoutDashboard, Bot, DollarSign, Plug, Settings, ChevronLeft, ChevronRight, Gauge, Activity
+} from "lucide-react";
+import { useState } from "react";
 
-Your job:
-1. Report real token prices and 24h changes for compute tokens (AKT, RNDR, IO/io.net)
-2. Identify which Base DEX pools show the highest trading activity
-3. Give a SIGNAL: which compute tokens show bullish momentum and why
-4. Recommend whether the copy trader should be active or stand down
+const NAV = [
+  { href: "/",            label: "Swarm Overview", icon: LayoutDashboard, tip: "Live status of all 4 broker agents" },
+  { href: "/drivers-seat",label: "Driver's Seat",  icon: Gauge,           tip: "Multi-property TV control room — $GSB + bleeding.cash" },
+  { href: "/agents",      label: "Agents",         icon: Bot,             tip: "Individual agent config & simulate" },
+  { href: "/earnings",    label: "Earnings",       icon: DollarSign,      tip: "USDC earned, payouts, withdraw" },
+  { href: "/copy-trader", label: "Copy Trader",    icon: Activity,        tip: "Compute signal copy trader — AKT/RNDR/IO signals" },
+  { href: "/connections", label: "API Connections",icon: Plug,            tip: "Telegram, X, x402, wallet keys" },
+  { href: "/settings",    label: "Settings",       icon: Settings,        tip: "Dashboard & agent preferences" },
+];
 
-Be direct, data-driven, and specific. Use real numbers only — never invent prices or volumes.
-Always include $GSB and the Agent Gas Bible compute bank context.`;
-
-interface OracleInput {
-  mission: string;
-  context?: Record<string, unknown>;
-}
-
-interface OracleResult {
-  result: string;
-  usdcEarned: number;
-  signal?: {
-    action: 'BUY' | 'HOLD' | 'STANDBY';
-    tokens: string[];
-    reason: string;
-    confidence: number;
-  };
-}
-
-async function fetchComputeTokens(): Promise<string> {
-  try {
-    const res = await fetch(
-      'https://api.coingecko.com/api/v3/simple/price?ids=akash-network,render-token,io-net&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true',
-      { headers: { 'Accept': 'application/json' } }
-    );
-    if (!res.ok) return '';
-    const data = await res.json();
-
-    const format = (id: string, symbol: string) => {
-      const d = data[id];
-      if (!d) return '';
-      const chg = d.usd_24h_change?.toFixed(2) ?? '0.00';
-      const dir = Number(chg) >= 0 ? '📈' : '📉';
-      return `${symbol}: $${d.usd?.toFixed(4)} ${dir} ${chg}% | Vol: $${Number(d.usd_24h_vol || 0).toLocaleString()}`;
-    };
-
-    const lines = [
-      format('akash-network', 'AKT (Akash)'),
-      format('render-token', 'RNDR (Render)'),
-      format('io-net', 'IO (io.net)'),
-    ].filter(Boolean);
-
-    return lines.length ? `Compute Token Prices:\n${lines.join('\n')}` : '';
-  } catch {
-    return '';
-  }
-}
-
-async function fetchBasePools(): Promise<string> {
-  try {
-    const res = await fetch('https://api.geckoterminal.com/api/v2/networks/base/trending_pools?page=1');
-    if (!res.ok) return '';
-    const data = await res.json();
-    const pools = data?.data?.slice(0, 5) || [];
-    const lines = pools.map((p: Record<string, unknown>) => {
-      const attrs = p.attributes as Record<string, unknown> | undefined;
-      const vol = (attrs?.volume_usd as Record<string, unknown> | undefined)?.h24;
-      const chg = (attrs?.price_change_percentage as Record<string, unknown> | undefined)?.h24;
-      const name = attrs?.name ?? 'Unknown';
-      return `${name}: Vol $${Number(vol || 0).toLocaleString()} | 24h ${Number(chg || 0).toFixed(1)}%`;
-    });
-    return lines.length ? `Top 5 Base DEX Pools:\n${lines.join('\n')}` : '';
-  } catch {
-    return '';
-  }
-}
-
-async function fetchSwarmStats(): Promise<string> {
-  try {
-    const res = await fetch('https://gsb-swarm-production.up.railway.app/api/public');
-    if (!res.ok) return '';
-    const data = await res.json();
-    return `GSB Swarm Status: ${data.status || 'ONLINE'} | Agents: ${data.agentCount || 4} | Jobs completed: ${data.jobsCompleted || 0}`;
-  } catch {
-    return 'GSB Swarm: ONLINE | 4 graduated agents';
-  }
-}
-
-export async function runOracle({ mission, context }: OracleInput): Promise<OracleResult> {
-  // Fetch all data in parallel
-  const [computeTokens, basePools, swarmStats] = await Promise.all([
-    fetchComputeTokens(),
-    fetchBasePools(),
-    fetchSwarmStats(),
-  ]);
-
-  const marketData = [computeTokens, basePools, swarmStats].filter(Boolean).join('\n\n');
-
-  // Pull key from MCP if not set locally
-  const anthropicKey = process.env.ANTHROPIC_API_KEY || await mcp.anthropicKey();
-
-  if (!anthropicKey) {
-    return {
-      result: `[Oracle — no API key]\n\n${marketData}`,
-      usdcEarned: 0.002,
-    };
-  }
-
-  const messageText = await callModel(
-    'oracle',
-    SYSTEM_PROMPT,
-    `Real Market Data:\n${marketData}\n\nContext: ${JSON.stringify(context || {})}\n\nMission: ${mission}`,
-    anthropicKey
+// Inline GSB logo SVG
+function Logo({ size = 30 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 40 40" width={size} height={size} fill="none" aria-label="GSB Swarm">
+      {/* Hexagon */}
+      <polygon
+        points="20,2 35,10.5 35,29.5 20,38 5,29.5 5,10.5"
+        stroke="hsl(4 85% 44%)"
+        strokeWidth="2"
+        fill="hsl(4 85% 44% / 0.08)"
+      />
+      {/* G arc */}
+      <path d="M13 15 A8 8 0 1 1 27 23 H20" stroke="hsl(4 85% 44%)" strokeWidth="2.2" strokeLinecap="round" />
+      {/* G crossbar */}
+      <path d="M20 23 H27 V27" stroke="hsl(4 85% 44%)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
+}
 
-  // Parse a simple signal from the response
-  const upper = messageText.toUpperCase();
-  let action: 'BUY' | 'HOLD' | 'STANDBY' = 'HOLD';
-  const tokens: string[] = [];
-  if (upper.includes('BULLISH') || upper.includes('BUY') || upper.includes('STRONG')) action = 'BUY';
-  if (upper.includes('STANDBY') || upper.includes('STAND DOWN') || upper.includes('BEARISH')) action = 'STANDBY';
-  if (upper.includes('AKT')) tokens.push('AKT');
-  if (upper.includes('RNDR')) tokens.push('RNDR');
-  if (upper.includes('IO')) tokens.push('IO');
+export default function Sidebar() {
+  const pathname = usePathname();
+  const [collapsed, setCollapsed] = useState(false);
 
-  return {
-    result: messageText,
-    usdcEarned: 0.002,
-    signal: { action, tokens, reason: messageText.slice(0, 200), confidence: 0.7 },
-  };
+  return (
+    <aside
+      className={cn(
+        "flex flex-col h-screen bg-card border-r border-border transition-all duration-300 shrink-0",
+        collapsed ? "w-[60px]" : "w-[220px]"
+      )}
+    >
+      {/* Brand */}
+      <div className={cn(
+        "flex items-center gap-3 px-4 py-5 border-b border-border",
+        collapsed && "justify-center px-2"
+      )}>
+        <Logo size={30} />
+        {!collapsed && (
+          <div>
+            <div className="text-sm font-bold tracking-wide text-glow-red" style={{ color: "hsl(4 85% 44%)" }}>
+              GSB Swarm
+            </div>
+            <div className="text-[10px] text-muted-foreground uppercase tracking-widest">Broker Control</div>
+          </div>
+        )}
+      </div>
+
+      {/* Nav */}
+      <nav className="flex-1 py-3 px-2 space-y-0.5 overflow-y-auto">
+        {NAV.map(({ href, label, icon: Icon, tip }) => {
+          const active = pathname === href || (href !== "/" && pathname.startsWith(href));
+          return (
+            <Link key={href} href={href} title={tip}>
+              <span className={cn(
+                "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-all cursor-pointer group relative",
+                active
+                  ? "bg-primary/10 text-primary border border-primary/25"
+                  : "text-muted-foreground hover:bg-secondary hover:text-foreground border border-transparent"
+              )}>
+                <Icon size={17} className="shrink-0" />
+                {!collapsed && <span>{label}</span>}
+                {/* Tooltip when collapsed */}
+                {collapsed && (
+                  <span className="absolute left-full ml-2.5 px-2 py-1 text-xs bg-secondary border border-border rounded whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-50 shadow-lg">
+                    {label}
+                  </span>
+                )}
+              </span>
+            </Link>
+          );
+        })}
+      </nav>
+
+      {/* Bottom */}
+      <div className="p-2 border-t border-border space-y-1">
+        {/* Properties */}
+        {!collapsed && (
+          <div className="px-3 py-1 text-[10px] uppercase tracking-widest text-muted-foreground">Properties</div>
+        )}
+        <a href="https://www.bleeding.cash" target="_blank" rel="noopener noreferrer"
+          className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors group relative"
+          title="bleeding.cash — AI financial triage"
+        >
+          <Activity size={17} className="shrink-0" />
+          {!collapsed && <span className="text-xs">💊 bleeding.cash</span>}
+          {collapsed && (
+            <span className="absolute left-full ml-2.5 px-2 py-1 text-xs bg-secondary border border-border rounded whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-50 shadow-lg">
+              bleeding.cash
+            </span>
+          )}
+        </a>
+        {/* Base network badge */}
+        {!collapsed && (
+          <div className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] text-muted-foreground">
+            <span className="status-dot active" />
+            <span>Base Network · x402</span>
+          </div>
+        )}
+        <button
+          onClick={() => setCollapsed(c => !c)}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+        >
+          {collapsed ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}
+          {!collapsed && "Collapse"}
+        </button>
+      </div>
+    </aside>
+  );
 }
