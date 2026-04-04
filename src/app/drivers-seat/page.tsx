@@ -143,6 +143,7 @@ export default function DriversSeat() {
   const [swarmStatus, setSwarmStatus] = useState<{status: string, agents: number, jobsFired: number} | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
+  const chatScrollRef = useRef<HTMLDivElement>(null)
 
   /* ── Data fetching ─────────────────────────────────────────────────── */
 
@@ -178,7 +179,6 @@ export default function DriversSeat() {
     const timestamp = new Date().toLocaleTimeString()
     setChatHistory(prev => [...prev, { role: 'user', content: mission, timestamp }])
     setCommand('')
-    setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
 
     try {
       // Step 1 — dispatch and get jobId
@@ -212,6 +212,7 @@ export default function DriversSeat() {
       setChatHistory(prev => [...prev, { role: 'agent', content: `Error: ${msg}`, agent: selectedAgent, timestamp: new Date().toLocaleTimeString() }])
     } finally {
       setIsLoading(false)
+      // Scroll to bottom when result arrives
       setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
     }
   }
