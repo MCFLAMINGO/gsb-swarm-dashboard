@@ -1,4 +1,5 @@
 import { callModel } from '@/lib/modelRouter';
+import { mcp } from '@/lib/mcp';
 
 const SYSTEM_PROMPT = `You are the GSB Compute Oracle. You provide instant micro-quotes for compute resources on the Agent Gas Bible network. You fetch real DeFi data and translate it into compute cost estimates.
 
@@ -50,14 +51,17 @@ async function fetchMarketData(): Promise<string> {
 export async function runOracle({ mission, context }: OracleInput): Promise<OracleResult> {
   const marketData = await fetchMarketData();
 
-  if (!process.env.ANTHROPIC_API_KEY) {
+  // Pull key from MCP if not set locally
+  const anthropicKey = process.env.ANTHROPIC_API_KEY || await mcp.anthropicKey();
+
+  if (!anthropicKey) {
     return {
       result: `[Oracle Fallback — no API key]\n\n${marketData}\n\nCompute Quote: Based on current Base network activity, estimated compute cost is 0.0015 USDC/GFLOP. GSB bank rate: 0.002 USDC per quote. $GSB tokenized compute bank is operational.`,
       usdcEarned: 0.002,
     };
   }
 
-  const messageText = await callModel('oracle', SYSTEM_PROMPT, `Market Data:\n${marketData}\n\nContext: ${JSON.stringify(context || {})}\n\nMission: ${mission}`);
+  const messageText = await callModel('oracle', SYSTEM_PROMPT, `Market Data:\n${marketData}\n\nContext: ${JSON.stringify(context || {})}\n\nMission: ${mission}`, anthropicKey);
 
   const result = messageText;
 
