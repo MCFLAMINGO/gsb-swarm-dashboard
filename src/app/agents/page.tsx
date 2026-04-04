@@ -139,7 +139,7 @@ Payment: $${agent.pricePerJob} USDC per job (x402 via ${agent.x402Endpoint})`;
                 <Save size={12} /> Save Changes
               </Button>
               <Button size="sm" variant="outline" className="gap-1.5 text-xs h-8 hover:border-primary/50 hover:text-primary"
-                onClick={() => { simulateJob(agent.id); toast.success(`${agent.shortName}: job simulated · +$${agent.pricePerJob.toFixed(4)} USDC`); }}
+                onClick={() => { simulateJob(agent.id); toast.success(`${agent.shortName}: job dispatched`); }}
                 disabled={!agent.enabled}
               >
                 <Play size={11} /> Simulate Job

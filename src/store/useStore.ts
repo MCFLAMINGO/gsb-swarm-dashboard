@@ -3,7 +3,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Agent, AcpJob, Withdrawal, ActivityLog, ApiConnection, EarningsSummary } from "@/types";
-import { RAILWAY_AGENTS, CEO_AGENT, DEFAULT_CONNECTIONS, generateSeedLogs } from "@/lib/mockData";
+import { RAILWAY_AGENTS, CEO_AGENT, DEFAULT_CONNECTIONS } from "@/lib/mockData";
 import type { RailwayPublicStatus } from "@/lib/railway";
 
 interface GsbStore {
@@ -25,7 +25,7 @@ interface GsbStore {
 
   // Actions
   updateAgent: (id: string, patch: Partial<Agent>) => void;
-  simulateJob: (agentId: string) => void;
+  simulateJob: (agentId: string) => Promise<void>;
   addJob: (job: AcpJob) => void;
   withdraw: (toAddress: string, amount: number, dest: "wallet" | "gsb_bank") => void;
   updateConnection: (key: string, value: string) => void;
@@ -40,7 +40,7 @@ export const useStore = create<GsbStore>()(
       agents: [...RAILWAY_AGENTS.map(a => ({ ...a })), { ...CEO_AGENT }],
       jobs: [],
       withdrawals: [],
-      logs: generateSeedLogs(),
+      logs: [],
       connections: DEFAULT_CONNECTIONS.map(c => ({ ...c })),
 
       // Live Railway data
@@ -76,36 +76,108 @@ export const useStore = create<GsbStore>()(
       updateAgent: (id, patch) =>
         set(s => ({ agents: s.agents.map(a => a.id === id ? { ...a, ...patch } : a) })),
 
-      simulateJob: (agentId) => {
+      simulateJob: async (agentId) => {
         const agent = get().agents.find(a => a.id === agentId);
         if (!agent) return;
-        const job: AcpJob = {
-          id: `job_${Date.now()}`,
-          agentId,
-          agentName: agent.shortName,
-          jobRef: `sim_${agentId}_${Date.now()}`,
-          usdcAmount: agent.pricePerJob,
-          status: "confirmed",
-          type: "micro",
-          createdAt: new Date().toISOString(),
-          confirmedAt: new Date().toISOString(),
+
+        const defaultMissions: Record<string, string> = {
+          oracle: "Provide a compute price quote for GSB token analysis on Base",
+          preacher: "Write a viral tweet about $GSB Agent Gas Bible token on Virtuals Protocol",
+          onboarding: "Help a new user understand how to hire GSB swarm agents",
+          alert: "Send retention alert about GSB swarm activity",
         };
+        const mission = defaultMissions[agentId] || `Run ${agent.name} default task`;
+
+        // Mark agent as active while dispatching
         set(s => ({
-          jobs: [job, ...s.jobs],
           agents: s.agents.map(a =>
-            a.id === agentId
-              ? { ...a, jobsCompleted: a.jobsCompleted + 1, totalEarned: a.totalEarned + job.usdcAmount, status: "active", lastActiveAt: new Date().toISOString() }
-              : a
+            a.id === agentId ? { ...a, status: "active" as const } : a
           ),
           logs: [{
             id: `log_${Date.now()}`,
             agentId,
-            type: "job",
-            message: `Job fired on Railway: ${job.usdcAmount} USDC`,
-            detail: `ref: ${job.jobRef}`,
+            type: "job" as const,
+            message: `Dispatching ${agent.shortName} job...`,
             createdAt: new Date().toISOString(),
           }, ...s.logs],
         }));
+
+        try {
+          const res = await fetch("/api/dispatch", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ agentId, mission }),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            throw new Error(data.error || `HTTP ${res.status}`);
+          }
+          if (data.jobId) {
+            // Poll for result
+            const poll = setInterval(async () => {
+              try {
+                const jobRes = await fetch(`/api/jobs/${data.jobId}`);
+                const job = await jobRes.json();
+                if (job.status === "completed" || job.status === "failed") {
+                  clearInterval(poll);
+                  const earned = job.usdcEarned ?? agent.pricePerJob;
+                  set(s => ({
+                    jobs: [{
+                      id: data.jobId,
+                      agentId,
+                      agentName: agent.shortName,
+                      jobRef: data.jobId,
+                      usdcAmount: earned,
+                      status: job.status === "completed" ? "confirmed" as const : "failed" as const,
+                      type: "micro" as const,
+                      createdAt: job.createdAt || new Date().toISOString(),
+                      confirmedAt: job.completedAt || new Date().toISOString(),
+                    }, ...s.jobs],
+                    agents: s.agents.map(a =>
+                      a.id === agentId
+                        ? {
+                            ...a,
+                            jobsCompleted: a.jobsCompleted + (job.status === "completed" ? 1 : 0),
+                            totalEarned: a.totalEarned + (job.status === "completed" ? earned : 0),
+                            status: "active" as const,
+                            lastActiveAt: new Date().toISOString(),
+                          }
+                        : a
+                    ),
+                    logs: [{
+                      id: `log_${Date.now()}`,
+                      agentId,
+                      type: "job" as const,
+                      message: job.status === "completed"
+                        ? `Job completed: ${earned} USDC`
+                        : `Job failed: ${job.result || "unknown error"}`,
+                      detail: `ref: ${data.jobId}`,
+                      createdAt: new Date().toISOString(),
+                    }, ...s.logs],
+                  }));
+                }
+              } catch {
+                // polling error — will retry on next interval
+              }
+            }, 2000);
+            // Timeout after 2 minutes
+            setTimeout(() => clearInterval(poll), 120_000);
+          }
+        } catch (e) {
+          console.error("Dispatch failed:", e);
+          set(s => ({
+            agents: s.agents.map(a =>
+              a.id === agentId ? { ...a, status: "error" as const } : a
+            ),
+            logs: [{
+              id: `log_${Date.now()}`,
+              agentId,
+              type: "error" as const,
+              message: `Dispatch failed: ${e instanceof Error ? e.message : "unknown"}`,
+              createdAt: new Date().toISOString(),
+            }, ...s.logs],
+          }));
+        }
       },
 
       addJob: (job) =>

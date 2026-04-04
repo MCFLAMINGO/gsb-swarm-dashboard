@@ -8,7 +8,11 @@ export async function POST(request: NextRequest) {
   const secret = process.env.DISPATCH_SECRET;
   if (secret) {
     const auth = request.headers.get("authorization");
-    if (auth !== `Bearer ${secret}`) {
+    const referer = request.headers.get("referer");
+    const host = request.headers.get("host");
+    // Allow same-origin browser calls (referer matches host)
+    const isSameOrigin = referer && host && referer.includes(host);
+    if (!isSameOrigin && auth !== `Bearer ${secret}`) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
   }
