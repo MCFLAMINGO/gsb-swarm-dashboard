@@ -129,6 +129,7 @@ const QUICK_COMMANDS = [
   { label: '🚨 Send Telegram alert', icon: Bell, cmd: 'Send a Telegram alert with current $GSB swarm status and any notable activity in the past hour.', agent: 'alert' },
   { label: '💊 Market bleeding.cash', icon: DollarSign, cmd: 'Write a promotional thread about bleeding.cash — AI financial triage for restaurants at $24.95. Target struggling restaurant owners on Twitter.', agent: 'preacher' },
   { label: '📈 Token analysis', icon: TrendingUp, cmd: 'Analyze $GSB token — current price action, volume, and what smart money is doing. Give a recommendation.', agent: 'oracle' },
+  { label: '⚡ GFLOP Scan', icon: Zap, cmd: 'GFLOP_SCAN', agent: 'oracle', special: 'gflop' },
 ]
 
 /* ── Page ─────────────────────────────────────────────────────────────── */
@@ -170,6 +171,55 @@ export default function DriversSeat() {
   }, [])
 
   /* ── Fire command ──────────────────────────────────────────────────── */
+
+  // Ensure operator token is stored for Railway direct calls
+  useEffect(() => {
+    const stored = localStorage.getItem('gsb_op_token')
+    if (!stored) {
+      fetch('https://gsb-swarm-production.up.railway.app/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: 'Erock1976' })
+      }).then(r => r.json()).then(d => {
+        if (d.token) localStorage.setItem('gsb_op_token', d.token)
+      }).catch(() => {})
+    }
+  }, [])
+
+  const fireGflopScan = async () => {
+    if (isLoading) return
+    setIsLoading(true)
+    const timestamp = new Date().toLocaleTimeString()
+    setChatHistory(prev => [...prev, { role: 'user', content: '⚡ GFLOP Compute Signal Scan fired — asking Alpha Scanner to find AI/compute token opportunities on Base...', timestamp }])
+    try {
+      const authRes = await fetch('/api/dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-dispatch-secret': 'gsb-dispatch-2026' },
+        body: JSON.stringify({ agentId: 'oracle', mission: 'gflop_scan_proxy' })
+      })
+      // Actually call Railway gflop-scan directly
+      const token = localStorage.getItem('gsb_op_token') || ''
+      const gflopRes = await fetch('https://gsb-swarm-production.up.railway.app/api/gflop-scan', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+      })
+      const data = await gflopRes.json()
+      const resultText = data.ok
+        ? `⚡ GFLOP Scan fired to Alpha Scanner (Job: ${data.jobId?.toString().slice(-8)})
+
+Compute token snapshot:
+${data.computeData}
+
+Alpha Scanner is analyzing Base DEX for correlated AI/compute tokens. Result will appear in the ACP brief feed when complete.`
+        : `GFLOP Scan error: ${data.error || 'ACP client not ready — check Railway'}`
+      setChatHistory(prev => [...prev, { role: 'agent', content: resultText, agent: 'oracle', timestamp: new Date().toLocaleTimeString() }])
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Unknown error'
+      setChatHistory(prev => [...prev, { role: 'agent', content: `GFLOP Scan error: ${msg}`, agent: 'oracle', timestamp: new Date().toLocaleTimeString() }])
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   const fireCommand = async (cmd?: string) => {
     const mission = cmd || command
@@ -281,9 +331,9 @@ export default function DriversSeat() {
 
           <Separator />
           <div className="text-xs text-muted-foreground font-medium">Quick Fire</div>
-          {QUICK_COMMANDS.map((qc) => (
+          {QUICK_COMMANDS.map((qc: { label: string; icon: React.ComponentType<{size?: number}>; cmd: string; agent: string; special?: string }) => (
             <Button key={qc.label} size="sm" variant="ghost" className="w-full justify-start text-xs h-8 px-2"
-              onClick={() => { setSelectedAgent(qc.agent); fireCommand(qc.cmd) }}>
+              onClick={() => { setSelectedAgent(qc.agent); qc.special === 'gflop' ? fireGflopScan() : fireCommand(qc.cmd) }}>
               <span className="truncate">{qc.label}</span>
             </Button>
           ))}
