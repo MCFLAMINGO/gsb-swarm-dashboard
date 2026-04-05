@@ -43,6 +43,12 @@ export default function CopyTraderPage() {
   const [status, setStatus] = useState<TraderStatus | null>(null)
   const [oracleSignal, setOracleSignal] = useState<OracleSignal | null>(null)
   const [acpSignal, setAcpSignal] = useState<AcpSignal | null>(null)
+  const [positions, setPositions] = useState<Record<string, {
+    posId: string; tokenName: string; tokenAddress: string;
+    buyPrice: number; amountUsd: number; buyTimestamp: number;
+    status: string; exitPrice?: number; pnlPct?: number; pnlUsd?: number;
+    exitReason?: string;
+  }>>({})
   const [budget, setBudget] = useState(10)
   const [isLoading, setIsLoading] = useState(false)
   const [lastAction, setLastAction] = useState<string | null>(null)
@@ -114,6 +120,17 @@ export default function CopyTraderPage() {
     } catch {}
   }
 
+  const fetchPositions = async () => {
+    if (!authToken) return
+    try {
+      const res = await fetch(`${RAILWAY}/api/copy-trader/positions`, {
+        headers: { 'Authorization': `Bearer ${authToken}` }
+      })
+      const data = await res.json()
+      if (data.positions) setPositions(data.positions)
+    } catch {}
+  }
+
   const fetchAcpSignal = async () => {
     if (!authToken) return
     try {
@@ -130,6 +147,7 @@ export default function CopyTraderPage() {
       fetchStatus()
       fetchOracleSignal()
       fetchAcpSignal()
+      fetchPositions()
     }
   }, [authToken])
 
@@ -335,6 +353,61 @@ export default function CopyTraderPage() {
             <p className="text-[10px] text-muted-foreground">Signals from GSB CEO Agent via ACP. USDC→WETH→token multi-hop swap. High risk — new tokens.</p>
           </CardContent>
         </Card>
+
+        {/* Open Positions */}
+        {Object.keys(positions).length > 0 && (
+          <Card>
+            <CardHeader className="pb-2 pt-4 px-4">
+              <CardTitle className="text-sm flex items-center justify-between">
+                <span>Positions</span>
+                <button onClick={fetchPositions} className="text-[10px] text-muted-foreground hover:text-foreground">↻ Refresh</button>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 pb-4 space-y-2">
+              {Object.values(positions).sort((a, b) => b.buyTimestamp - a.buyTimestamp).map(pos => {
+                const isOpen = pos.status === 'open'
+                const pnlColor = (pos.pnlPct || 0) >= 0 ? 'text-green-400' : 'text-red-400'
+                const ageHrs = ((Date.now() - pos.buyTimestamp) / 3_600_000).toFixed(1)
+                return (
+                  <div key={pos.posId} className={`rounded-lg border p-3 ${
+                    isOpen ? 'border-blue-500/30 bg-blue-950/10' : 'border-border bg-muted/20'
+                  }`}>
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="font-bold text-sm">{pos.tokenName}</div>
+                        <div className="text-[10px] text-muted-foreground">
+                          Entry: ${pos.buyPrice?.toFixed(8)} · ${pos.amountUsd} invested · {ageHrs}h ago
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className={`text-sm font-bold ${
+                          isOpen ? 'text-blue-400' : pnlColor
+                        }`}>
+                          {isOpen ? '● OPEN' : (
+                            `${(pos.pnlPct || 0) >= 0 ? '+' : ''}${((pos.pnlPct || 0)*100).toFixed(1)}%`
+                          )}
+                        </div>
+                        {!isOpen && pos.exitReason && (
+                          <div className="text-[10px] text-muted-foreground">{pos.exitReason.split(' —')[0]}</div>
+                        )}
+                      </div>
+                    </div>
+                    {isOpen && (
+                      <div className="mt-2 text-[10px] text-muted-foreground">
+                        Stop: ${(pos.buyPrice * 0.80).toFixed(8)} · Target: ${(pos.buyPrice * 1.50).toFixed(8)} · Exit monitor active
+                      </div>
+                    )}
+                    {!isOpen && pos.pnlUsd !== undefined && (
+                      <div className={`mt-1 text-[10px] font-medium ${pnlColor}`}>
+                        P&L: {pos.pnlUsd >= 0 ? '+' : ''}${pos.pnlUsd.toFixed(2)}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </CardContent>
+          </Card>
+        )}
 
         {/* ACP Signal */}
         {acpSignal?.signal && (
