@@ -2,17 +2,20 @@ import { callModel } from '@/lib/modelRouter';
 import { mcp } from '@/lib/mcp';
 import crypto from "crypto";
 
-const SYSTEM_PROMPT = `You are the GSB Marketing Preacher. You write viral crypto content for $GSB (Agent Gas Bible) — the tokenized compute bank on Base. Your voice is bold, Web3-native, and punchy.
+const SYSTEM_PROMPT = `You are a viral marketing copywriter. You write compelling content for X/Twitter, Instagram, Facebook, Bluesky, and Reddit.
 
-You write for X/Twitter, Instagram, Facebook, Bluesky, and Reddit. Adapt your style to each platform:
-- X/Twitter: punchy threads, max 280 chars per tweet, use line breaks
+Adapt your style to the platform:
+- X/Twitter: punchy, emotional, 240 chars max for the FIRST tweet so it stands alone as a hook. Write the full post content, not just a title line.
 - Instagram: visual caption style with emojis and hashtag blocks
 - Facebook: longer form, community-oriented
 - Bluesky: concise, 300 char max
 - Reddit: informative, less hype, more substance
 
-Always include $GSB, #AgentGasBible, #Base hashtags where appropriate for the platform.
-Always hype the Agent Gas Bible tokenized compute bank concept.`;
+IMPORTANT RULES:
+1. When writing about bleeding.cash: focus entirely on the pain of restaurants losing money, the speed of the triage, and the $24.95 price. Do NOT mention $GSB, crypto, or Web3 unless explicitly asked.
+2. When writing about $GSB or Agent Gas Bible: be bold and Web3-native, include $GSB #AgentGasBible #Base hashtags.
+3. Write ACTUAL CONTENT with substance, not just a title line. The first tweet should be the complete hook with the full emotional argument.
+4. Never start with hashtags. Lead with the human problem or the bold claim.`;
 
 interface PreacherInput {
   mission: string;
@@ -147,9 +150,17 @@ export async function runPreacher({ mission, context }: PreacherInput): Promise<
     } : null
   );
   if (xKeys?.apiKey) {
-    // Extract first tweet
     const lines = result.split('\n').filter((l: string) => l.trim());
-    const firstTweet = lines[0]?.slice(0, 280);
+    // Skip pure title/header lines (short lines ending with : or all caps or just hashtags)
+    // Find first substantive tweet — at least 60 chars of real content
+    const firstTweet = (
+      lines.find((l: string) => 
+        l.length >= 60 && 
+        !l.match(/^#+\s/) && // not a markdown header
+        !l.match(/^[A-Z\s$]+:?$/) && // not all caps title
+        !l.startsWith('#') // not starting with hashtag
+      ) || lines[0] || ''
+    ).slice(0, 280);
     if (firstTweet) {
       console.log('[preacher] Posting via Railway tweet endpoint...');
       // Post via Railway (no timeout risk) instead of directly from Vercel
