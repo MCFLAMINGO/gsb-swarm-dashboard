@@ -66,10 +66,16 @@ export default function CopyTraderPage() {
           body: JSON.stringify({ password: 'Erock1976' })
         })
         const data = await res.json()
-        if (data.token) setAuthToken(data.token)
+        if (data.token) {
+          setAuthToken(data.token)
+          localStorage.setItem('gsb_op_token', data.token)
+        }
       } catch {}
     }
     getToken()
+    // Refresh token every 20 min since Railway restarts wipe validTokens
+    const tokenRefresh = setInterval(getToken, 20 * 60 * 1000)
+    return () => clearInterval(tokenRefresh)
   }, [])
 
   // Poll status every 10s when running
