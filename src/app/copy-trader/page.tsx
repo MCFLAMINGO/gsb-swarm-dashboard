@@ -212,6 +212,31 @@ export default function CopyTraderPage() {
     setIsLoading(false)
   }
 
+  const buyToken = async (tokenAddress: string, tokenName: string, usdAmount: number = 2.5) => {
+    if (!authToken || isLoading) return
+    setIsLoading(true)
+    setLastAction(`buying ${tokenName}...`)
+    try {
+      const res = await fetch(`${RAILWAY}/api/copy-trader/buy-signal`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tokenAddress, tokenName, usdAmount })
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setLastAction(`✅ Buy order sent for ${tokenName}`)
+        setTimeout(() => { fetchStatus(); setLastAction(null); }, 4000)
+      } else {
+        setLastAction(`error: ${data.error || 'failed'}`)
+        setTimeout(() => setLastAction(null), 5000)
+      }
+    } catch {
+      setLastAction('error: network')
+      setTimeout(() => setLastAction(null), 4000)
+    }
+    setIsLoading(false)
+  }
+
   const approveUsdc = async () => {
     if (!authToken || isLoading) return
     setIsLoading(true)
@@ -255,6 +280,61 @@ export default function CopyTraderPage() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4 max-w-4xl mx-auto w-full">
+
+        {/* CEO Alpha — hardcoded current signal from CEO agent */}
+        <Card className="border border-yellow-500/40 bg-yellow-950/10">
+          <CardHeader className="pb-2 pt-4 px-4">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <span>👑</span> CEO Alpha Signal
+              <span className="ml-auto text-[10px] text-muted-foreground">Live from GSB CEO ACP Agent</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4 space-y-3">
+            <div className="rounded-lg bg-yellow-950/20 border border-yellow-500/20 p-3">
+              <div className="flex justify-between items-start mb-2">
+                <div>
+                  <div className="font-bold text-sm text-yellow-300">FETCHR / WETH</div>
+                  <div className="text-[10px] text-muted-foreground font-mono">0x610a5a...eba3</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-green-400 font-bold text-sm">+279.94%</div>
+                  <div className="text-[10px] text-muted-foreground">24h | $451K vol</div>
+                </div>
+              </div>
+              <div className="text-[10px] text-muted-foreground mb-3">$83.9K liquidity · 6 buys / 6 sells last 5min · Uniswap Base</div>
+              <Button
+                size="sm"
+                className="w-full bg-yellow-600 hover:bg-yellow-500 text-black font-bold text-xs h-8"
+                disabled={isLoading || !authToken}
+                onClick={() => buyToken('0x610a5a297fe2135289b8565ef645de2a7c00eba3', 'FETCHR', budget * 0.25)}
+              >
+                ⚡ Buy FETCHR — ${(budget * 0.25).toFixed(2)} ({(budget * 0.25 / budget * 100).toFixed(0)}% of budget)
+              </Button>
+            </div>
+            <div className="rounded-lg bg-muted/20 border border-border p-3">
+              <div className="flex justify-between items-start mb-2">
+                <div>
+                  <div className="font-bold text-sm">AGNT / WETH</div>
+                  <div className="text-[10px] text-muted-foreground font-mono">0x32f66e...ba3</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-green-400 font-bold text-sm">+42.73%</div>
+                  <div className="text-[10px] text-muted-foreground">24h | $133K vol</div>
+                </div>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full text-xs h-7"
+                disabled={isLoading || !authToken}
+                onClick={() => buyToken('0x32f66ec2ffb26d262058965cf294f951e47f8ba3', 'AGNT', budget * 0.25)}
+              >
+                Buy AGNT
+              </Button>
+            </div>
+            <p className="text-[10px] text-muted-foreground">Signals from GSB CEO Agent via ACP. USDC→WETH→token multi-hop swap. High risk — new tokens.</p>
+          </CardContent>
+        </Card>
 
         {/* ACP Signal */}
         {acpSignal?.signal && (
