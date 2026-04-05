@@ -21,6 +21,15 @@ type TraderStatus = {
   recentLog: string[]
 }
 
+type AcpSignal = {
+  signal: string | null
+  token?: string
+  source?: string
+  receivedAt?: string
+  briefSnippet?: string
+  message?: string
+}
+
 type OracleSignal = {
   action: 'BUY' | 'HOLD' | 'STANDBY'
   tokens: string[]
@@ -33,6 +42,7 @@ type OracleSignal = {
 export default function CopyTraderPage() {
   const [status, setStatus] = useState<TraderStatus | null>(null)
   const [oracleSignal, setOracleSignal] = useState<OracleSignal | null>(null)
+  const [acpSignal, setAcpSignal] = useState<AcpSignal | null>(null)
   const [budget, setBudget] = useState(10)
   const [isLoading, setIsLoading] = useState(false)
   const [lastAction, setLastAction] = useState<string | null>(null)
@@ -104,10 +114,22 @@ export default function CopyTraderPage() {
     } catch {}
   }
 
+  const fetchAcpSignal = async () => {
+    if (!authToken) return
+    try {
+      const res = await fetch(`${RAILWAY}/api/trade-signal`, {
+        headers: { 'Authorization': `Bearer ${authToken}` }
+      })
+      const data = await res.json()
+      setAcpSignal(data)
+    } catch {}
+  }
+
   useEffect(() => {
     if (authToken) {
       fetchStatus()
       fetchOracleSignal()
+      fetchAcpSignal()
     }
   }, [authToken])
 
@@ -233,6 +255,43 @@ export default function CopyTraderPage() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4 max-w-4xl mx-auto w-full">
+
+        {/* ACP Signal */}
+        {acpSignal?.signal && (
+          <Card className="border border-purple-500/30 bg-purple-950/20">
+            <CardHeader className="pb-2 pt-4 px-4">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <span>🤖</span> ACP Agent Signal
+                <span className="ml-auto font-bold text-purple-400">{acpSignal.signal}</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 pb-4">
+              <div className="space-y-1.5 text-xs">
+                {acpSignal.token && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Token</span>
+                    <span className="font-mono">{acpSignal.token.slice(0,16)}...</span>
+                  </div>
+                )}
+                {acpSignal.receivedAt && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Received</span>
+                    <span>{new Date(acpSignal.receivedAt).toLocaleTimeString()}</span>
+                  </div>
+                )}
+                {acpSignal.source && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Source</span>
+                    <span className="text-purple-400">{acpSignal.source}</span>
+                  </div>
+                )}
+                <button onClick={fetchAcpSignal} className="text-[10px] text-muted-foreground hover:text-foreground mt-1">
+                  ↻ Refresh
+                </button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Oracle Signal */}
         <Card className={`border ${signalBg}`}>
