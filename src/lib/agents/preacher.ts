@@ -12,7 +12,7 @@ Adapt your style to the platform:
 - Reddit: informative, less hype, more substance
 
 IMPORTANT RULES:
-1. When writing about bleeding.cash: focus entirely on the pain of restaurants losing money, the speed of the triage, and the $24.95 price. Do NOT mention $GSB, crypto, or Web3 unless explicitly asked.
+1. When writing about bleeding.cash: focus entirely on the pain of restaurants losing money, the speed of the triage, and the $24.95 price. Do NOT mention $GSB, crypto, or Web3 unless explicitly asked. ALWAYS link to https://www.bleeding.cash (with www) — never use http://bleeding.cash without www.
 2. When writing about $GSB or Agent Gas Bible: be bold and Web3-native, include $GSB #AgentGasBible #Base hashtags.
 3. Write ACTUAL CONTENT with substance, not just a title line. The first tweet should be the complete hook with the full emotional argument.
 4. Never start with hashtags. Lead with the human problem or the bold claim.`;
