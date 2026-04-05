@@ -190,6 +190,25 @@ export default function CopyTraderPage() {
     setIsLoading(false)
   }
 
+  const approveUsdc = async () => {
+    if (!authToken || isLoading) return
+    setIsLoading(true)
+    setLastAction('approving USDC...')
+    try {
+      const res = await fetch(`${RAILWAY}/api/copy-trader/approve`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${authToken}` }
+      })
+      const data = await res.json()
+      setLastAction(data.ok ? '✅ USDC approved — swaps now instant' : 'error: ' + (data.error || 'failed'))
+      setTimeout(() => setLastAction(null), 6000)
+    } catch {
+      setLastAction('error: network')
+      setTimeout(() => setLastAction(null), 4000)
+    }
+    setIsLoading(false)
+  }
+
   const signalColor = oracleSignal?.action === 'BUY' ? 'text-green-400' :
                       oracleSignal?.action === 'STANDBY' ? 'text-red-400' : 'text-yellow-400'
   const signalBg = oracleSignal?.action === 'BUY' ? 'border-green-500/30 bg-green-950/20' :
@@ -350,6 +369,15 @@ export default function CopyTraderPage() {
                 <span className="ml-1.5">{isLoading && lastAction === 'stopping' ? 'Stopping...' : 'Stop'}</span>
               </Button>
             </div>
+
+            {/* One-time approve button */}
+            <button
+              onClick={approveUsdc}
+              disabled={isLoading || !authToken}
+              className="w-full text-xs text-muted-foreground hover:text-yellow-400 hover:border-yellow-500/30 border border-transparent rounded py-1.5 transition-colors disabled:opacity-30"
+            >
+              ⚡ Pre-approve USDC for instant swaps (one-time setup)
+            </button>
 
             {oracleSignal?.action === 'STANDBY' && (
               <div className="flex items-start gap-2 p-2 rounded bg-red-950/20 border border-red-500/20">
