@@ -147,16 +147,33 @@ export async function runPreacher({ mission, context }: PreacherInput): Promise<
     } : null
   );
   if (xKeys?.apiKey) {
-    // Extract first tweet (up to first double newline, max 280 chars)
+    // Extract first tweet
     const lines = result.split('\n').filter((l: string) => l.trim());
     const firstTweet = lines[0]?.slice(0, 280);
     if (firstTweet) {
-      console.log('[preacher] Posting to X:', firstTweet.slice(0, 60) + '...');
-      tweetUrl = await postTweetToX(firstTweet, xKeys);
-      console.log('[preacher] Tweet result:', tweetUrl || 'FAILED');
+      console.log('[preacher] Posting via Railway tweet endpoint...');
+      // Post via Railway (no timeout risk) instead of directly from Vercel
+      try {
+        const railwayRes = await fetch('https://gsb-swarm-production.up.railway.app/api/tweet', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-gsb-token': 'gsb-dispatch-2026' },
+          body: JSON.stringify({ text: firstTweet }),
+        });
+        const railwayData = await railwayRes.json();
+        if (railwayData.url) {
+          tweetUrl = railwayData.url;
+          console.log('[preacher] Posted via Railway:', tweetUrl);
+        } else {
+          // Fallback: post directly from Vercel
+          tweetUrl = await postTweetToX(firstTweet, xKeys);
+          console.log('[preacher] Posted directly:', tweetUrl || 'FAILED');
+        }
+      } catch {
+        tweetUrl = await postTweetToX(firstTweet, xKeys);
+      }
     }
   } else {
-    console.warn('[preacher] No X credentials available — skipping post');
+    console.warn('[preacher] No X credentials — skipping post');
   }
 
   return {
