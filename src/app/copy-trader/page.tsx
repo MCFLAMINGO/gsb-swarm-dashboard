@@ -35,6 +35,7 @@ export default function CopyTraderPage() {
   const [oracleSignal, setOracleSignal] = useState<OracleSignal | null>(null)
   const [budget, setBudget] = useState(10)
   const [isLoading, setIsLoading] = useState(false)
+  const [lastAction, setLastAction] = useState<string | null>(null)
   const [authToken, setAuthToken] = useState('')
   const [logExpanded, setLogExpanded] = useState(false)
   const pollRef = useRef<NodeJS.Timeout | null>(null)
@@ -122,6 +123,7 @@ export default function CopyTraderPage() {
   const startTrader = async () => {
     if (!authToken || isLoading) return
     setIsLoading(true)
+    setLastAction('starting')
     try {
       const res = await fetch(`${RAILWAY}/api/copy-trader/start`, {
         method: 'POST',
@@ -130,38 +132,61 @@ export default function CopyTraderPage() {
       })
       const data = await res.json()
       if (data.ok) {
+        setLastAction('started')
         await fetchStatus()
+        setTimeout(() => setLastAction(null), 4000)
+      } else {
+        setLastAction('error: ' + (data.error || 'failed'))
+        setTimeout(() => setLastAction(null), 4000)
       }
-    } catch {}
+    } catch (e) {
+      setLastAction('error: network')
+      setTimeout(() => setLastAction(null), 4000)
+    }
     setIsLoading(false)
   }
 
   const rehuntWallets = async () => {
     if (!authToken || isLoading) return
     setIsLoading(true)
+    setLastAction('hunting')
     try {
       const res = await fetch(`${RAILWAY}/api/copy-trader/rehunt`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${authToken}` }
+        headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ budget })
       })
       const data = await res.json()
       if (data.ok) {
-        setTimeout(fetchStatus, 3000) // Give it 3s to start scanning
+        setLastAction('hunting — scanning 2000 blocks...')
+        setTimeout(() => { fetchStatus(); setLastAction(null); }, 4000)
+      } else {
+        setLastAction('error: ' + (data.error || 'failed'))
+        setTimeout(() => setLastAction(null), 4000)
       }
-    } catch {}
+    } catch {
+      setLastAction('error: network')
+      setTimeout(() => setLastAction(null), 4000)
+    }
     setIsLoading(false)
   }
 
   const stopTrader = async () => {
     if (!authToken || isLoading) return
     setIsLoading(true)
+    setLastAction('stopping')
     try {
       await fetch(`${RAILWAY}/api/copy-trader/stop`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${authToken}` }
       })
+      setLastAction('stopped')
       await fetchStatus()
-    } catch {}
+      setTimeout(() => setLastAction(null), 3000)
+    } catch {
+      setLastAction('error: network')
+      setTimeout(() => setLastAction(null), 3000)
+    }
     setIsLoading(false)
   }
 
@@ -271,32 +296,58 @@ export default function CopyTraderPage() {
             <Separator />
 
             {/* Start / Stop */}
-            <div className="flex gap-3">
+            {/* Action feedback toast */}
+            {lastAction && (
+              <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium animate-pulse ${
+                lastAction.startsWith('error') 
+                  ? 'bg-red-950/40 border border-red-500/40 text-red-400'
+                  : lastAction === 'stopped'
+                  ? 'bg-muted border border-border text-muted-foreground'
+                  : 'bg-green-950/40 border border-green-500/40 text-green-400'
+              }`}>
+                {lastAction.startsWith('error') ? '✗' : lastAction === 'stopped' ? '■' : '●'}
+                &nbsp;{lastAction.charAt(0).toUpperCase() + lastAction.slice(1)}
+              </div>
+            )}
+
+            <div className="grid grid-cols-3 gap-2">
               <Button
-                className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                className={`col-span-1 font-bold transition-all ${
+                  status?.running 
+                    ? 'bg-green-700 text-white cursor-not-allowed opacity-60' 
+                    : 'bg-green-600 hover:bg-green-500 active:bg-green-700 text-white shadow-lg shadow-green-900/30'
+                }`}
                 disabled={status?.running || isLoading || !authToken}
                 onClick={startTrader}
               >
-                <Play className="w-4 h-4 mr-2" />
-                Start
+                {isLoading && lastAction === 'starting' 
+                  ? <RefreshCw className="w-4 h-4 animate-spin" />
+                  : <Play className="w-4 h-4" />}
+                <span className="ml-1.5">{isLoading && lastAction === 'starting' ? 'Starting...' : status?.running ? 'Running' : 'Start'}</span>
               </Button>
+
               <Button
                 variant="outline"
-                className="flex-1"
+                className="col-span-1 border-blue-500/50 text-blue-400 hover:bg-blue-950/30 hover:border-blue-400 active:bg-blue-950/50 font-bold"
                 disabled={isLoading || !authToken}
                 onClick={rehuntWallets}
               >
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Re-Hunt Wallets
+                {isLoading && lastAction?.startsWith('hunt')
+                  ? <RefreshCw className="w-4 h-4 animate-spin" />
+                  : <RefreshCw className="w-4 h-4" />}
+                <span className="ml-1.5">{isLoading && lastAction?.startsWith('hunt') ? 'Hunting...' : 'Re-Hunt'}</span>
               </Button>
+
               <Button
                 variant="destructive"
-                className="flex-1"
+                className="col-span-1 font-bold hover:bg-red-600 active:bg-red-800 disabled:opacity-30"
                 disabled={!status?.running || isLoading}
                 onClick={stopTrader}
               >
-                <Square className="w-4 h-4 mr-2" />
-                Stop
+                {isLoading && lastAction === 'stopping'
+                  ? <RefreshCw className="w-4 h-4 animate-spin" />
+                  : <Square className="w-4 h-4" />}
+                <span className="ml-1.5">{isLoading && lastAction === 'stopping' ? 'Stopping...' : 'Stop'}</span>
               </Button>
             </div>
 
