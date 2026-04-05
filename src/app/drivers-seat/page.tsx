@@ -197,11 +197,19 @@ export default function DriversSeat() {
         headers: { 'Content-Type': 'application/json', 'x-dispatch-secret': 'gsb-dispatch-2026' },
         body: JSON.stringify({ agentId: 'oracle', mission: 'gflop_scan_proxy' })
       })
-      // Actually call Railway gflop-scan directly
-      const token = localStorage.getItem('gsb_op_token') || ''
+      // Always get a fresh token (Railway restarts wipe validTokens)
+      const authRes2 = await fetch('https://gsb-swarm-production.up.railway.app/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: 'Erock1976' })
+      })
+      const authData2 = await authRes2.json()
+      const freshToken = authData2.token || ''
+      if (freshToken) localStorage.setItem('gsb_op_token', freshToken)
+
       const gflopRes = await fetch('https://gsb-swarm-production.up.railway.app/api/gflop-scan', {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+        headers: { 'Authorization': `Bearer ${freshToken}`, 'Content-Type': 'application/json' }
       })
       const data = await gflopRes.json()
       const resultText = data.ok
