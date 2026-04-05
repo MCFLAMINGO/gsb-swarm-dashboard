@@ -33,13 +33,17 @@ function detectPlatform(mission: string): string {
   return "X/Twitter";
 }
 
-function signOAuth1(method: string, url: string): string {
+function signOAuth1(
+  method: string,
+  url: string,
+  keys: { apiKey: string; apiSecret: string; accessToken: string; accessTokenSecret: string }
+): string {
   const oauth: Record<string, string> = {
-    oauth_consumer_key: process.env.X_API_KEY || "",
+    oauth_consumer_key: keys.apiKey,
     oauth_nonce: crypto.randomBytes(16).toString("hex"),
     oauth_signature_method: "HMAC-SHA1",
     oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
-    oauth_token: process.env.X_ACCESS_TOKEN || "",
+    oauth_token: keys.accessToken,
     oauth_version: "1.0",
   };
   const sortedParams = Object.keys(oauth)
@@ -47,7 +51,7 @@ function signOAuth1(method: string, url: string): string {
     .map((k) => `${encodeURIComponent(k)}=${encodeURIComponent(oauth[k])}`)
     .join("&");
   const baseString = `${method}&${encodeURIComponent(url)}&${encodeURIComponent(sortedParams)}`;
-  const signingKey = `${encodeURIComponent(process.env.X_API_SECRET || "")}&${encodeURIComponent(process.env.X_ACCESS_TOKEN_SECRET || "")}`;
+  const signingKey = `${encodeURIComponent(keys.apiSecret)}&${encodeURIComponent(keys.accessTokenSecret)}`;
   const signature = crypto.createHmac("sha1", signingKey).update(baseString).digest("base64");
   const headerParams = { ...oauth, oauth_signature: signature };
   return (
@@ -58,22 +62,30 @@ function signOAuth1(method: string, url: string): string {
   );
 }
 
-async function postTweetToX(text: string): Promise<string | null> {
-  if (!process.env.X_API_KEY || !process.env.X_ACCESS_TOKEN) return null;
+async function postTweetToX(
+  text: string,
+  keys: { apiKey: string; apiSecret: string; accessToken: string; accessTokenSecret: string }
+): Promise<string | null> {
+  if (!keys.apiKey || !keys.accessToken) return null;
   try {
     const url = "https://api.twitter.com/2/tweets";
-    const auth = signOAuth1("POST", url);
+    const auth = signOAuth1("POST", url, keys);
     const res = await fetch(url, {
       method: "POST",
       headers: { Authorization: auth, "Content-Type": "application/json" },
       body: JSON.stringify({ text: text.slice(0, 280) }),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error('[preacher] X post failed:', res.status, errText.slice(0, 200));
+      return null;
+    }
     const data = await res.json();
     return data.data?.id
       ? `https://x.com/ErikOsol43597/status/${data.data.id}`
       : null;
-  } catch {
+  } catch (e) {
+    console.error('[preacher] postTweetToX error:', e);
     return null;
   }
 }
@@ -124,19 +136,27 @@ export async function runPreacher({ mission, context }: PreacherInput): Promise<
 
   const result = messageText;
 
-  // Auto-post first tweet — use MCP creds if local env empty
+  // Auto-post first tweet — pass creds directly, no process.env mutation
   let tweetUrl: string | null = null;
-  const xKey = creds?.apiKey || process.env.X_API_KEY;
-  if (xKey) {
-    // Temporarily set env vars from MCP for signOAuth1
-    if (creds) {
-      process.env.X_API_KEY = creds.apiKey;
-      process.env.X_API_SECRET = creds.apiSecret;
-      process.env.X_ACCESS_TOKEN = creds.accessToken;
-      process.env.X_ACCESS_TOKEN_SECRET = creds.accessTokenSecret;
+  const xKeys = creds || (
+    process.env.X_API_KEY ? {
+      apiKey: process.env.X_API_KEY,
+      apiSecret: process.env.X_API_SECRET || '',
+      accessToken: process.env.X_ACCESS_TOKEN || '',
+      accessTokenSecret: process.env.X_ACCESS_TOKEN_SECRET || '',
+    } : null
+  );
+  if (xKeys?.apiKey) {
+    // Extract first tweet (up to first double newline, max 280 chars)
+    const lines = result.split('\n').filter((l: string) => l.trim());
+    const firstTweet = lines[0]?.slice(0, 280);
+    if (firstTweet) {
+      console.log('[preacher] Posting to X:', firstTweet.slice(0, 60) + '...');
+      tweetUrl = await postTweetToX(firstTweet, xKeys);
+      console.log('[preacher] Tweet result:', tweetUrl || 'FAILED');
     }
-    const firstTweet = result.split("\n\n")[0]?.slice(0, 280);
-    if (firstTweet) tweetUrl = await postTweetToX(firstTweet);
+  } else {
+    console.warn('[preacher] No X credentials available — skipping post');
   }
 
   return {
