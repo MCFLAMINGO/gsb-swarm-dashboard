@@ -2,10 +2,10 @@ import { callModel } from '@/lib/modelRouter';
 import { mcp } from '@/lib/mcp';
 import crypto from "crypto";
 
-const SYSTEM_PROMPT = `You are a viral marketing copywriter. You write compelling content for X/Twitter, Instagram, Facebook, Bluesky, and Reddit.
+const SYSTEM_PROMPT = `You are a viral marketing copywriter and content strategist powered by the GSB Content Engine.
 
 Adapt your style to the platform:
-- X/Twitter: punchy, emotional, 240 chars max for the FIRST tweet so it stands alone as a hook. Write the full post content, not just a title line.
+- X/Twitter: punchy, emotional, 240 chars max for the FIRST tweet so it stands alone as a hook. Write full post content, not just a title line.
 - Instagram: visual caption style with emojis and hashtag blocks
 - Facebook: longer form, community-oriented
 - Bluesky: concise, 300 char max
@@ -15,7 +15,8 @@ IMPORTANT RULES:
 1. When writing about bleeding.cash: focus entirely on the pain of restaurants losing money, the speed of the triage, and the $24.95 price. Do NOT mention $GSB, crypto, or Web3 unless explicitly asked. ALWAYS link to https://www.bleeding.cash (with www) — never use http://bleeding.cash without www.
 2. When writing about $GSB or Agent Gas Bible: be bold and Web3-native, include $GSB #AgentGasBible #Base hashtags.
 3. Write ACTUAL CONTENT with substance, not just a title line. The first tweet should be the complete hook with the full emotional argument.
-4. Never start with hashtags. Lead with the human problem or the bold claim.`;
+4. Never start with hashtags. Lead with the human problem or the bold claim.
+5. When audience intelligence is provided, use it to speak directly to that audience's pain points and language.`;
 
 interface PreacherInput {
   mission: string;
@@ -34,6 +35,17 @@ function detectPlatform(mission: string): string {
   if (lower.includes("bluesky") || lower.includes("bsky")) return "Bluesky";
   if (lower.includes("reddit")) return "Reddit";
   return "X/Twitter";
+}
+
+// Detect which brand/site the mission is about
+function detectBrandUrl(mission: string): string | null {
+  if (mission.toLowerCase().includes('bleeding.cash') || mission.toLowerCase().includes('restaurant')) {
+    return 'https://www.bleeding.cash';
+  }
+  if (mission.toLowerCase().includes('gsb') || mission.toLowerCase().includes('agent gas bible') || mission.toLowerCase().includes('raiders')) {
+    return 'https://www.raidersofthechain.com';
+  }
+  return null;
 }
 
 function signOAuth1(
@@ -93,8 +105,49 @@ async function postTweetToX(
   }
 }
 
+// Fetch audience intelligence from content engine
+async function getAudienceIntel(url: string): Promise<string> {
+  try {
+    const res = await fetch('https://gsb-swarm-production.up.railway.app/api/content/analyze-audience', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, walletAddress: 'preacher-agent' }),
+    });
+    if (!res.ok) return '';
+    const data = await res.json();
+    if (!data.ok) return '';
+    const a = data.primaryAudience;
+    return `Audience Intel for ${url}:
+- Demographics: ${a?.demographics || 'unknown'}
+- Pain points: ${a?.painPoints?.join(', ') || 'none'}
+- Goals: ${a?.goals?.join(', ') || 'none'}
+- Awareness level: ${a?.awarenessLevel || 'unknown'}
+- Trust sources: ${data.trustSources?.join(', ') || 'none'}
+- Tone: ${data.contentStrategy?.tone || 'neutral'}`;
+  } catch {
+    return '';
+  }
+}
+
+// Humanize post via content engine
+async function humanizePost(text: string): Promise<string> {
+  try {
+    const res = await fetch('https://gsb-swarm-production.up.railway.app/api/content/humanize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, intensity: 'medium' }),
+    });
+    if (!res.ok) return text;
+    const data = await res.json();
+    return data.ok ? (data.humanized || text) : text;
+  } catch {
+    return text;
+  }
+}
+
 export async function runPreacher({ mission, context }: PreacherInput): Promise<PreacherResult> {
   const platform = detectPlatform(mission);
+  const brandUrl = detectBrandUrl(mission);
 
   // Pull keys from MCP if not in local env
   const creds = await mcp.xCredentials();
@@ -107,7 +160,7 @@ export async function runPreacher({ mission, context }: PreacherInput): Promise<
     };
   }
 
-  // Fetch real GSB swarm stats before writing
+  // Fetch real GSB swarm stats
   let realStats = '';
   try {
     const statsRes = await fetch('https://gsb-swarm-production.up.railway.app/api/public');
@@ -133,13 +186,25 @@ export async function runPreacher({ mission, context }: PreacherInput): Promise<
     }
   } catch { tokenData = ''; }
 
-  const groundedContext = [realStats, tokenData].filter(Boolean).join('\n');
+  // Fetch audience intelligence for brand-specific posts
+  let audienceIntel = '';
+  if (brandUrl) {
+    audienceIntel = await getAudienceIntel(brandUrl);
+  }
 
-  const messageText = await callModel('preacher', SYSTEM_PROMPT, `Platform: ${platform}\nReal Data (USE THESE NUMBERS ONLY — do not invent stats):\n${groundedContext}\n\nContext: ${JSON.stringify(context || {})}\n\nMission: ${mission}`, anthropicKey || undefined);
+  const groundedContext = [realStats, tokenData, audienceIntel].filter(Boolean).join('\n');
 
-  const result = messageText;
+  const rawContent = await callModel(
+    'preacher',
+    SYSTEM_PROMPT,
+    `Platform: ${platform}\nReal Data (USE THESE NUMBERS ONLY — do not invent stats):\n${groundedContext}\n\nContext: ${JSON.stringify(context || {})}\n\nMission: ${mission}`,
+    anthropicKey || undefined
+  );
 
-  // Auto-post first tweet — pass creds directly, no process.env mutation
+  // Humanize the content so it doesn't read as AI-generated
+  const result = await humanizePost(rawContent);
+
+  // Auto-post first tweet
   let tweetUrl: string | null = null;
   const xKeys = creds || (
     process.env.X_API_KEY ? {
@@ -151,19 +216,16 @@ export async function runPreacher({ mission, context }: PreacherInput): Promise<
   );
   if (xKeys?.apiKey) {
     const lines = result.split('\n').filter((l: string) => l.trim());
-    // Skip pure title/header lines (short lines ending with : or all caps or just hashtags)
-    // Find first substantive tweet — at least 60 chars of real content
     const firstTweet = (
-      lines.find((l: string) => 
-        l.length >= 60 && 
-        !l.match(/^#+\s/) && // not a markdown header
-        !l.match(/^[A-Z\s$]+:?$/) && // not all caps title
-        !l.startsWith('#') // not starting with hashtag
+      lines.find((l: string) =>
+        l.length >= 60 &&
+        !l.match(/^#+\s/) &&
+        !l.match(/^[A-Z\s$]+:?$/) &&
+        !l.startsWith('#')
       ) || lines[0] || ''
     ).slice(0, 280);
     if (firstTweet) {
       console.log('[preacher] Posting via Railway tweet endpoint...');
-      // Post via Railway (no timeout risk) instead of directly from Vercel
       try {
         const railwayRes = await fetch('https://gsb-swarm-production.up.railway.app/api/tweet', {
           method: 'POST',
@@ -175,7 +237,6 @@ export async function runPreacher({ mission, context }: PreacherInput): Promise<
           tweetUrl = railwayData.url;
           console.log('[preacher] Posted via Railway:', tweetUrl);
         } else {
-          // Fallback: post directly from Vercel
           tweetUrl = await postTweetToX(firstTweet, xKeys);
           console.log('[preacher] Posted directly:', tweetUrl || 'FAILED');
         }
