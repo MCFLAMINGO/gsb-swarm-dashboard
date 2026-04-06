@@ -2,8 +2,9 @@ import { runOracle } from "./oracle";
 import { runPreacher } from "./preacher";
 import { runOnboarding } from "./onboarding";
 import { runAlert } from "./alert";
+import { runThreadWriter } from "./threadwriter";
 
-export type AgentId = "oracle" | "preacher" | "onboarding" | "alert";
+export type AgentId = "oracle" | "preacher" | "onboarding" | "alert" | "thread-writer";
 
 interface AgentInput {
   mission: string;
@@ -20,6 +21,7 @@ const handlers: Record<AgentId, (input: AgentInput) => Promise<AgentOutput>> = {
   preacher: runPreacher,
   onboarding: runOnboarding,
   alert: runAlert,
+  'thread-writer': runThreadWriter,
 };
 
 export function isValidAgent(id: string): id is AgentId {
