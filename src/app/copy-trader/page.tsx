@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Activity, Play, Square, RefreshCw, DollarSign, TrendingUp, TrendingDown, Zap, AlertTriangle, Plus, Minus } from 'lucide-react'
+import { Activity, Play, Square, RefreshCw, DollarSign, TrendingUp, TrendingDown, AlertTriangle, Plus, Minus } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -21,7 +21,22 @@ type TraderStatus = {
   recentLog: string[]
 }
 
-type AcpSignal = {
+type Position = {
+  posId: string
+  tokenName: string
+  tokenAddress: string
+  buyPrice: number
+  amountUsd: number
+  buyTimestamp: number
+  status: string
+  exitPrice?: number
+  pnlPct?: number
+  pnlUsd?: number
+  exitReason?: string
+  source?: string
+}
+
+type TradeSignal = {
   signal: string | null
   token?: string
   source?: string
@@ -30,31 +45,35 @@ type AcpSignal = {
   message?: string
 }
 
-type OracleSignal = {
-  action: 'BUY' | 'HOLD' | 'STANDBY'
-  tokens: string[]
-  reason: string
-  akt?: { price: number; change: number }
-  rndr?: { price: number; change: number }
-  io?: { price: number; change: number }
+function agentBadgeClass(source?: string): string {
+  if (!source) return 'bg-muted/40 border-border text-muted-foreground'
+  const s = source.toLowerCase()
+  if (s.includes('ceo') || s.includes('alpha')) return 'bg-yellow-950/40 border-yellow-500/40 text-yellow-300'
+  if (s.includes('oracle')) return 'bg-purple-950/40 border-purple-500/40 text-purple-300'
+  if (s.includes('hunt')) return 'bg-blue-950/40 border-blue-500/40 text-blue-300'
+  return 'bg-muted/40 border-border text-muted-foreground'
+}
+
+function agentLabel(source?: string): string {
+  if (!source) return 'Unknown'
+  const s = source.toLowerCase()
+  if (s.includes('ceo') || s.includes('alpha')) return 'CEO Alpha'
+  if (s.includes('oracle')) return 'Oracle'
+  if (s.includes('hunt')) return 'Hunt Mode'
+  return source
 }
 
 export default function CopyTraderPage() {
   const [status, setStatus] = useState<TraderStatus | null>(null)
-  const [oracleSignal, setOracleSignal] = useState<OracleSignal | null>(null)
-  const [acpSignal, setAcpSignal] = useState<AcpSignal | null>(null)
-  const [positions, setPositions] = useState<Record<string, {
-    posId: string; tokenName: string; tokenAddress: string;
-    buyPrice: number; amountUsd: number; buyTimestamp: number;
-    status: string; exitPrice?: number; pnlPct?: number; pnlUsd?: number;
-    exitReason?: string;
-  }>>({})
+  const [tradeSignal, setTradeSignal] = useState<TradeSignal | null>(null)
+  const [positions, setPositions] = useState<Record<string, Position>>({})
   const [budget, setBudget] = useState(10)
   const [isLoading, setIsLoading] = useState(false)
   const [lastAction, setLastAction] = useState<string | null>(null)
   const [authToken, setAuthToken] = useState('')
   const [logExpanded, setLogExpanded] = useState(false)
   const pollRef = useRef<NodeJS.Timeout | null>(null)
+  const signalPollRef = useRef<NodeJS.Timeout | null>(null)
 
   // Auth
   useEffect(() => {
@@ -73,12 +92,10 @@ export default function CopyTraderPage() {
       } catch {}
     }
     getToken()
-    // Refresh token every 20 min since Railway restarts wipe validTokens
     const tokenRefresh = setInterval(getToken, 20 * 60 * 1000)
     return () => clearInterval(tokenRefresh)
   }, [])
 
-  // Poll status every 10s when running
   const fetchStatus = async () => {
     if (!authToken) return
     try {
@@ -87,42 +104,6 @@ export default function CopyTraderPage() {
       })
       const data = await res.json()
       if (!data.error) setStatus(data)
-    } catch {}
-  }
-
-  // Fetch real compute token prices
-  const fetchOracleSignal = async () => {
-    try {
-      const res = await fetch(
-        'https://api.coingecko.com/api/v3/simple/price?ids=akash-network,render-token,io&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true'
-      )
-      const data = await res.json()
-      const akt = data['akash-network']
-      const rndr = data['render-token']
-      const io = data['io']
-
-      // Simple signal: if 2+ compute tokens are up → BUY signal
-      const upCount = [akt, rndr, io].filter(t => t && Number(t.usd_24h_change) > 0).length
-      const bullishTokens = []
-      if (akt && Number(akt.usd_24h_change) > 0) bullishTokens.push('AKT')
-      if (rndr && Number(rndr.usd_24h_change) > 0) bullishTokens.push('RNDR')
-      if (io && Number(io?.usd_24h_change) > 0) bullishTokens.push('IO')
-
-      const action = upCount >= 2 ? 'BUY' : upCount === 0 ? 'STANDBY' : 'HOLD'
-      const reason = action === 'BUY'
-        ? `${bullishTokens.join(' + ')} showing positive momentum — compute demand rising`
-        : action === 'STANDBY'
-        ? 'All compute tokens bearish — stand down, preserve capital'
-        : 'Mixed signals — hold current positions'
-
-      setOracleSignal({
-        action,
-        tokens: bullishTokens,
-        reason,
-        akt: akt ? { price: akt.usd, change: akt.usd_24h_change } : undefined,
-        rndr: rndr ? { price: rndr.usd, change: rndr.usd_24h_change } : undefined,
-        io: io ? { price: io.usd, change: io.usd_24h_change } : undefined,
-      })
     } catch {}
   }
 
@@ -137,34 +118,46 @@ export default function CopyTraderPage() {
     } catch {}
   }
 
-  const fetchAcpSignal = async () => {
+  const fetchTradeSignal = async () => {
     if (!authToken) return
     try {
       const res = await fetch(`${RAILWAY}/api/trade-signal`, {
         headers: { 'Authorization': `Bearer ${authToken}` }
       })
       const data = await res.json()
-      setAcpSignal(data)
+      setTradeSignal(data)
     } catch {}
   }
 
+  // Initial load after auth
   useEffect(() => {
     if (authToken) {
       fetchStatus()
-      fetchOracleSignal()
-      fetchAcpSignal()
+      fetchTradeSignal()
       fetchPositions()
     }
   }, [authToken])
 
+  // Poll status every 5s when running
   useEffect(() => {
-    if (status?.running) {
-      pollRef.current = setInterval(fetchStatus, 10000)
-    } else {
-      if (pollRef.current) clearInterval(pollRef.current)
+    if (pollRef.current) clearInterval(pollRef.current)
+    if (status?.running && authToken) {
+      pollRef.current = setInterval(() => {
+        fetchStatus()
+        fetchPositions()
+      }, 5000)
     }
     return () => { if (pollRef.current) clearInterval(pollRef.current) }
   }, [status?.running, authToken])
+
+  // Poll trade signal every 30s
+  useEffect(() => {
+    if (signalPollRef.current) clearInterval(signalPollRef.current)
+    if (authToken) {
+      signalPollRef.current = setInterval(fetchTradeSignal, 30000)
+    }
+    return () => { if (signalPollRef.current) clearInterval(signalPollRef.current) }
+  }, [authToken])
 
   const startTrader = async () => {
     if (!authToken || isLoading) return
@@ -185,7 +178,7 @@ export default function CopyTraderPage() {
         setLastAction('error: ' + (data.error || 'failed'))
         setTimeout(() => setLastAction(null), 4000)
       }
-    } catch (e) {
+    } catch {
       setLastAction('error: network')
       setTimeout(() => setLastAction(null), 4000)
     }
@@ -280,12 +273,24 @@ export default function CopyTraderPage() {
     setIsLoading(false)
   }
 
-  const signalColor = oracleSignal?.action === 'BUY' ? 'text-green-400' :
-                      oracleSignal?.action === 'STANDBY' ? 'text-red-400' : 'text-yellow-400'
-  const signalBg = oracleSignal?.action === 'BUY' ? 'border-green-500/30 bg-green-950/20' :
-                   oracleSignal?.action === 'STANDBY' ? 'border-red-500/30 bg-red-950/20' : 'border-yellow-500/30 bg-yellow-950/20'
+  // Derived stats for portfolio summary
+  const posArr = Object.values(positions)
+  const closedPositions = posArr.filter(p => p.status !== 'open')
+  const openPositions = posArr.filter(p => p.status === 'open')
+  const profitableClosedCount = closedPositions.filter(p => (p.pnlUsd ?? 0) > 0).length
+  const winRate = closedPositions.length > 0
+    ? (profitableClosedCount / closedPositions.length) * 100
+    : null
+
+  const totalValue = status
+    ? status.cashRemaining + openPositions.reduce((sum, p) => sum + p.amountUsd, 0)
+    : null
+  const totalReturnPct = status && status.budget > 0
+    ? (status.totalPnl / status.budget) * 100
+    : null
 
   const pnlColor = (status?.totalPnl ?? 0) >= 0 ? 'text-green-400' : 'text-red-400'
+  const hasSignal = tradeSignal?.signal && tradeSignal.signal !== 'NONE' && tradeSignal.signal !== 'none'
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -298,70 +303,150 @@ export default function CopyTraderPage() {
             {status?.running ? '● RUNNING' : '○ Stopped'}
           </Badge>
         </div>
-        <Button size="sm" variant="ghost" onClick={() => { fetchStatus(); fetchOracleSignal(); }}>
+        <Button size="sm" variant="ghost" onClick={() => { fetchStatus(); fetchTradeSignal(); fetchPositions(); }}>
           <RefreshCw className="w-4 h-4 mr-1" /> Refresh
         </Button>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4 max-w-4xl mx-auto w-full">
 
-        {/* CEO Alpha — hardcoded current signal from CEO agent */}
+        {/* Portfolio Summary */}
+        {status && (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Card>
+              <CardContent className="p-4">
+                <div className="text-xs text-muted-foreground mb-1">Total Value</div>
+                <div className="font-mono font-bold text-lg flex items-center gap-1">
+                  <DollarSign className="w-4 h-4 text-muted-foreground" />
+                  {totalValue !== null ? totalValue.toFixed(2) : status.cashRemaining.toFixed(2)}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  ${status.cashRemaining.toFixed(2)} cash + {openPositions.length} positions
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4">
+                <div className="text-xs text-muted-foreground mb-1">Total P&L</div>
+                <div className={`font-mono font-bold text-lg flex items-center gap-1 ${pnlColor}`}>
+                  {status.totalPnl >= 0
+                    ? <TrendingUp className="w-4 h-4" />
+                    : <TrendingDown className="w-4 h-4" />}
+                  {status.totalPnl >= 0 ? '+' : ''}${status.totalPnl.toFixed(2)}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  {status.openPositions} open · {status.closedPositions} closed
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4">
+                <div className="text-xs text-muted-foreground mb-1">Total Return</div>
+                <div className={`font-mono font-bold text-lg ${totalReturnPct !== null && totalReturnPct >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  {totalReturnPct !== null
+                    ? `${totalReturnPct >= 0 ? '+' : ''}${totalReturnPct.toFixed(1)}%`
+                    : '—'}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  on ${status.budget} budget
+                </div>
+                <div className="mt-2 h-1.5 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-primary rounded-full transition-all"
+                    style={{ width: `${Math.max(0, Math.min(100, (status.cashRemaining / Math.max(status.budget, 1)) * 100))}%` }}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4">
+                <div className="text-xs text-muted-foreground mb-1">Win Rate</div>
+                <div className={`font-mono font-bold text-lg ${winRate !== null && winRate >= 50 ? 'text-green-400' : winRate !== null ? 'text-red-400' : 'text-muted-foreground'}`}>
+                  {winRate !== null ? `${winRate.toFixed(0)}%` : '—'}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  {profitableClosedCount}/{closedPositions.length} closed profitable
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* CEO Alpha Signal — live */}
         <Card className="border border-yellow-500/40 bg-yellow-950/10">
           <CardHeader className="pb-2 pt-4 px-4">
             <CardTitle className="text-sm flex items-center gap-2">
               <span>👑</span> CEO Alpha Signal
               <span className="ml-auto text-[10px] text-muted-foreground">Live from GSB CEO ACP Agent</span>
+              <button
+                onClick={fetchTradeSignal}
+                className="text-[10px] text-muted-foreground hover:text-foreground ml-1"
+                title="Refresh signal"
+              >
+                ↻
+              </button>
             </CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-4 space-y-3">
-            <div className="rounded-lg bg-yellow-950/20 border border-yellow-500/20 p-3">
-              <div className="flex justify-between items-start mb-2">
-                <div>
-                  <div className="font-bold text-sm text-yellow-300">FETCHR / WETH</div>
-                  <div className="text-[10px] text-muted-foreground font-mono">0x610a5a...eba3</div>
+            {hasSignal ? (
+              <div className="rounded-lg bg-yellow-950/20 border border-yellow-500/20 p-3">
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <div className="font-bold text-sm text-yellow-300">
+                      {tradeSignal!.signal}
+                    </div>
+                    {tradeSignal!.token && (
+                      <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                        {tradeSignal!.token.length > 20
+                          ? `${tradeSignal!.token.slice(0, 8)}...${tradeSignal!.token.slice(-6)}`
+                          : tradeSignal!.token}
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    {tradeSignal!.source && (
+                      <div className="text-[10px] text-yellow-400 font-medium">{tradeSignal!.source}</div>
+                    )}
+                    {tradeSignal!.receivedAt && (
+                      <div className="text-[10px] text-muted-foreground">
+                        {new Date(tradeSignal!.receivedAt).toLocaleTimeString()}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-green-400 font-bold text-sm">+279.94%</div>
-                  <div className="text-[10px] text-muted-foreground">24h | $451K vol</div>
-                </div>
+                {tradeSignal!.briefSnippet && (
+                  <p className="text-[10px] text-muted-foreground mb-3">{tradeSignal!.briefSnippet}</p>
+                )}
+                {tradeSignal!.token && (
+                  <Button
+                    size="sm"
+                    className="w-full bg-yellow-600 hover:bg-yellow-500 text-black font-bold text-xs h-8"
+                    disabled={isLoading || !authToken}
+                    onClick={() => buyToken(tradeSignal!.token!, tradeSignal!.signal ?? 'TOKEN', budget * 0.25)}
+                  >
+                    ⚡ Buy Signal — ${(budget * 0.25).toFixed(2)} ({((budget * 0.25 / budget) * 100).toFixed(0)}% of budget)
+                  </Button>
+                )}
               </div>
-              <div className="text-[10px] text-muted-foreground mb-3">$83.9K liquidity · 6 buys / 6 sells last 5min · Uniswap Base</div>
-              <Button
-                size="sm"
-                className="w-full bg-yellow-600 hover:bg-yellow-500 text-black font-bold text-xs h-8"
-                disabled={isLoading || !authToken}
-                onClick={() => buyToken('0x610a5a297fe2135289b8565ef645de2a7c00eba3', 'FETCHR', budget * 0.25)}
-              >
-                ⚡ Buy FETCHR — ${(budget * 0.25).toFixed(2)} ({(budget * 0.25 / budget * 100).toFixed(0)}% of budget)
-              </Button>
-            </div>
-            <div className="rounded-lg bg-muted/20 border border-border p-3">
-              <div className="flex justify-between items-start mb-2">
-                <div>
-                  <div className="font-bold text-sm">AGNT / WETH</div>
-                  <div className="text-[10px] text-muted-foreground font-mono">0x32f66e...ba3</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-green-400 font-bold text-sm">+42.73%</div>
-                  <div className="text-[10px] text-muted-foreground">24h | $133K vol</div>
-                </div>
+            ) : (
+              <div className="rounded-lg bg-yellow-950/10 border border-yellow-500/10 p-3 text-center">
+                <div className="text-xs text-muted-foreground">Waiting for CEO agent signal...</div>
+                {tradeSignal?.message && (
+                  <div className="text-[10px] text-muted-foreground mt-1">{tradeSignal.message}</div>
+                )}
               </div>
-              <Button
-                size="sm"
-                variant="outline"
-                className="w-full text-xs h-7"
-                disabled={isLoading || !authToken}
-                onClick={() => buyToken('0x32f66ec2ffb26d262058965cf294f951e47f8ba3', 'AGNT', budget * 0.25)}
-              >
-                Buy AGNT
-              </Button>
-            </div>
-            <p className="text-[10px] text-muted-foreground">Signals from GSB CEO Agent via ACP. USDC→WETH→token multi-hop swap. High risk — new tokens.</p>
+            )}
+            <p className="text-[10px] text-muted-foreground">
+              Signals from GSB CEO Agent via ACP. USDC→WETH→token multi-hop swap. High risk — new tokens. Auto-refreshes every 30s.
+            </p>
           </CardContent>
         </Card>
 
         {/* Open Positions */}
-        {Object.keys(positions).length > 0 && (
+        {posArr.length > 0 && (
           <Card>
             <CardHeader className="pb-2 pt-4 px-4">
               <CardTitle className="text-sm flex items-center justify-between">
@@ -370,27 +455,44 @@ export default function CopyTraderPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="px-4 pb-4 space-y-2">
-              {Object.values(positions).sort((a, b) => b.buyTimestamp - a.buyTimestamp).map(pos => {
+              {posArr.sort((a, b) => b.buyTimestamp - a.buyTimestamp).map(pos => {
                 const isOpen = pos.status === 'open'
-                const pnlColor = (pos.pnlPct || 0) >= 0 ? 'text-green-400' : 'text-red-400'
-                const ageHrs = ((Date.now() - pos.buyTimestamp) / 3_600_000).toFixed(1)
+                const posPnlColor = (pos.pnlPct || 0) >= 0 ? 'text-green-400' : 'text-red-400'
+                const ageMs = Date.now() - pos.buyTimestamp
+                const ageStr = ageMs < 3_600_000
+                  ? `${Math.floor(ageMs / 60_000)}m ago`
+                  : `${(ageMs / 3_600_000).toFixed(1)}h ago`
+                const currentValueEst = isOpen && pos.buyPrice > 0
+                  ? pos.amountUsd // without live price feed, show invested amount
+                  : undefined
+                const unrealizedPct = isOpen && pos.pnlPct !== undefined
+                  ? pos.pnlPct * 100
+                  : null
+
                 return (
                   <div key={pos.posId} className={`rounded-lg border p-3 ${
                     isOpen ? 'border-blue-500/30 bg-blue-950/10' : 'border-border bg-muted/20'
                   }`}>
                     <div className="flex justify-between items-start">
-                      <div>
-                        <div className="font-bold text-sm">{pos.tokenName}</div>
-                        <div className="text-[10px] text-muted-foreground">
-                          Entry: ${pos.buyPrice?.toFixed(8)} · ${pos.amountUsd} invested · {ageHrs}h ago
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-sm">{pos.tokenName}</span>
+                          {pos.source && (
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${agentBadgeClass(pos.source)}`}>
+                              {agentLabel(pos.source)}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground mt-0.5">
+                          Entry: ${pos.buyPrice?.toFixed(8)} · ${pos.amountUsd.toFixed(2)} invested · {ageStr}
                         </div>
                       </div>
-                      <div className="text-right">
+                      <div className="text-right ml-3 shrink-0">
                         <div className={`text-sm font-bold ${
-                          isOpen ? 'text-blue-400' : pnlColor
+                          isOpen ? 'text-blue-400' : posPnlColor
                         }`}>
                           {isOpen ? '● OPEN' : (
-                            `${(pos.pnlPct || 0) >= 0 ? '+' : ''}${((pos.pnlPct || 0)*100).toFixed(1)}%`
+                            `${(pos.pnlPct || 0) >= 0 ? '+' : ''}${((pos.pnlPct || 0) * 100).toFixed(1)}%`
                           )}
                         </div>
                         {!isOpen && pos.exitReason && (
@@ -398,13 +500,24 @@ export default function CopyTraderPage() {
                         )}
                       </div>
                     </div>
+
                     {isOpen && (
-                      <div className="mt-2 text-[10px] text-muted-foreground">
-                        Stop: ${(pos.buyPrice * 0.80).toFixed(8)} · Target: ${(pos.buyPrice * 1.50).toFixed(8)} · Exit monitor active
+                      <div className="mt-2 flex items-center justify-between text-[10px] text-muted-foreground">
+                        <span>Stop: ${(pos.buyPrice * 0.80).toFixed(8)}</span>
+                        <span>Target: ${(pos.buyPrice * 1.50).toFixed(8)}</span>
+                        <span>Exit monitor active</span>
                       </div>
                     )}
+
+                    {isOpen && unrealizedPct !== null && (
+                      <div className={`mt-1 text-[10px] font-medium ${unrealizedPct >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        Unrealized: {unrealizedPct >= 0 ? '+' : ''}{unrealizedPct.toFixed(1)}%
+                        {currentValueEst !== undefined && ` · ~$${currentValueEst.toFixed(2)} current value`}
+                      </div>
+                    )}
+
                     {!isOpen && pos.pnlUsd !== undefined && (
-                      <div className={`mt-1 text-[10px] font-medium ${pnlColor}`}>
+                      <div className={`mt-1 text-[10px] font-medium ${posPnlColor}`}>
                         P&L: {pos.pnlUsd >= 0 ? '+' : ''}${pos.pnlUsd.toFixed(2)}
                       </div>
                     )}
@@ -414,90 +527,6 @@ export default function CopyTraderPage() {
             </CardContent>
           </Card>
         )}
-
-        {/* ACP Signal */}
-        {acpSignal?.signal && (
-          <Card className="border border-purple-500/30 bg-purple-950/20">
-            <CardHeader className="pb-2 pt-4 px-4">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <span>🤖</span> ACP Agent Signal
-                <span className="ml-auto font-bold text-purple-400">{acpSignal.signal}</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-4">
-              <div className="space-y-1.5 text-xs">
-                {acpSignal.token && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Token</span>
-                    <span className="font-mono">{acpSignal.token.slice(0,16)}...</span>
-                  </div>
-                )}
-                {acpSignal.receivedAt && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Received</span>
-                    <span>{new Date(acpSignal.receivedAt).toLocaleTimeString()}</span>
-                  </div>
-                )}
-                {acpSignal.source && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Source</span>
-                    <span className="text-purple-400">{acpSignal.source}</span>
-                  </div>
-                )}
-                <button onClick={fetchAcpSignal} className="text-[10px] text-muted-foreground hover:text-foreground mt-1">
-                  ↻ Refresh
-                </button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Oracle Signal */}
-        <Card className={`border ${signalBg}`}>
-          <CardHeader className="pb-2 pt-4 px-4">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Zap className="w-4 h-4" />
-              Oracle Compute Signal
-              <span className={`ml-auto font-bold ${signalColor}`}>
-                {oracleSignal?.action ?? '—'}
-              </span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-4">
-            {oracleSignal ? (
-              <>
-                <p className="text-xs text-muted-foreground mb-3">{oracleSignal.reason}</p>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { label: 'AKT', data: oracleSignal.akt },
-                    { label: 'RNDR', data: oracleSignal.rndr },
-                    { label: 'IO', data: oracleSignal.io },
-                  ].map(({ label, data }) => (
-                    <div key={label} className="bg-muted/30 rounded p-2 text-center">
-                      <div className="text-xs font-bold mb-1">{label}</div>
-                      {data ? (
-                        <>
-                          <div className="text-xs font-mono">${data.price.toFixed(4)}</div>
-                          <div className={`text-[10px] ${data.change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                            {data.change >= 0 ? '+' : ''}{data.change.toFixed(2)}%
-                          </div>
-                        </>
-                      ) : <div className="text-xs text-muted-foreground">N/A</div>}
-                    </div>
-                  ))}
-                </div>
-                <button
-                  onClick={fetchOracleSignal}
-                  className="mt-3 text-[10px] text-muted-foreground hover:text-foreground"
-                >
-                  ↻ Refresh signal
-                </button>
-              </>
-            ) : (
-              <div className="text-xs text-muted-foreground">Loading compute signal...</div>
-            )}
-          </CardContent>
-        </Card>
 
         {/* Controls */}
         <Card>
@@ -532,11 +561,10 @@ export default function CopyTraderPage() {
 
             <Separator />
 
-            {/* Start / Stop */}
             {/* Action feedback toast */}
             {lastAction && (
               <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium animate-pulse ${
-                lastAction.startsWith('error') 
+                lastAction.startsWith('error')
                   ? 'bg-red-950/40 border border-red-500/40 text-red-400'
                   : lastAction === 'stopped'
                   ? 'bg-muted border border-border text-muted-foreground'
@@ -550,14 +578,14 @@ export default function CopyTraderPage() {
             <div className="grid grid-cols-3 gap-2">
               <Button
                 className={`col-span-1 font-bold transition-all ${
-                  status?.running 
-                    ? 'bg-green-700 text-white cursor-not-allowed opacity-60' 
+                  status?.running
+                    ? 'bg-green-700 text-white cursor-not-allowed opacity-60'
                     : 'bg-green-600 hover:bg-green-500 active:bg-green-700 text-white shadow-lg shadow-green-900/30'
                 }`}
                 disabled={status?.running || isLoading || !authToken}
                 onClick={startTrader}
               >
-                {isLoading && lastAction === 'starting' 
+                {isLoading && lastAction === 'starting'
                   ? <RefreshCw className="w-4 h-4 animate-spin" />
                   : <Play className="w-4 h-4" />}
                 <span className="ml-1.5">{isLoading && lastAction === 'starting' ? 'Starting...' : status?.running ? 'Running' : 'Start'}</span>
@@ -596,54 +624,8 @@ export default function CopyTraderPage() {
             >
               ⚡ Pre-approve USDC for instant swaps (one-time setup)
             </button>
-
-            {oracleSignal?.action === 'STANDBY' && (
-              <div className="flex items-start gap-2 p-2 rounded bg-red-950/20 border border-red-500/20">
-                <AlertTriangle className="w-3 h-3 text-red-400 mt-0.5 shrink-0" />
-                <p className="text-xs text-red-400">Oracle says STANDBY — compute tokens are bearish. Consider waiting for a better signal.</p>
-              </div>
-            )}
           </CardContent>
         </Card>
-
-        {/* P&L Dashboard */}
-        {status && (
-          <div className="grid grid-cols-2 gap-3">
-            <Card>
-              <CardContent className="p-4">
-                <div className="text-xs text-muted-foreground mb-1">Cash Remaining</div>
-                <div className="font-mono font-bold text-lg flex items-center gap-1">
-                  <DollarSign className="w-4 h-4 text-muted-foreground" />
-                  {status.cashRemaining.toFixed(2)}
-                </div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  of ${status.budget} budget
-                </div>
-                <div className="mt-2 h-1.5 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-primary rounded-full transition-all"
-                    style={{ width: `${Math.max(0, Math.min(100, (status.cashRemaining / Math.max(status.budget, 1)) * 100))}%` }}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-4">
-                <div className="text-xs text-muted-foreground mb-1">Total P&L</div>
-                <div className={`font-mono font-bold text-lg flex items-center gap-1 ${pnlColor}`}>
-                  {status.totalPnl >= 0
-                    ? <TrendingUp className="w-4 h-4" />
-                    : <TrendingDown className="w-4 h-4" />}
-                  {status.totalPnl >= 0 ? '+' : ''}${status.totalPnl.toFixed(2)}
-                </div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  {status.openPositions} open · {status.closedPositions} closed
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
 
         {/* Target Wallets */}
         {status?.targets && status.targets.length > 0 && (
