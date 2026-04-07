@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
 
   if (!isValidAgent(body.agentId)) {
     return NextResponse.json(
-      { error: `Unknown agent: ${body.agentId}. Valid: oracle, preacher, onboarding, alert` },
+      { error: `Unknown agent: ${body.agentId}. Valid: oracle, preacher, onboarding, alert, token_analyst, wallet_profiler, alpha_scanner, thread_writer` },
       { status: 422 }
     );
   }

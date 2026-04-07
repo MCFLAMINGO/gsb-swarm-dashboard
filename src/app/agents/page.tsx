@@ -20,6 +20,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Play, Save, ChevronDown, ChevronUp, Copy, Check, Send, Loader2, Radio } from "lucide-react";
 import { toast } from "sonner";
 import type { Agent } from "@/types";
+import { fetchAgentStatus } from "@/lib/railway";
 
 // ── Types for live feed ─────────────────────────────────────────────────────
 interface LiveJob {
@@ -276,7 +277,12 @@ function DispatchModal({
                 agentId === "oracle" ? "Get a compute quote for running GPT-4 inference on Base..." :
                 agentId === "preacher" ? "Write a viral X thread about $GSB hitting new ATH..." :
                 agentId === "onboarding" ? "Write a cold email to a DeFi protocol founder about GSB..." :
-                "Generate a $GSB price alert for Telegram and X..."
+                agentId === "alert" ? "Generate a $GSB price alert for Telegram and X..." :
+                agentId === "token_analyst" ? "Analyze token 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 on Base (USDC)..." :
+                agentId === "wallet_profiler" ? "Profile wallet 0x6dA1A9793Ebe96975c240501A633ab8B3c83D14A on Base..." :
+                agentId === "alpha_scanner" ? "Scan Base chain for alpha signals — new launches, whale moves..." :
+                agentId === "thread_writer" ? "Write a thread about $GSB tokenized agents on Virtuals Protocol..." :
+                "Enter a mission for this agent..."
               }
               className="text-sm bg-secondary border-border"
               rows={3}
@@ -442,7 +448,36 @@ function LiveFeed() {
 // ── Main Page ───────────────────────────────────────────────────────────────
 export default function AgentsPage() {
   const agents = useStore(s => s.agents);
+  const updateAgent = useStore(s => s.updateAgent);
   const [dispatchAgent, setDispatchAgent] = useState<string | null>(null);
+
+  // Pull live Railway job counts every 60s and reflect in agent cards
+  useEffect(() => {
+    const RAILWAY_ID_MAP: Record<string, string> = {
+      token_analysis: "token_analyst",
+      wallet_profile: "wallet_profiler",
+      alpha_signals: "alpha_scanner",
+      thread: "thread_writer",
+    };
+
+    const sync = async () => {
+      const status = await fetchAgentStatus().catch(() => null);
+      if (!status) return;
+      status.workers.forEach(w => {
+        const agentId = RAILWAY_ID_MAP[w.id];
+        if (!agentId) return;
+        updateAgent(agentId, {
+          jobsCompleted: w.jobsCompleted,
+          status: (w.status === "working" ? "active" : "idle") as "active" | "idle",
+          lastActiveAt: w.lastJobAt || new Date().toISOString(),
+        });
+      });
+    };
+
+    sync();
+    const interval = setInterval(sync, 60_000);
+    return () => clearInterval(interval);
+  }, [updateAgent]);
 
   return (
     <div className="flex-1 overflow-y-auto">

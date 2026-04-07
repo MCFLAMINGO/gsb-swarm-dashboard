@@ -3,7 +3,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Agent, AcpJob, Withdrawal, ActivityLog, ApiConnection, EarningsSummary } from "@/types";
-import { RAILWAY_AGENTS, CEO_AGENT, DEFAULT_CONNECTIONS } from "@/lib/mockData";
+import { RAILWAY_AGENTS, CEO_AGENT, DEFAULT_AGENTS, DEFAULT_CONNECTIONS } from "@/lib/mockData";
 import type { RailwayPublicStatus } from "@/lib/railway";
 
 interface GsbStore {
@@ -37,7 +37,7 @@ export const useStore = create<GsbStore>()(
   persist(
     (set, get) => ({
       // Initialize with Railway ACP agents + CEO agent (no more fake Vercel agents on main page)
-      agents: [...RAILWAY_AGENTS.map(a => ({ ...a })), { ...CEO_AGENT }],
+      agents: [...RAILWAY_AGENTS.map(a => ({ ...a })), ...DEFAULT_AGENTS.map(a => ({ ...a })), { ...CEO_AGENT }],
       jobs: [],
       withdrawals: [],
       logs: [],
@@ -85,6 +85,10 @@ export const useStore = create<GsbStore>()(
           preacher: "Write a viral tweet about $GSB Agent Gas Bible token on Virtuals Protocol",
           onboarding: "Help a new user understand how to hire GSB swarm agents",
           alert: "Send retention alert about GSB swarm activity",
+          token_analyst: "Analyze token 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 on Base",
+          wallet_profiler: "Profile wallet 0x6dA1A9793Ebe96975c240501A633ab8B3c83D14A on Base",
+          alpha_scanner: "Scan Base chain for top alpha signals now",
+          thread_writer: "Write a viral X thread about $GSB Agent Gas Bible on Virtuals Protocol — tokenized AI agents earning USDC on Base",
         };
         const mission = defaultMissions[agentId] || `Run ${agent.name} default task`;
 

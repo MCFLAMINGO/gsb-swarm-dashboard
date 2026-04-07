@@ -149,3 +149,41 @@ export async function fireJob(agentId: string, mission: string): Promise<FireJob
 
   return res.json();
 }
+
+// ── Agent Status (public endpoint, no auth) ─────────────────────────────────
+
+export interface AgentStatusWorker {
+  id: string;         // role key: 'token_analysis', 'wallet_profile', etc.
+  name: string;       // 'GSB Token Analyst'
+  status: string;     // 'idle' | 'working'
+  jobsCompleted: number;
+  lastJobAt: string | null;
+  pricePerJob: number;
+}
+
+export interface AgentStatusResponse {
+  ok: boolean;
+  updatedAt: string;
+  acpReady: boolean;
+  workers: AgentStatusWorker[];
+  copyTrader: {
+    running: boolean;
+    budget: number;
+    startedAt: string | null;
+    recentLog: string[];
+  };
+  totalJobsServed: number;
+}
+
+export async function fetchAgentStatus(): Promise<AgentStatusResponse | null> {
+  try {
+    const res = await fetch(`${RAILWAY_BASE}/api/agent-status`, {
+      next: { revalidate: 0 },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
