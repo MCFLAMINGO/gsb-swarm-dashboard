@@ -74,9 +74,17 @@ export default function CopyTraderPage() {
   const [logExpanded, setLogExpanded] = useState(false)
   const pollRef = useRef<NodeJS.Timeout | null>(null)
   const signalPollRef = useRef<NodeJS.Timeout | null>(null)
+  // Ref so callbacks always read the latest token without stale closure issues
+  const tokenRef = useRef<string>('')
 
-  // Auth
+  // Auth — seed from localStorage immediately, then refresh from Railway
   useEffect(() => {
+    const cached = typeof window !== 'undefined' ? localStorage.getItem('gsb_op_token') : null
+    if (cached) {
+      setAuthToken(cached)
+      tokenRef.current = cached
+    }
+
     const getToken = async () => {
       try {
         const res = await fetch(`${RAILWAY}/api/auth`, {
@@ -87,6 +95,7 @@ export default function CopyTraderPage() {
         const data = await res.json()
         if (data.token) {
           setAuthToken(data.token)
+          tokenRef.current = data.token
           localStorage.setItem('gsb_op_token', data.token)
         }
       } catch {}
@@ -96,11 +105,15 @@ export default function CopyTraderPage() {
     return () => clearInterval(tokenRefresh)
   }, [])
 
+  // Helper: always uses the latest token from ref
+  const getAuth = () => tokenRef.current || authToken
+
   const fetchStatus = async () => {
-    if (!authToken) return
+    const tok = getAuth()
+    if (!tok) return
     try {
       const res = await fetch(`${RAILWAY}/api/copy-trader/status`, {
-        headers: { 'Authorization': `Bearer ${authToken}` }
+        headers: { 'Authorization': `Bearer ${tok}` }
       })
       const data = await res.json()
       if (!data.error) setStatus(data)
@@ -108,10 +121,11 @@ export default function CopyTraderPage() {
   }
 
   const fetchPositions = async () => {
-    if (!authToken) return
+    const tok = getAuth()
+    if (!tok) return
     try {
       const res = await fetch(`${RAILWAY}/api/copy-trader/positions`, {
-        headers: { 'Authorization': `Bearer ${authToken}` }
+        headers: { 'Authorization': `Bearer ${tok}` }
       })
       const data = await res.json()
       if (data.positions) setPositions(data.positions)
@@ -119,17 +133,28 @@ export default function CopyTraderPage() {
   }
 
   const fetchTradeSignal = async () => {
-    if (!authToken) return
+    const tok = getAuth()
+    if (!tok) return
     try {
       const res = await fetch(`${RAILWAY}/api/trade-signal`, {
-        headers: { 'Authorization': `Bearer ${authToken}` }
+        headers: { 'Authorization': `Bearer ${tok}` }
       })
       const data = await res.json()
       setTradeSignal(data)
     } catch {}
   }
 
-  // Initial load after auth
+  // Initial load — runs once on mount (token will be in ref within ms)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchStatus()
+      fetchTradeSignal()
+      fetchPositions()
+    }, 300) // small delay to let auth ref populate
+    return () => clearTimeout(timer)
+  }, [])
+
+  // Re-fetch whenever token state changes (first real token)
   useEffect(() => {
     if (authToken) {
       fetchStatus()
@@ -141,32 +166,30 @@ export default function CopyTraderPage() {
   // Poll status every 5s when running
   useEffect(() => {
     if (pollRef.current) clearInterval(pollRef.current)
-    if (status?.running && authToken) {
+    if (status?.running) {
       pollRef.current = setInterval(() => {
         fetchStatus()
         fetchPositions()
       }, 5000)
     }
     return () => { if (pollRef.current) clearInterval(pollRef.current) }
-  }, [status?.running, authToken])
+  }, [status?.running])
 
   // Poll trade signal every 30s
   useEffect(() => {
-    if (signalPollRef.current) clearInterval(signalPollRef.current)
-    if (authToken) {
-      signalPollRef.current = setInterval(fetchTradeSignal, 30000)
-    }
+    signalPollRef.current = setInterval(fetchTradeSignal, 30000)
     return () => { if (signalPollRef.current) clearInterval(signalPollRef.current) }
-  }, [authToken])
+  }, [])
 
   const startTrader = async () => {
-    if (!authToken || isLoading) return
+    const tok = getAuth()
+    if (!tok || isLoading) return
     setIsLoading(true)
     setLastAction('starting')
     try {
       const res = await fetch(`${RAILWAY}/api/copy-trader/start`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+        headers: { 'Authorization': `Bearer ${tok}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ budget })
       })
       const data = await res.json()
@@ -186,13 +209,14 @@ export default function CopyTraderPage() {
   }
 
   const rehuntWallets = async () => {
-    if (!authToken || isLoading) return
+    const tok = getAuth()
+    if (!tok || isLoading) return
     setIsLoading(true)
     setLastAction('hunting')
     try {
       const res = await fetch(`${RAILWAY}/api/copy-trader/rehunt`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+        headers: { 'Authorization': `Bearer ${tok}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ budget })
       })
       const data = await res.json()
@@ -211,13 +235,14 @@ export default function CopyTraderPage() {
   }
 
   const stopTrader = async () => {
-    if (!authToken || isLoading) return
+    const tok = getAuth()
+    if (!tok || isLoading) return
     setIsLoading(true)
     setLastAction('stopping')
     try {
       await fetch(`${RAILWAY}/api/copy-trader/stop`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${authToken}` }
+        headers: { 'Authorization': `Bearer ${tok}` }
       })
       setLastAction('stopped')
       await fetchStatus()
@@ -230,13 +255,14 @@ export default function CopyTraderPage() {
   }
 
   const buyToken = async (tokenAddress: string, tokenName: string, usdAmount: number = 2.5) => {
-    if (!authToken || isLoading) return
+    const tok = getAuth()
+    if (!tok || isLoading) return
     setIsLoading(true)
     setLastAction(`buying ${tokenName}...`)
     try {
       const res = await fetch(`${RAILWAY}/api/copy-trader/buy-signal`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+        headers: { 'Authorization': `Bearer ${tok}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ tokenAddress, tokenName, usdAmount })
       })
       const data = await res.json()
@@ -255,13 +281,14 @@ export default function CopyTraderPage() {
   }
 
   const approveUsdc = async () => {
-    if (!authToken || isLoading) return
+    const tok = getAuth()
+    if (!tok || isLoading) return
     setIsLoading(true)
     setLastAction('approving USDC...')
     try {
       const res = await fetch(`${RAILWAY}/api/copy-trader/approve`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${authToken}` }
+        headers: { 'Authorization': `Bearer ${tok}` }
       })
       const data = await res.json()
       setLastAction(data.ok ? '✅ USDC approved — swaps now instant' : 'error: ' + (data.error || 'failed'))
@@ -424,7 +451,7 @@ export default function CopyTraderPage() {
                   <Button
                     size="sm"
                     className="w-full bg-yellow-600 hover:bg-yellow-500 text-black font-bold text-xs h-8"
-                    disabled={isLoading || !authToken}
+                    disabled={isLoading}
                     onClick={() => buyToken(tradeSignal!.token!, tradeSignal!.signal ?? 'TOKEN', budget * 0.25)}
                   >
                     ⚡ Buy Signal — ${(budget * 0.25).toFixed(2)} ({((budget * 0.25 / budget) * 100).toFixed(0)}% of budget)
@@ -582,7 +609,7 @@ export default function CopyTraderPage() {
                     ? 'bg-green-700 text-white cursor-not-allowed opacity-60'
                     : 'bg-green-600 hover:bg-green-500 active:bg-green-700 text-white shadow-lg shadow-green-900/30'
                 }`}
-                disabled={status?.running || isLoading || !authToken}
+                disabled={status?.running || isLoading}
                 onClick={startTrader}
               >
                 {isLoading && lastAction === 'starting'
@@ -594,7 +621,7 @@ export default function CopyTraderPage() {
               <Button
                 variant="outline"
                 className="col-span-1 border-blue-500/50 text-blue-400 hover:bg-blue-950/30 hover:border-blue-400 active:bg-blue-950/50 font-bold"
-                disabled={isLoading || !authToken}
+                disabled={isLoading}
                 onClick={rehuntWallets}
               >
                 {isLoading && lastAction?.startsWith('hunt')
@@ -619,7 +646,7 @@ export default function CopyTraderPage() {
             {/* One-time approve button */}
             <button
               onClick={approveUsdc}
-              disabled={isLoading || !authToken}
+              disabled={isLoading}
               className="w-full text-xs text-muted-foreground hover:text-yellow-400 hover:border-yellow-500/30 border border-transparent rounded py-1.5 transition-colors disabled:opacity-30"
             >
               ⚡ Pre-approve USDC for instant swaps (one-time setup)
