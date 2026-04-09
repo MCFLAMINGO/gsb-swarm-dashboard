@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
-  LayoutDashboard, Bot, DollarSign, Plug, Settings, ChevronLeft, ChevronRight, Gauge, Activity
+  LayoutDashboard, Bot, DollarSign, Plug, Settings, ChevronLeft, ChevronRight, Gauge, Activity, Swords
 } from "lucide-react";
 import { useState } from "react";
 
@@ -13,6 +13,7 @@ const NAV = [
   { href: "/drivers-seat",label: "Driver's Seat",  icon: Gauge,           tip: "Multi-property TV control room — $GSB + bleeding.cash" },
   { href: "/agents",      label: "Agents",         icon: Bot,             tip: "Individual agent config & simulate" },
   { href: "/earnings",    label: "Earnings",       icon: DollarSign,      tip: "USDC earned, payouts, withdraw" },
+  { href: "/war-room",   label: "War Room",      icon: Swords,          tip: "Game theory strategy engine — all agents, all chains" },
   { href: "/copy-trader", label: "Copy Trader",    icon: Activity,        tip: "Compute signal copy trader — AKT/RNDR/IO signals" },
   { href: "/connections", label: "API Connections",icon: Plug,            tip: "Telegram, X, x402, wallet keys" },
   { href: "/settings",    label: "Settings",       icon: Settings,        tip: "Dashboard & agent preferences" },
