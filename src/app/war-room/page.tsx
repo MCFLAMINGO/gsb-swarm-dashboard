@@ -1,15 +1,17 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { toast } from "sonner";
 import {
   Brain, Zap, Wallet, TrendingUp, Search, BarChart2,
-  Users, FileText, AlertTriangle, Clock, CheckCircle,
+  Users, FileText, AlertTriangle, CheckCircle,
   XCircle, Play, Square, RefreshCw, ChevronRight,
-  Activity, DollarSign
+  Activity, DollarSign, ArrowRightLeft
 } from "lucide-react";
 
-const EXECUTOR_BASE = process.env.NEXT_PUBLIC_EXECUTOR_URL || "https://gsb-swarm-production.up.railway.app";
+// ACP agents live in gsb-swarm; executor/trades live in gsb-yield-swarm
+const EXECUTOR_BASE = process.env.NEXT_PUBLIC_EXECUTOR_URL || "https://gsb-yield-swarm-production.up.railway.app";
+const ACP_BASE = process.env.NEXT_PUBLIC_ACP_URL || "https://gsb-swarm-production.up.railway.app";
 
 // ─── Types ────────────────────────────────────────────────────────────────
 interface PlaybookStep {
@@ -105,6 +107,109 @@ const SEVERITY_COLORS: Record<string, string> = {
 };
 
 // ─── Panel wrapper ─────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// LiveTradesPanel — consolidated view of all open positions across all strategies
+// ---------------------------------------------------------------------------
+function LiveTradesPanel() {
+  const EXEC = process.env.NEXT_PUBLIC_EXECUTOR_URL || "https://gsb-yield-swarm-production.up.railway.app";
+  const [data, setData] = React.useState<any>(null);
+  const [lastUpdated, setLastUpdated] = React.useState<string | null>(null);
+
+  const load = async () => {
+    try {
+      const r = await fetch(`${EXEC}/api/positions`);
+      if (r.ok) { const d = await r.json(); setData(d); setLastUpdated(new Date().toLocaleTimeString()); }
+    } catch {}
+  };
+
+  React.useEffect(() => { load(); const t = setInterval(load, 10000); return () => clearInterval(t); }, []);
+
+  const TYPE_COLORS: Record<string, string> = {
+    copy_trade:  "bg-blue-900/60 text-blue-300",
+    funding_arb: "bg-emerald-900/60 text-emerald-300",
+    tempo_yield: "bg-violet-900/60 text-violet-300",
+  };
+
+  const TYPE_LABELS: Record<string, string> = {
+    copy_trade:  "Copy",
+    funding_arb: "Arb",
+    tempo_yield: "Yield",
+  };
+
+  // flatten all open positions
+  const allPositions: any[] = [];
+  if (data?.summary) {
+    for (const [type, summary] of Object.entries(data.summary) as [string, any][]) {
+      if (summary?.positions) {
+        for (const p of summary.positions) allPositions.push({ ...p, _type: type });
+      }
+    }
+  }
+  allPositions.sort((a, b) => new Date(b.openedAt).getTime() - new Date(a.openedAt).getTime());
+
+  return (
+    <div className="space-y-3">
+      {/* Summary row */}
+      <div className="grid grid-cols-4 gap-1.5">
+        {[
+          { label: "Total Exposure", val: data ? `$${data.totalExposureUsd}` : "—", color: "text-white" },
+          { label: "Unrealized P&L", val: data ? `$${data.totalUnrealizedPnl}` : "—", color: Number(data?.totalUnrealizedPnl) >= 0 ? "text-emerald-400" : "text-red-400" },
+          { label: "Open Positions", val: allPositions.length, color: "text-white" },
+          { label: "Updated", val: lastUpdated || "—", color: "text-zinc-400" },
+        ].map(({ label, val, color }) => (
+          <div key={label} className="bg-zinc-800 rounded-lg p-2 text-center">
+            <div className="text-xs text-zinc-500">{label}</div>
+            <div className={`text-xs font-bold ${color}`}>{val}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Per-strategy mini-stats */}
+      {data?.summary && (
+        <div className="grid grid-cols-3 gap-1.5">
+          {Object.entries(data.summary).map(([type, s]: [string, any]) => (
+            <div key={type} className="bg-zinc-800 rounded-lg p-2">
+              <div className={`text-xs font-semibold px-1.5 py-0.5 rounded inline-block mb-1 ${TYPE_COLORS[type] || "bg-zinc-700 text-zinc-300"}`}>{TYPE_LABELS[type] || type}</div>
+              <div className="text-xs text-zinc-300">{s.openCount} open · ${s.exposureUsd}</div>
+              <div className={`text-xs ${Number(s.unrealizedPnl) >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                P&L {Number(s.unrealizedPnl) >= 0 ? "+" : ""}{s.unrealizedPnl}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Live position rows */}
+      {allPositions.length > 0 ? (
+        <div className="space-y-1 max-h-36 overflow-y-auto">
+          {allPositions.map((p: any) => (
+            <div key={p.id} className="bg-zinc-800 rounded px-2 py-1.5 flex items-center gap-2">
+              <span className={`text-xs px-1 py-0.5 rounded shrink-0 ${TYPE_COLORS[p._type] || "bg-zinc-700 text-zinc-300"}`}>
+                {TYPE_LABELS[p._type] || p._type}
+              </span>
+              <span className="text-xs text-zinc-200 font-medium">{p.tokenIn} → {p.tokenOut}</span>
+              <span className="text-xs text-zinc-500">{p.chain}</span>
+              <span className="text-xs text-zinc-400 ml-auto">${p.amount}</span>
+              <span className={`text-xs ${(p.unrealizedPnl || 0) >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                {(p.unrealizedPnl || 0) >= 0 ? "+" : ""}{(p.unrealizedPnl || 0).toFixed(2)}
+              </span>
+              <span className="text-xs text-zinc-600">{new Date(p.openedAt).toLocaleTimeString()}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-xs text-zinc-500 bg-zinc-800 rounded-lg p-3 text-center">
+          {data ? "No open positions — executor is idle" : "Connecting to executor…"}
+        </div>
+      )}
+
+      <button onClick={load} className="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 text-xs py-1.5 rounded-lg transition-all">
+        Refresh
+      </button>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // PositionPanel — shared component for Copy Trader + Funding Rate Arb
 // Shows live positions, P&L, exposure, and throttle controls
@@ -255,7 +360,7 @@ export default function WarRoom() {
   // ── Data fetchers ────────────────────────────────────────────────────────
   const fetchStatus = useCallback(async () => {
     try {
-      const r = await fetch(`${EXECUTOR_BASE}/api/strategy/status`);
+      const r = await fetch(`${ACP_BASE}/api/strategy/status`);
       if (!r.ok) return;
       const d = await r.json();
       if (d.wallets?.wallets) setWallets(d.wallets.wallets);
@@ -266,7 +371,7 @@ export default function WarRoom() {
 
   const fetchUMA = useCallback(async () => {
     try {
-      const r = await fetch(`${EXECUTOR_BASE}/uma/pending`);
+      const r = await fetch(`${ACP_BASE}/uma/pending`);
       if (r.ok) { const d = await r.json(); setUma(d.assertions || []); }
     } catch { /* silent */ }
   }, []);
@@ -280,6 +385,7 @@ export default function WarRoom() {
         return { token: t, price: null, error: "unavailable" };
       } catch { return { token: t, price: null, error: "error" }; }
     }));
+    // also fetch SOL from executor's /api/price/SOL — already included above
     setPrices(results);
   }, []);
 
@@ -297,7 +403,7 @@ export default function WarRoom() {
     setAutoFire(true);
     toast.info(`Agents cooking — horizon: ${timeHorizon}`);
     try {
-      const r = await fetch(`${EXECUTOR_BASE}/api/strategy/cook`, {
+      const r = await fetch(`${ACP_BASE}/api/strategy/cook`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ timeHorizon }),
@@ -335,7 +441,7 @@ export default function WarRoom() {
     }
     setExecutingStep(step.step);
     try {
-      const r = await fetch(`${EXECUTOR_BASE}/api/strategy/execute/${step.step}`, {
+      const r = await fetch(`${ACP_BASE}/api/strategy/execute/${step.step}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
@@ -498,7 +604,7 @@ export default function WarRoom() {
             <button
               onClick={async () => {
                 try {
-                  const r = await fetch(`${EXECUTOR_BASE}/trigger/tempo_yield`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+                  const r = await fetch(`${"https://gsb-yield-swarm-production.up.railway.app"}/trigger/tempo_yield`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
                   const d = await r.json();
                   toast.success(d.result?.success ? "Flip order placed" : "Tempo yield triggered");
                 } catch { toast.error("Failed to trigger Tempo yield"); }
@@ -625,24 +731,9 @@ export default function WarRoom() {
             triggerLabel="Scan Rates Now" triggerColor="emerald" />
         </Panel>
 
-        {/* Panel 10 — Revenue Streams */}
-        <Panel title="Revenue Streams" subtitle="Raiders + bleeding.cash + new opportunities" icon={DollarSign} iconColor="text-pink-400">
-          <div className="space-y-2">
-            <div className="bg-zinc-800 rounded-lg p-2">
-              <div className="text-xs font-semibold text-pink-300 mb-0.5">⚔️ Raiders of the Chain</div>
-              <p className="text-xs text-zinc-500">Agents identify trending tokens → launch coordinated raids → collect raid kit fees. Thread Writer posts raid signal.</p>
-              <a href="https://raiders-of-the-chain.vercel.app" target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400 flex items-center gap-1 mt-1">Launch <ChevronRight size={10} /></a>
-            </div>
-            <div className="bg-zinc-800 rounded-lg p-2">
-              <div className="text-xs font-semibold text-red-300 mb-0.5">💊 bleeding.cash</div>
-              <p className="text-xs text-zinc-500">Restaurant financial triage. CEO agent can refer leads. $24.95/report.</p>
-              <a href="https://www.bleeding.cash" target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400 flex items-center gap-1 mt-1">View <ChevronRight size={10} /></a>
-            </div>
-            <div className="bg-zinc-800 rounded-lg p-2">
-              <div className="text-xs font-semibold text-amber-300 mb-0.5">💡 New Opportunities</div>
-              <p className="text-xs text-zinc-500">CEO surfaces agentically-friendly digital product ideas in morning brief. No physical shipping unless exceptional.</p>
-            </div>
-          </div>
+        {/* Panel 10 — Live Trades */}
+        <Panel title="Live Trades" subtitle="All open positions — copy trader · funding arb · tempo yield" icon={ArrowRightLeft} iconColor="text-cyan-400">
+          <LiveTradesPanel />
         </Panel>
 
       </div>
