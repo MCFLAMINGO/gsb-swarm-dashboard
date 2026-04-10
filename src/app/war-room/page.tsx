@@ -367,6 +367,15 @@ export default function WarRoom() {
       if (d.playbook)         setPlaybook(d.playbook);
       if (d.feed)             setFeed(d.feed);
     } catch { /* silent */ }
+    // Fetch hot wallet balances directly from executor
+    try {
+      const wr = await fetch(`${EXECUTOR_BASE}/api/debug/balances`);
+      if (wr.ok) {
+        const wd = await wr.json();
+        // wd is { base: {...}, solana: {...}, tempo: {...} }
+        if (wd && typeof wd === 'object' && !wd.error) setWallets(wd);
+      }
+    } catch { /* silent */ }
   }, []);
 
   const fetchUMA = useCallback(async () => {
