@@ -105,6 +105,120 @@ const SEVERITY_COLORS: Record<string, string> = {
 };
 
 // ─── Panel wrapper ─────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// PositionPanel — shared component for Copy Trader + Funding Rate Arb
+// Shows live positions, P&L, exposure, and throttle controls
+// ---------------------------------------------------------------------------
+function PositionPanel({ type, triggerPath, triggerBody, triggerLabel, triggerColor }: {
+  type: string;
+  triggerPath: string;
+  triggerBody: object;
+  triggerLabel: string;
+  triggerColor: string;
+}) {
+  const EXECUTOR_BASE = process.env.NEXT_PUBLIC_EXECUTOR_URL || "https://gsb-yield-swarm-production.up.railway.app";
+  const [positions, setPositions] = React.useState<any>(null);
+  const [throttle, setThrottleState] = React.useState<any>(null);
+  const [editing, setEditing] = React.useState(false);
+  const [maxSize, setMaxSize] = React.useState("");
+
+  const load = async () => {
+    try {
+      const r = await fetch(`${EXECUTOR_BASE}/api/positions`);
+      const d = await r.json();
+      const s = d.summary?.[type];
+      if (s) { setPositions(s); setThrottleState(s.throttle); setMaxSize(String(s.throttle?.maxPositionUsd || "")); }
+    } catch {}
+  };
+
+  React.useEffect(() => { load(); const t = setInterval(load, 15000); return () => clearInterval(t); }, []);
+
+  const saveThrottle = async (enabled?: boolean) => {
+    try {
+      await fetch(`${EXECUTOR_BASE}/api/positions/throttle`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, enabled: enabled ?? throttle?.enabled, maxPositionUsd: Number(maxSize) }),
+      });
+      toast.success("Throttle updated");
+      setEditing(false);
+      load();
+    } catch { toast.error("Failed to update throttle"); }
+  };
+
+  const colorMap: Record<string, string> = {
+    blue: "bg-blue-700 hover:bg-blue-600",
+    emerald: "bg-emerald-700 hover:bg-emerald-600",
+  };
+  const btnCls = colorMap[triggerColor] || "bg-zinc-700 hover:bg-zinc-600";
+
+  return (
+    <div className="space-y-3">
+      {/* Summary row */}
+      <div className="grid grid-cols-3 gap-2">
+        {[{label:"Open",val:positions?.openCount??"—"},{label:"Exposure",val:positions?`$${positions.exposureUsd}`:"—"},{label:"Unreal. P&L",val:positions?`$${positions.unrealizedPnl}`:"—"}].map(({label,val})=>(
+          <div key={label} className="bg-zinc-800 rounded-lg p-2 text-center">
+            <div className="text-xs text-zinc-500">{label}</div>
+            <div className="text-sm font-bold text-white">{val}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Open positions list */}
+      {positions?.positions?.length > 0 ? (
+        <div className="space-y-1 max-h-28 overflow-y-auto">
+          {positions.positions.map((p: any) => (
+            <div key={p.id} className="bg-zinc-800 rounded px-2 py-1 flex justify-between items-center">
+              <span className="text-xs text-zinc-300">{p.tokenOut} <span className="text-zinc-500">{p.chain}</span></span>
+              <span className="text-xs text-zinc-400">${p.amount}</span>
+              <span className={`text-xs ${(p.unrealizedPnl||0)>=0?"text-emerald-400":"text-red-400"}`}>
+                {(p.unrealizedPnl||0)>=0?"+":""}{(p.unrealizedPnl||0).toFixed(2)}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-xs text-zinc-500 bg-zinc-800 rounded-lg p-2 text-center">No open positions</div>
+      )}
+
+      {/* Throttle controls */}
+      <div className="bg-zinc-800 rounded-lg p-2">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-xs text-zinc-400">Throttle</span>
+          <div className="flex items-center gap-2">
+            <button onClick={() => saveThrottle(!throttle?.enabled)}
+              className={`text-xs px-2 py-0.5 rounded ${throttle?.enabled?"bg-emerald-700 text-emerald-200":"bg-zinc-700 text-zinc-400"}`}>
+              {throttle?.enabled ? "ON" : "OFF"}
+            </button>
+            <button onClick={() => setEditing(!editing)} className="text-xs text-zinc-500 hover:text-zinc-300">Edit</button>
+          </div>
+        </div>
+        {editing && (
+          <div className="flex gap-2 mt-1">
+            <input value={maxSize} onChange={e => setMaxSize(e.target.value)}
+              className="flex-1 bg-zinc-700 text-white text-xs rounded px-2 py-1 w-full"
+              placeholder="Max $ per position" />
+            <button onClick={() => saveThrottle()} className="text-xs bg-blue-700 hover:bg-blue-600 text-white px-2 rounded">Save</button>
+          </div>
+        )}
+        <div className="text-xs text-zinc-600 mt-1">Max: ${throttle?.maxPositionUsd} • Max open: {throttle?.maxOpenPositions}</div>
+      </div>
+
+      {/* Trigger button */}
+      <button onClick={async () => {
+        try {
+          await fetch(`${EXECUTOR_BASE}${triggerPath}`, {
+            method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(triggerBody),
+          });
+          toast.success("Triggered");
+          setTimeout(load, 2000);
+        } catch { toast.error("Failed"); }
+      }} className={`w-full ${btnCls} text-white text-xs py-2 rounded-lg transition-all`}>
+        {triggerLabel}
+      </button>
+    </div>
+  );
+}
+
 function Panel({ title, subtitle, icon: Icon, iconColor = "text-zinc-400", children, className = "" }: {
   title: string; subtitle?: string; icon: React.ElementType;
   iconColor?: string; children: React.ReactNode; className?: string;
@@ -499,57 +613,16 @@ export default function WarRoom() {
 
         {/* Panel 8 — Copy Trader */}
         <Panel title="Copy Trader" subtitle="Smart money signal copy — live positions" icon={Users} iconColor="text-blue-400">
-          <div className="space-y-3">
-            <div className="bg-zinc-800 rounded-lg p-3">
-              <div className="text-xs text-zinc-500 mb-1">How it works</div>
-              <p className="text-xs text-zinc-400 leading-relaxed">
-                Wallet Profiler detects when smart money wallets accumulate a token. 
-                Copy trade fires automatically within the 2h timeframe. Position size: $25 default.
-              </p>
-            </div>
-            <div className="bg-zinc-800 rounded-lg p-3">
-              <div className="text-xs text-zinc-500 mb-1">Signal Status</div>
-              <div className="text-xs text-zinc-400">Monitoring active wallets. Signal auto-feeds into playbook when detected.</div>
-            </div>
-            <button
-              onClick={async () => {
-                try {
-                  const r = await fetch(`${EXECUTOR_BASE}/trigger/copy_trade`, {
-                    method: "POST", headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ signal: { token: "VIRTUAL", chain: "base", amount: 25 } }),
-                  });
-                  toast.success("Copy trade triggered");
-                } catch { toast.error("Failed"); }
-              }}
-              className="w-full bg-blue-700 hover:bg-blue-600 text-white text-xs py-2 rounded-lg transition-all"
-            >
-              Manual Copy Trade Trigger
-            </button>
-          </div>
+          <PositionPanel type="copy_trade" triggerPath="/trigger/copy_trade"
+            triggerBody={{ signal: { token: "VIRTUAL", chain: "base", amount: 25 } }}
+            triggerLabel="Manual Copy Trade Trigger" triggerColor="blue" />
         </Panel>
 
         {/* Panel 9 — Funding Rate Arb */}
         <Panel title="Funding Rate Arb" subtitle="Hyperliquid / Bybit / Tempo rate comparison" icon={DollarSign} iconColor="text-emerald-400">
-          <div className="space-y-3">
-            <div className="bg-zinc-800 rounded-lg p-3">
-              <div className="text-xs text-zinc-500 mb-1">Strategy</div>
-              <p className="text-xs text-zinc-400 leading-relaxed">
-                Scans funding rates across perpetual venues. When rate differential &gt;0.1% favors a direction, 
-                opens delta-neutral position to capture the spread. Auto-closes when rate normalizes.
-              </p>
-            </div>
-            <button
-              onClick={async () => {
-                try {
-                  await fetch(`${EXECUTOR_BASE}/trigger/funding_rate_arb`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-                  toast.success("Funding rate arb triggered");
-                } catch { toast.error("Failed"); }
-              }}
-              className="w-full bg-emerald-700 hover:bg-emerald-600 text-white text-xs py-2 rounded-lg transition-all"
-            >
-              Scan Rates Now
-            </button>
-          </div>
+          <PositionPanel type="funding_arb" triggerPath="/trigger/funding_rate_arb"
+            triggerBody={{}}
+            triggerLabel="Scan Rates Now" triggerColor="emerald" />
         </Panel>
 
         {/* Panel 10 — Revenue Streams */}
