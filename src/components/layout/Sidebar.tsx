@@ -109,6 +109,18 @@ export default function Sidebar() {
             </span>
           )}
         </a>
+        <a href="https://www.raidersofthechain.com" target="_blank" rel="noopener noreferrer"
+          className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors group relative"
+          title="Raiders of the Chain"
+        >
+          <Activity size={17} className="shrink-0" />
+          {!collapsed && <span className="text-xs">⚔️ Raiders of the Chain</span>}
+          {collapsed && (
+            <span className="absolute left-full ml-2.5 px-2 py-1 text-xs bg-secondary border border-border rounded whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-50 shadow-lg">
+              Raiders of the Chain
+            </span>
+          )}
+        </a>
         {/* Base network badge */}
         {!collapsed && (
           <div className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] text-muted-foreground">
