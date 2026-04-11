@@ -2,7 +2,7 @@ import { callModel } from '@/lib/modelRouter';
 import { mcp } from '@/lib/mcp';
 import crypto from "crypto";
 
-const SYSTEM_PROMPT = `You are a viral marketing copywriter and content strategist powered by the GSB Content Engine.
+const SYSTEM_PROMPT = `You are a viral content writer and strategist. You write for real audiences on real topics — not just one brand.
 
 Adapt your style to the platform:
 - X/Twitter: punchy, emotional, 240 chars max for the FIRST tweet so it stands alone as a hook. Write full post content, not just a title line.
@@ -12,11 +12,12 @@ Adapt your style to the platform:
 - Reddit: informative, less hype, more substance
 
 IMPORTANT RULES:
-1. When writing about bleeding.cash: focus entirely on the pain of restaurants losing money, the speed of the triage, and the $24.95 price. Do NOT mention $GSB, crypto, or Web3 unless explicitly asked. ALWAYS link to https://www.bleeding.cash (with www) — never use http://bleeding.cash without www.
+1. When writing about bleeding.cash: focus entirely on the pain of restaurants losing money, the speed of the triage, and the $24.95 price. Do NOT mention $GSB, crypto, or Web3 unless explicitly asked. ALWAYS link to https://www.bleeding.cash (with www).
 2. When writing about $GSB or Agent Gas Bible: be bold and Web3-native, include $GSB #AgentGasBible #Base hashtags.
-3. Write ACTUAL CONTENT with substance, not just a title line. The first tweet should be the complete hook with the full emotional argument.
-4. Never start with hashtags. Lead with the human problem or the bold claim.
-5. When audience intelligence is provided, use it to speak directly to that audience's pain points and language.`;
+3. When writing about ANY OTHER TOPIC: write authentically about that topic. Do NOT force GSB or bleeding.cash in. Use the real data and context provided.
+4. Write ACTUAL CONTENT with substance, not just a title line. The first tweet should be the complete hook with the full emotional argument.
+5. Never start with hashtags. Lead with the human problem or the bold claim.
+6. When real data is provided, use it. When audience intelligence is provided, speak directly to that audience's pain points.`;
 
 interface PreacherInput {
   mission: string;
@@ -105,6 +106,64 @@ async function postTweetToX(
   }
 }
 
+// Detect topic type
+function detectTopic(mission: string): 'gsb' | 'restaurant' | 'crypto' | 'general' {
+  const m = mission.toLowerCase();
+  if (m.includes('gsb') || m.includes('agent gas bible') || m.includes('raiders')) return 'gsb';
+  if (m.includes('bleeding.cash') || m.includes('restaurant')) return 'restaurant';
+  if (m.includes('bitcoin') || m.includes('btc') || m.includes('solana') || m.includes('sol') || m.includes('eth') || m.includes('crypto') || m.includes('defi') || m.includes('nft') || m.includes('token') || m.includes('pump') || m.includes('memecoin')) return 'crypto';
+  return 'general';
+}
+
+// Fetch live crypto data for any token mentioned in mission
+async function fetchCryptoContext(mission: string): Promise<string> {
+  try {
+    // Extract potential ticker symbols (1-6 uppercase letters preceded by $ or as standalone words)
+    const tickers = mission.match(/\$([A-Z]{2,6})/g)?.map(t => t.slice(1)) || [];
+    if (!tickers.length) {
+      // Try common names
+      const m = mission.toLowerCase();
+      if (m.includes('bitcoin') || m.includes('btc')) tickers.push('BTC');
+      if (m.includes('solana') || m.includes('sol')) tickers.push('SOL');
+      if (m.includes('ethereum') || m.includes('eth')) tickers.push('ETH');
+    }
+    if (!tickers.length) return '';
+
+    const results: string[] = [];
+    for (const ticker of tickers.slice(0, 3)) {
+      // Try DexScreener first for on-chain tokens
+      const res = await fetch(`https://api.dexscreener.com/latest/dex/search?q=${ticker}`, { signal: AbortSignal.timeout(5000) });
+      if (res.ok) {
+        const data = await res.json();
+        const pair = data.pairs?.find((p: Record<string, unknown>) =>
+          (p.baseToken as Record<string, string>)?.symbol?.toUpperCase() === ticker &&
+          ((p.chainId as string) === 'solana' || (p.chainId as string) === 'ethereum' || (p.chainId as string) === 'base')
+        ) || data.pairs?.[0];
+        if (pair) {
+          results.push(`$${ticker}: $${pair.priceUsd || '?'} | 24h vol: $${Number(pair.volume?.h24 || 0).toLocaleString()} | 24h chg: ${pair.priceChange?.h24 || '?'}% | chain: ${pair.chainId}`);
+        }
+      }
+    }
+    return results.join('\n');
+  } catch {
+    return '';
+  }
+}
+
+// Fetch trending news/context for general topics via DexScreener trending or web search fallback
+async function fetchGeneralContext(mission: string): Promise<string> {
+  try {
+    // Pull Solana trending tokens as general crypto context
+    const res = await fetch('https://api.dexscreener.com/token-profiles/latest/v1', { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) return '';
+    const data = await res.json();
+    const top = (Array.isArray(data) ? data : []).slice(0, 5).map((t: Record<string, string>) => t.symbol || t.tokenAddress?.slice(0, 8)).join(', ');
+    return top ? `Trending tokens right now: ${top}` : '';
+  } catch {
+    return '';
+  }
+}
+
 // Fetch audience intelligence from content engine
 async function getAudienceIntel(url: string): Promise<string> {
   try {
@@ -148,6 +207,7 @@ async function humanizePost(text: string): Promise<string> {
 export async function runPreacher({ mission, context }: PreacherInput): Promise<PreacherResult> {
   const platform = detectPlatform(mission);
   const brandUrl = detectBrandUrl(mission);
+  const topic = detectTopic(mission);
 
   // Pull keys from MCP if not in local env
   const creds = await mcp.xCredentials();
@@ -160,39 +220,52 @@ export async function runPreacher({ mission, context }: PreacherInput): Promise<
     };
   }
 
-  // Fetch real GSB swarm stats
-  let realStats = '';
-  try {
-    const statsRes = await fetch('https://gsb-swarm-production.up.railway.app/api/public');
-    if (statsRes.ok) {
-      const stats = await statsRes.json();
-      realStats = `Real GSB Stats: ${stats.agentCount || 4} graduated agents on Virtuals Protocol. Status: ${stats.status || 'ONLINE'}.`;
-    }
-  } catch { realStats = 'GSB Swarm: 4 graduated agents on Virtuals Protocol (Base chain).'; }
+  // Fetch grounded context based on topic type
+  let groundedContext = '';
 
-  // Fetch real $GSB token data
-  let tokenData = '';
-  try {
-    const tokenRes = await fetch('https://api.dexscreener.com/latest/dex/tokens/0x6dA1A9793Ebe96975c240501A633ab8B3c83D14A');
-    if (tokenRes.ok) {
-      const td = await tokenRes.json();
-      const pair = td.pairs?.[0];
-      if (pair) {
-        const price = parseFloat(pair.priceUsd || '0').toFixed(8);
-        const vol = Number(pair.volume?.h24 || 0).toLocaleString();
-        const chg = pair.priceChange?.h24 || '0';
-        tokenData = `$GSB Price: $${price} | 24h Vol: $${vol} | 24h Change: ${chg}%`;
+  if (topic === 'gsb') {
+    // Fetch real GSB swarm stats
+    let realStats = '';
+    try {
+      const statsRes = await fetch('https://gsb-swarm-production.up.railway.app/api/public');
+      if (statsRes.ok) {
+        const stats = await statsRes.json();
+        realStats = `Real GSB Stats: ${stats.agentCount || 4} graduated agents on Virtuals Protocol. Status: ${stats.status || 'ONLINE'}.`;
       }
-    }
-  } catch { tokenData = ''; }
+    } catch { realStats = 'GSB Swarm: 4 graduated agents on Virtuals Protocol (Base chain).'; }
 
-  // Fetch audience intelligence for brand-specific posts
-  let audienceIntel = '';
-  if (brandUrl) {
-    audienceIntel = await getAudienceIntel(brandUrl);
+    // Fetch real $GSB token data
+    let tokenData = '';
+    try {
+      const tokenRes = await fetch('https://api.dexscreener.com/latest/dex/tokens/0x6dA1A9793Ebe96975c240501A633ab8B3c83D14A');
+      if (tokenRes.ok) {
+        const td = await tokenRes.json();
+        const pair = td.pairs?.[0];
+        if (pair) {
+          const price = parseFloat(pair.priceUsd || '0').toFixed(8);
+          const vol = Number(pair.volume?.h24 || 0).toLocaleString();
+          const chg = pair.priceChange?.h24 || '0';
+          tokenData = `$GSB Price: $${price} | 24h Vol: $${vol} | 24h Change: ${chg}%`;
+        }
+      }
+    } catch { tokenData = ''; }
+
+    // Fetch audience intel for Raiders/GSB
+    const audienceIntel = brandUrl ? await getAudienceIntel(brandUrl) : '';
+    groundedContext = [realStats, tokenData, audienceIntel].filter(Boolean).join('\n');
+
+  } else if (topic === 'restaurant') {
+    // Audience intel only — no crypto noise
+    groundedContext = await getAudienceIntel('https://www.bleeding.cash');
+
+  } else if (topic === 'crypto') {
+    // Live DexScreener data for the token(s) mentioned
+    groundedContext = await fetchCryptoContext(mission);
+
+  } else {
+    // General topic — trending tokens as ambient context
+    groundedContext = await fetchGeneralContext(mission);
   }
-
-  const groundedContext = [realStats, tokenData, audienceIntel].filter(Boolean).join('\n');
 
   const rawContent = await callModel(
     'preacher',
