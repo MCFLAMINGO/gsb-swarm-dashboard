@@ -449,6 +449,7 @@ export default function WarRoom() {
               steps,
               totalExpectedPnl: 0,
               conflicts: [],
+              entanglementWarnings: [],
               generatedAt: new Date().toISOString(),
               requiresBoardApproval: false,
               ceoVerdict: synthesized,
