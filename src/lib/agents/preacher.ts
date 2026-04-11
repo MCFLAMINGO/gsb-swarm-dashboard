@@ -17,7 +17,9 @@ IMPORTANT RULES:
 3. When writing about ANY OTHER TOPIC: write authentically about that topic. Do NOT force GSB or bleeding.cash in. Use the real data and context provided.
 4. Write ACTUAL CONTENT with substance, not just a title line. The first tweet should be the complete hook with the full emotional argument.
 5. Never start with hashtags. Lead with the human problem or the bold claim.
-6. When real data is provided, use it. When audience intelligence is provided, speak directly to that audience's pain points.`;
+6. When real data is provided, use it. When audience intelligence is provided, speak directly to that audience's pain points.
+7. NEVER ask questions or request more information. You are a writer, not a researcher. If you lack details, write boldly from what you DO know. Make a strong claim and back it up. A post that ships beats a perfect post that never gets written.
+8. NEVER output a numbered list of questions. NEVER output a research brief. NEVER say "I need more info". Write the post — that is your ONLY job.`;
 
 interface PreacherInput {
   mission: string;
@@ -289,14 +291,26 @@ export async function runPreacher({ mission, context }: PreacherInput): Promise<
   );
   if (xKeys?.apiKey) {
     const lines = result.split('\n').filter((l: string) => l.trim());
-    const firstTweet = (
+    // Detect if output looks like a research brief / question list — don't post it
+    const looksLikeResearchBrief = (
+      lines.filter((l: string) => l.trim().endsWith('?')).length >= 2 ||
+      lines.some((l: string) => /^(Look,|Here'?s what|I need|Give me|What is|What'?s|So here'?s|Before I|Can you|Tell me)/i.test(l.trim()))
+    );
+
+    const firstTweet = looksLikeResearchBrief ? '' : (
       lines.find((l: string) =>
         l.length >= 60 &&
+        !l.trim().endsWith('?') &&
         !l.match(/^#+\s/) &&
         !l.match(/^[A-Z\s$]+:?$/) &&
-        !l.startsWith('#')
+        !l.startsWith('#') &&
+        !/^(Look,|Here'?s what|I need|Give me|What is|So here'?s)/i.test(l.trim())
       ) || lines[0] || ''
     ).slice(0, 280);
+
+    if (looksLikeResearchBrief) {
+      console.warn('[preacher] Output looks like a research brief — skipping post');
+    }
     if (firstTweet) {
       console.log('[preacher] Posting via Railway tweet endpoint...');
       try {
