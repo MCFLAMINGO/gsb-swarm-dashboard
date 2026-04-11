@@ -418,19 +418,56 @@ export default function WarRoom() {
         body: JSON.stringify({ timeHorizon }),
       });
       const d = await r.json();
-      if (d.playbook) {
-        setPlaybook(d.playbook);
-        setFeed(prev => [{ type: "playbook_ready", message: `Playbook ready — ${d.playbook.steps.length} steps, est. $${d.playbook.totalExpectedPnl}`, severity: "success", ts: new Date().toISOString() }, ...prev]);
-        toast.success(`Playbook ready — ${d.playbook.steps.length} steps`);
-        if (d.playbook.requiresBoardApproval) {
-          toast.warning("⚠️ Board approval required for 1+ steps > $1000");
-          setAutoFire(false);
-        }
-      }
+      if (!d.ok) throw new Error(d.error || "Cook failed");
+
+      // Backend fires workers async — poll /api/strategy/status until latestBrief appears
+      const pollStart = Date.now();
+      const poll = setInterval(async () => {
+        try {
+          const sr = await fetch(`${ACP_BASE}/api/strategy/status`, {
+            headers: { "x-gsb-token": localStorage.getItem("gsb_token") || "" },
+          });
+          const sd = await sr.json();
+          // Update feed from workers as they report in
+          if (sd.feed) setFeed(sd.feed);
+          if (sd.latestBrief) {
+            clearInterval(poll);
+            setCooking(false);
+            const brief = sd.latestBrief;
+            // Map brief into playbook shape the UI expects
+            const steps = Object.entries(brief.results || {}).map(([worker, res]: [string, any], i) => ({
+              step: i + 1,
+              worker,
+              action: res.raw ? res.raw.slice(0, 120) + "…" : (res.error || "No result"),
+              chain: "base",
+              expectedPnl: 0,
+              risk: "medium" as const,
+              status: res.error ? "failed" : "ready",
+            }));
+            const synthesized = brief.ceoSynthesis?.recommendation || brief.ceoSynthesis?.raw || "";
+            const pb = {
+              steps,
+              totalExpectedPnl: 0,
+              conflicts: [],
+              generatedAt: new Date().toISOString(),
+              requiresBoardApproval: false,
+              ceoVerdict: synthesized,
+            };
+            setPlaybook(pb);
+            setFeed(prev => [{ type: "playbook_ready", message: `Playbook ready — ${steps.length} workers reported`, severity: "success", ts: new Date().toISOString() }, ...prev]);
+            toast.success(`Playbook ready — ${steps.length} workers reported`);
+          } else if (Date.now() - pollStart > 120000) {
+            // Timeout after 2 min
+            clearInterval(poll);
+            setCooking(false);
+            toast.warning("Agents still cooking — check back shortly");
+          }
+        } catch { /* silent */ }
+      }, 4000);
+
     } catch (e: unknown) {
       toast.error("Cook failed");
       setAutoFire(false);
-    } finally {
       setCooking(false);
     }
   };
