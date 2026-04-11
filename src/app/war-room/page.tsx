@@ -627,13 +627,13 @@ export default function WarRoom() {
 
         {/* Panel 5 — Agents */}
         <Panel title="Agent Roster" subtitle="Each agent runs its own strategy independently" icon={Brain} iconColor="text-pink-400">
-          <div className="space-y-0 overflow-y-auto max-h-full">
+          <div className="space-y-2">
             {AGENTS.map(a => (
-              <div key={a.id} className="flex items-center gap-2 py-1.5 border-b border-zinc-800 last:border-0">
-                <a.icon size={13} className={`${a.color} shrink-0`} />
+              <div key={a.id} className="flex items-start gap-2 py-2 border-b border-zinc-800 last:border-0">
+                <a.icon size={14} className={`${a.color} mt-0.5 shrink-0`} />
                 <div>
-                  <div className="text-xs font-semibold text-zinc-200 leading-tight">{a.label}</div>
-                  <div className="text-[10px] text-zinc-500 leading-tight">{a.desc}</div>
+                  <div className="text-xs font-semibold text-zinc-200">{a.label}</div>
+                  <div className="text-xs text-zinc-500">{a.desc}</div>
                 </div>
               </div>
             ))}
