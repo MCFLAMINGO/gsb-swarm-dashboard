@@ -4,8 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { Activity, Play, Square, Zap, TrendingUp, TrendingDown, Circle, DollarSign, Target, Shield } from 'lucide-react'
 
 // ── Config ────────────────────────────────────────────────────────────────
-const BACKEND = 'https://gsb-swarm-production.up.railway.app'
-const EXECUTOR = 'https://gsb-yield-swarm-production.up.railway.app'  // gsb-yield-swarm Railway URL
+const EXECUTOR = 'https://gsb-yield-swarm-production.up.railway.app'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 type FeedEvent = {
@@ -205,8 +204,6 @@ export default function CopyTraderPage() {
   const [stats, setStats]   = useState({ totalPnl: 0, wins: 0, losses: 0, buys: 0 })
   const feedRef = useRef<HTMLDivElement>(null)
   const esRef   = useRef<EventSource | null>(null)
-  const statsRef = useRef(stats)
-  statsRef.current = stats
 
   // ── Fetch status ──────────────────────────────────────────────────────
   const fetchStatus = useCallback(async () => {
