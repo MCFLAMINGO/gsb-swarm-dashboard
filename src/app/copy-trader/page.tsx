@@ -1,9 +1,8 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Activity, Play, Square, Zap, TrendingUp, TrendingDown, Circle, DollarSign, Target, Shield } from 'lucide-react'
+import { Activity, Play, Square, Zap, TrendingUp, TrendingDown, DollarSign, Target, Shield, RefreshCw, Wallet, BarChart2 } from 'lucide-react'
 
-// ── Config ────────────────────────────────────────────────────────────────
 const EXECUTOR = 'https://gsb-yield-swarm-production.up.railway.app'
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -16,27 +15,39 @@ type FeedEvent = {
   currentPrice?: number
   exitPrice?: number
   pnlPct?: number
-  pnlUsd?: number
   amountUsd?: number
   mcap?: number
-  volume?: number
   reason?: string
   positionId?: string
   txHash?: string
+  strategy?: string
+  walletSource?: string
+  exchange?: string
+  rate?: number
   ts: string
 }
 
-type SniperStatus = {
+type StrategyStatus = {
   running: boolean
-  startedAt: string | null
-  positionSize: number
+  positionSize?: number
   openCount: number
-  maxPositions: number
-  takeProfit: number
-  stopLoss: number
-  maxHoldHours: number
   recentLog: FeedEvent[]
   openPositions: OpenPosition[]
+  takeProfit?: number
+  stopLoss?: number
+  maxHoldHours?: number
+  mirrorRatio?: number
+  minRate?: number
+  volMultiplier?: number
+  volAccelMin?: number
+}
+
+type AllStrategies = {
+  sniper: StrategyStatus
+  momentum_swing: StrategyStatus
+  trend_rider: StrategyStatus
+  wallet_copy: StrategyStatus
+  funding_arb: StrategyStatus
 }
 
 type OpenPosition = {
@@ -47,484 +58,445 @@ type OpenPosition = {
   amount: number
   openedAt: string
   type: string
+  note?: string
 }
 
+// ── Strategy metadata ─────────────────────────────────────────────────────
+const STRATEGIES = [
+  {
+    id: 'sniper',
+    label: 'Micro Sniper',
+    icon: Zap,
+    color: 'text-yellow-400',
+    border: 'border-yellow-400/30',
+    bg: 'bg-yellow-400/5',
+    glow: 'shadow-yellow-400/20',
+    desc: 'New tokens <6h, <$2M mcap, momentum entry',
+    tp: '50%', sl: '20%', hold: '3h',
+    defaultSize: 10,
+  },
+  {
+    id: 'momentum_swing',
+    label: 'Momentum Swing',
+    icon: TrendingUp,
+    color: 'text-blue-400',
+    border: 'border-blue-400/30',
+    bg: 'bg-blue-400/5',
+    glow: 'shadow-blue-400/20',
+    desc: 'SOL/BTC/ETH — h1 green + vol spike entry',
+    tp: '8%', sl: '4%', hold: '6h',
+    defaultSize: 15,
+  },
+  {
+    id: 'funding_arb',
+    label: 'Funding Arb',
+    icon: Shield,
+    color: 'text-green-400',
+    border: 'border-green-400/30',
+    bg: 'bg-green-400/5',
+    glow: 'shadow-green-400/20',
+    desc: 'Delta-neutral yield — Tempo pathUSD + Hyperliquid',
+    tp: '—', sl: '—', hold: '72h max',
+    defaultSize: 10,
+  },
+  {
+    id: 'trend_rider',
+    label: 'Trend Rider',
+    icon: BarChart2,
+    color: 'text-purple-400',
+    border: 'border-purple-400/30',
+    bg: 'bg-purple-400/5',
+    glow: 'shadow-purple-400/20',
+    desc: 'Boosted tokens 6-48h old, 3x vol acceleration',
+    tp: '30%', sl: '15%', hold: '6h',
+    defaultSize: 10,
+  },
+  {
+    id: 'wallet_copy',
+    label: 'Wallet Copy',
+    icon: Wallet,
+    color: 'text-orange-400',
+    border: 'border-orange-400/30',
+    bg: 'bg-orange-400/5',
+    glow: 'shadow-orange-400/20',
+    desc: 'Mirror alpha wallet buys at 20% ratio',
+    tp: '40%', sl: '20%', hold: '3h',
+    defaultSize: 20,
+  },
+]
+
 // ── Helpers ───────────────────────────────────────────────────────────────
-const fmt = (n: number, d = 2) => n.toFixed(d)
 const fmtPrice = (p: number) => p < 0.0001 ? p.toExponential(3) : p < 1 ? p.toFixed(6) : p.toFixed(4)
-const fmtUsd = (n: number) => `$${Math.abs(n).toFixed(2)}`
 const fmtK = (n: number) => n >= 1_000_000 ? `$${(n/1_000_000).toFixed(1)}M` : `$${(n/1000).toFixed(0)}k`
-const age = (ts: string) => {
+const ageStr = (ts: string) => {
   const ms = Date.now() - new Date(ts).getTime()
   if (ms < 60000) return `${Math.floor(ms/1000)}s`
   if (ms < 3600000) return `${Math.floor(ms/60000)}m`
   return `${(ms/3600000).toFixed(1)}h`
 }
 
-// ── Trade ticker item ─────────────────────────────────────────────────────
-function TickerRow({ ev }: { ev: FeedEvent }) {
-  const isBuy  = ev.type === 'buy'
-  const isSell = ev.type === 'sell'
-  const isUp   = (ev.pnlPct ?? 0) >= 0
-
-  if (ev.type === 'price_update') {
-    return (
-      <div className="flex items-center gap-2 px-3 py-1 text-[11px] font-mono border-b border-white/5 hover:bg-white/[0.02] transition-colors">
-        <Circle className="w-2 h-2 text-blue-500 shrink-0" />
-        <span className="text-blue-300 font-medium w-16 shrink-0">{ev.symbol}</span>
-        <span className="text-muted-foreground">{fmtPrice(ev.currentPrice ?? 0)}</span>
-        <span className={`ml-auto font-bold ${isUp ? 'text-green-400' : 'text-red-400'}`}>
-          {isUp ? '+' : ''}{fmt((ev.pnlPct ?? 0) * 100, 1)}%
-        </span>
-        <span className="text-muted-foreground text-[10px] w-8 text-right">{age(ev.ts)}</span>
-      </div>
-    )
-  }
-
-  if (isBuy) {
-    return (
-      <div className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-mono bg-green-950/20 border-b border-green-500/10 hover:bg-green-950/30 transition-colors">
-        <TrendingUp className="w-3 h-3 text-green-400 shrink-0" />
-        <span className="text-green-300 font-bold w-16 shrink-0">{ev.symbol}</span>
-        <span className="text-green-200">{fmtUsd(ev.amountUsd ?? 0)}</span>
-        <span className="text-muted-foreground">@ {fmtPrice(ev.entryPrice ?? 0)}</span>
-        {ev.mcap && <span className="text-muted-foreground ml-1">mc {fmtK(ev.mcap)}</span>}
-        <span className="text-green-400 ml-auto font-bold text-[10px]">BUY</span>
-        <span className="text-muted-foreground text-[10px] w-8 text-right">{age(ev.ts)}</span>
-      </div>
-    )
-  }
-
-  if (isSell) {
-    const good = (ev.pnlPct ?? 0) >= 0
-    return (
-      <div className={`flex items-center gap-2 px-3 py-1.5 text-[11px] font-mono border-b transition-colors ${
-        good ? 'bg-emerald-950/20 border-emerald-500/10 hover:bg-emerald-950/30'
-              : 'bg-red-950/20 border-red-500/10 hover:bg-red-950/30'
-      }`}>
-        <TrendingDown className={`w-3 h-3 shrink-0 ${good ? 'text-emerald-400' : 'text-red-400'}`} />
-        <span className={`font-bold w-16 shrink-0 ${good ? 'text-emerald-300' : 'text-red-300'}`}>{ev.symbol}</span>
-        <span className={good ? 'text-emerald-200' : 'text-red-200'}>
-          {good ? '+' : '-'}{fmtUsd(Math.abs(ev.pnlUsd ?? 0))}
-        </span>
-        <span className={`font-bold ${good ? 'text-emerald-400' : 'text-red-400'}`}>
-          {good ? '+' : ''}{fmt((ev.pnlPct ?? 0) * 100, 1)}%
-        </span>
-        <span className="text-muted-foreground text-[10px] uppercase">{ev.reason?.replace('_',' ')}</span>
-        <span className={`ml-auto font-bold text-[10px] ${good ? 'text-emerald-400' : 'text-red-400'}`}>SELL</span>
-        <span className="text-muted-foreground text-[10px] w-8 text-right">{age(ev.ts)}</span>
-      </div>
-    )
-  }
-
-  // info/warn/error log line
-  const color = ev.type === 'error' ? 'text-red-400' : ev.type === 'warn' ? 'text-yellow-400' : 'text-muted-foreground'
-  return (
-    <div className={`flex items-center gap-2 px-3 py-0.5 text-[10px] font-mono border-b border-white/5 ${color}`}>
-      <span className="opacity-50 shrink-0">{age(ev.ts)}</span>
-      <span className="truncate">{ev.message}</span>
-    </div>
-  )
+const eventColor = (type: string) => {
+  if (type === 'buy')   return 'text-green-400'
+  if (type === 'sell')  return 'text-red-400'
+  if (type === 'error') return 'text-red-500'
+  if (type === 'warn')  return 'text-yellow-400'
+  if (type === 'debug') return 'text-gray-600'
+  return 'text-gray-400'
 }
 
-// ── Position card ─────────────────────────────────────────────────────────
-function PositionCard({ pos, livePrice }: { pos: OpenPosition; livePrice?: number }) {
-  const pnlPct = livePrice && pos.entryPrice
-    ? (livePrice - pos.entryPrice) / pos.entryPrice
-    : null
-  const pnlUsd = pnlPct !== null ? pos.amount * pnlPct : null
-  const good = (pnlPct ?? 0) >= 0
-  const ageMs = Date.now() - new Date(pos.openedAt).getTime()
-  const pctOfHold = Math.min(100, (ageMs / (3 * 3600000)) * 100)
+const eventIcon = (type: string) => {
+  if (type === 'buy')  return '▲'
+  if (type === 'sell') return '▼'
+  if (type === 'error' || type === 'warn') return '⚠'
+  return '·'
+}
+
+// ── Strategy Card ─────────────────────────────────────────────────────────
+function StrategyCard({
+  meta,
+  status,
+  onStart,
+  onStop,
+  onSize,
+  loading,
+}: {
+  meta: typeof STRATEGIES[0]
+  status: StrategyStatus | null
+  onStart: (size: number) => void
+  onStop: () => void
+  onSize: (size: number) => void
+  loading: boolean
+}) {
+  const [size, setSize] = useState(meta.defaultSize)
+  const Icon = meta.icon
+  const running = status?.running ?? false
 
   return (
-    <div className={`rounded-lg border p-3 space-y-2 ${good ? 'border-green-500/20 bg-green-950/10' : 'border-red-500/20 bg-red-950/10'}`}>
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="font-bold text-sm">{pos.tokenName}</div>
-          <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
-            {pos.tokenAddress.slice(0,6)}…{pos.tokenAddress.slice(-4)}
-          </div>
+    <div className={`rounded-xl border ${meta.border} ${meta.bg} p-4 flex flex-col gap-3 shadow-lg ${running ? meta.glow : ''}`}>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Icon className={`w-4 h-4 ${meta.color}`} />
+          <span className={`font-bold text-sm ${meta.color}`}>{meta.label}</span>
+          <span className={`w-2 h-2 rounded-full ${running ? 'bg-green-400 animate-pulse' : 'bg-gray-600'}`} />
         </div>
-        <div className="text-right">
-          {pnlPct !== null ? (
-            <>
-              <div className={`font-bold text-sm ${good ? 'text-green-400' : 'text-red-400'}`}>
-                {good ? '+' : ''}{fmt(pnlPct * 100, 1)}%
-              </div>
-              <div className={`text-[11px] ${good ? 'text-green-300' : 'text-red-300'}`}>
-                {good ? '+' : '-'}{fmtUsd(Math.abs(pnlUsd ?? 0))}
-              </div>
-            </>
-          ) : (
-            <div className="text-blue-400 font-bold text-sm">● OPEN</div>
-          )}
-        </div>
+        <span className="text-xs text-gray-500">{status?.openCount ?? 0} open</span>
       </div>
 
-      <div className="grid grid-cols-3 gap-1 text-[10px] text-muted-foreground">
-        <div>
-          <div className="text-[9px] uppercase mb-0.5">Entry</div>
-          <div className="font-mono">{fmtPrice(pos.entryPrice)}</div>
-        </div>
-        <div>
-          <div className="text-[9px] uppercase mb-0.5">Size</div>
-          <div className="font-mono">{fmtUsd(pos.amount)}</div>
-        </div>
-        <div>
-          <div className="text-[9px] uppercase mb-0.5">Age</div>
-          <div className="font-mono">{age(pos.openedAt)}</div>
-        </div>
+      {/* Desc */}
+      <p className="text-xs text-gray-500 leading-relaxed">{meta.desc}</p>
+
+      {/* Stats row */}
+      <div className="flex gap-3 text-xs text-gray-500">
+        <span>TP <span className="text-green-400">{meta.tp}</span></span>
+        <span>SL <span className="text-red-400">{meta.sl}</span></span>
+        <span>Max <span className="text-gray-300">{meta.hold}</span></span>
       </div>
 
-      {/* Time bar — 3h max hold */}
-      <div>
-        <div className="flex justify-between text-[9px] text-muted-foreground mb-0.5">
-          <span>Hold time</span>
-          <span>3h max</span>
-        </div>
-        <div className="h-1 bg-white/10 rounded-full overflow-hidden">
-          <div
-            className={`h-full rounded-full transition-all ${pctOfHold > 80 ? 'bg-red-500' : pctOfHold > 50 ? 'bg-yellow-500' : 'bg-blue-500'}`}
-            style={{ width: `${pctOfHold}%` }}
-          />
-        </div>
+      {/* Size buttons */}
+      <div className="flex gap-1 flex-wrap">
+        {[5, 10, 15, 20, 50].map(s => (
+          <button
+            key={s}
+            onClick={() => { setSize(s); if (running) onSize(s); }}
+            className={`px-2 py-0.5 rounded text-xs font-mono transition-all ${
+              size === s
+                ? `${meta.color} border ${meta.border} bg-white/5`
+                : 'text-gray-600 border border-gray-800 hover:border-gray-600'
+            }`}
+          >${s}</button>
+        ))}
       </div>
+
+      {/* Open positions */}
+      {status?.openPositions && status.openPositions.length > 0 && (
+        <div className="space-y-1">
+          {status.openPositions.map(pos => (
+            <div key={pos.id} className="flex items-center justify-between text-xs bg-black/30 rounded px-2 py-1">
+              <span className={`font-mono font-bold ${meta.color}`}>{pos.tokenName}</span>
+              <span className="text-gray-400">${pos.amount.toFixed(0)}</span>
+              <span className="text-gray-500">{ageStr(pos.openedAt)}</span>
+              <span className="text-gray-600 text-[10px]" title={pos.tokenAddress}>
+                {pos.tokenAddress?.slice(0, 6)}...
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Start/Stop */}
+      <button
+        onClick={() => running ? onStop() : onStart(size)}
+        disabled={loading}
+        className={`w-full py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all ${
+          running
+            ? 'bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30'
+            : `${meta.bg} ${meta.color} border ${meta.border} hover:bg-white/10`
+        } disabled:opacity-50`}
+      >
+        {loading ? (
+          <RefreshCw className="w-3 h-3 animate-spin" />
+        ) : running ? (
+          <><Square className="w-3 h-3" /> Stop</>
+        ) : (
+          <><Play className="w-3 h-3" /> Start ${size}</>
+        )}
+      </button>
     </div>
   )
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────
 export default function CopyTraderPage() {
-  const [status, setStatus] = useState<SniperStatus | null>(null)
-  const [feed, setFeed]     = useState<FeedEvent[]>([])
-  const [posSize, setPosSize] = useState(10)
-  const [loading, setLoading] = useState(false)
-  const [livePrices, setLivePrices] = useState<Record<string, number>>({})
-  const [stats, setStats]   = useState({ totalPnl: 0, wins: 0, losses: 0, buys: 0 })
+  const [strategies, setStrategies] = useState<AllStrategies | null>(null)
+  const [feed, setFeed] = useState<FeedEvent[]>([])
+  const [loading, setLoading] = useState<Record<string, boolean>>({})
+  const [activeFilter, setActiveFilter] = useState<string>('all')
   const feedRef = useRef<HTMLDivElement>(null)
-  const esRef   = useRef<EventSource | null>(null)
+  const esRef = useRef<EventSource | null>(null)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // ── Fetch status ──────────────────────────────────────────────────────
-  const fetchStatus = useCallback(async () => {
+  // ── Fetch all strategy statuses ──────────────────────────────────────
+  const fetchStatuses = useCallback(async () => {
     try {
-      const r = await fetch(`${EXECUTOR}/api/sniper/status`)
-      if (r.ok) {
-        const d = await r.json()
-        setStatus(d)
-        if (d.positionSize) setPosSize(d.positionSize)
-      }
-    } catch {}
+      const res = await fetch(`${EXECUTOR}/api/strategies`)
+      if (res.ok) setStrategies(await res.json())
+    } catch { /* silent */ }
   }, [])
-
-  useEffect(() => {
-    fetchStatus()
-    const t = setInterval(fetchStatus, 8000)
-    return () => clearInterval(t)
-  }, [fetchStatus])
 
   // ── SSE feed ──────────────────────────────────────────────────────────
-  useEffect(() => {
-    const connect = () => {
-      if (esRef.current) esRef.current.close()
-      const es = new EventSource(`${EXECUTOR}/api/sniper/feed`)
-      esRef.current = es
-
-      es.onmessage = (e) => {
-        try {
-          const ev: FeedEvent = JSON.parse(e.data)
-
-          setFeed(prev => {
-            const next = [ev, ...prev].slice(0, 200)
-            return next
-          })
-
-          // Live price tracking
-          if (ev.type === 'price_update' && ev.address && ev.currentPrice) {
-            setLivePrices(p => ({ ...p, [ev.address!]: ev.currentPrice! }))
-          }
-
-          // Running P&L stats
-          if (ev.type === 'sell' && ev.pnlUsd !== undefined) {
-            setStats(s => ({
-              totalPnl: s.totalPnl + (ev.pnlUsd ?? 0),
-              wins:     s.wins + ((ev.pnlUsd ?? 0) >= 0 ? 1 : 0),
-              losses:   s.losses + ((ev.pnlUsd ?? 0) < 0 ? 1 : 0),
-              buys:     s.buys,
-            }))
-          }
-          if (ev.type === 'buy') {
-            setStats(s => ({ ...s, buys: s.buys + 1 }))
-          }
-        } catch {}
-      }
-
-      es.onerror = () => {
-        es.close()
-        setTimeout(connect, 5000)
-      }
+  const connectFeed = useCallback(() => {
+    if (esRef.current) { esRef.current.close(); esRef.current = null; }
+    const es = new EventSource(`${EXECUTOR}/api/strategies/feed`)
+    es.onmessage = (e) => {
+      try {
+        const event: FeedEvent = JSON.parse(e.data)
+        setFeed(prev => [event, ...prev].slice(0, 300))
+        if (event.type === 'buy' || event.type === 'sell') fetchStatuses()
+      } catch { /* ignore */ }
     }
+    es.onerror = () => { es.close(); setTimeout(connectFeed, 5000); }
+    esRef.current = es
+  }, [fetchStatuses])
 
-    connect()
-    return () => { esRef.current?.close() }
-  }, [])
+  useEffect(() => {
+    fetchStatuses()
+    connectFeed()
+    pollRef.current = setInterval(fetchStatuses, 10000)
+    return () => {
+      if (esRef.current) esRef.current.close()
+      if (pollRef.current) clearInterval(pollRef.current)
+    }
+  }, [fetchStatuses, connectFeed])
 
-  // Auto-scroll feed to top (newest is top)
+  // Auto-scroll feed
   useEffect(() => {
     if (feedRef.current) feedRef.current.scrollTop = 0
-  }, [feed.length])
+  }, [feed])
 
-  // ── Controls ──────────────────────────────────────────────────────────
-  const startSniper = async () => {
-    setLoading(true)
+  // ── Actions ───────────────────────────────────────────────────────────
+  const startStrategy = async (id: string, size: number) => {
+    setLoading(l => ({ ...l, [id]: true }))
     try {
-      const r = await fetch(`${EXECUTOR}/api/sniper/start`, {
+      await fetch(`${EXECUTOR}/api/strategies/${id}/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ positionSize: posSize }),
+        body: JSON.stringify({ positionSize: size }),
       })
-      await r.json()
-      setTimeout(fetchStatus, 1000)
-    } catch {}
-    setLoading(false)
-  }
-
-  const stopSniper = async () => {
-    setLoading(true)
-    try {
-      await fetch(`${EXECUTOR}/api/sniper/stop`, { method: 'POST' })
-      setTimeout(fetchStatus, 1000)
-    } catch {}
-    setLoading(false)
-  }
-
-  const updateSize = async (size: number) => {
-    setPosSize(size)
-    if (status?.running) {
-      try {
-        await fetch(`${EXECUTOR}/api/sniper/size`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ positionSize: size }),
-        })
-      } catch {}
+      setTimeout(fetchStatuses, 1000)
+    } finally {
+      setLoading(l => ({ ...l, [id]: false }))
     }
   }
 
-  const isRunning   = status?.running ?? false
-  const openPos     = status?.openPositions ?? []
-  const winRate     = (stats.wins + stats.losses) > 0
-    ? (stats.wins / (stats.wins + stats.losses)) * 100 : null
-  const pnlPositive = stats.totalPnl >= 0
+  const stopStrategy = async (id: string) => {
+    setLoading(l => ({ ...l, [id]: true }))
+    try {
+      await fetch(`${EXECUTOR}/api/strategies/${id}/stop`, { method: 'POST' })
+      setTimeout(fetchStatuses, 1000)
+    } finally {
+      setLoading(l => ({ ...l, [id]: false }))
+    }
+  }
+
+  const sizeStrategy = async (id: string, size: number) => {
+    await fetch(`${EXECUTOR}/api/strategies/${id}/size`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ positionSize: size }),
+    })
+  }
+
+  // ── Derived stats ─────────────────────────────────────────────────────
+  const totalOpen = strategies
+    ? Object.values(strategies).reduce((s, v) => s + (v.openCount || 0), 0)
+    : 0
+  const activeCount = strategies
+    ? Object.values(strategies).filter(v => v.running).length
+    : 0
+
+  const filteredFeed = activeFilter === 'all'
+    ? feed
+    : feed.filter(e => e.strategy === activeFilter || (!e.strategy && activeFilter === 'sniper'))
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-background h-full">
-
-      {/* ── Header ─────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-border shrink-0">
-        <div className="flex items-center gap-2.5">
-          <Zap className="w-4 h-4 text-yellow-400" />
-          <span className="font-bold text-sm">Solana Sniper</span>
-          <div className={`flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full border ${
-            isRunning
-              ? 'bg-green-950/40 border-green-500/40 text-green-400'
-              : 'bg-muted/40 border-border text-muted-foreground'
-          }`}>
-            <div className={`w-1.5 h-1.5 rounded-full ${isRunning ? 'bg-green-400 animate-pulse' : 'bg-muted-foreground'}`} />
-            {isRunning ? 'LIVE' : 'STOPPED'}
-          </div>
-          {isRunning && openPos.length > 0 && (
-            <span className="text-[11px] text-blue-400">{openPos.length}/{status?.maxPositions} positions</span>
-          )}
+    <div className="min-h-screen bg-black text-white font-mono">
+      {/* Top bar */}
+      <div className="border-b border-gray-800 px-6 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Activity className="w-5 h-5 text-green-400" />
+          <span className="text-white font-bold text-sm tracking-widest uppercase">GSB Trading Engine</span>
+          <span className="text-gray-600 text-xs">5 Strategies</span>
         </div>
-
-        {/* Stats row */}
-        <div className="flex items-center gap-4 text-[11px] font-mono">
-          <div className="flex items-center gap-1">
-            <DollarSign className="w-3 h-3 text-muted-foreground" />
-            <span className={pnlPositive ? 'text-green-400' : 'text-red-400'}>
-              {pnlPositive ? '+' : ''}{fmtUsd(stats.totalPnl)}
-            </span>
+        <div className="flex items-center gap-6 text-xs">
+          <div className="flex items-center gap-2">
+            <DollarSign className="w-3 h-3 text-green-400" />
+            <span className="text-gray-400">{totalOpen} positions open</span>
           </div>
-          <div className="flex items-center gap-1">
-            <Target className="w-3 h-3 text-muted-foreground" />
-            <span className="text-muted-foreground">
-              {winRate !== null ? `${fmt(winRate, 0)}% WR` : '—'}
-            </span>
+          <div className="flex items-center gap-2">
+            <Target className="w-3 h-3 text-yellow-400" />
+            <span className="text-gray-400">{activeCount}/5 active</span>
           </div>
-          <div className="flex items-center gap-1">
-            <Activity className="w-3 h-3 text-muted-foreground" />
-            <span className="text-muted-foreground">{stats.buys} buys</span>
+          <div className={`flex items-center gap-1 ${activeCount > 0 ? 'text-green-400' : 'text-gray-600'}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${activeCount > 0 ? 'bg-green-400 animate-pulse' : 'bg-gray-700'}`} />
+            {activeCount > 0 ? 'LIVE' : 'IDLE'}
           </div>
         </div>
       </div>
 
-      {/* ── Main layout: left=ticker, right=controls+positions ─────────── */}
-      <div className="flex-1 flex overflow-hidden min-h-0">
-
-        {/* LEFT — Live trade ticker (big screen) */}
-        <div className="flex-1 flex flex-col min-w-0 border-r border-border">
-          <div className="flex items-center justify-between px-3 py-1.5 border-b border-border shrink-0">
-            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Live Trade Feed</span>
-            <span className="text-[10px] text-muted-foreground">{feed.length} events</span>
+      <div className="flex h-[calc(100vh-53px)]">
+        {/* Left — Live feed */}
+        <div className="w-[42%] border-r border-gray-800 flex flex-col">
+          {/* Feed header + filters */}
+          <div className="border-b border-gray-800 px-4 py-2 flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-gray-500 mr-1">FILTER:</span>
+            {['all', ...STRATEGIES.map(s => s.id)].map(f => (
+              <button
+                key={f}
+                onClick={() => setActiveFilter(f)}
+                className={`px-2 py-0.5 rounded text-[11px] transition-all ${
+                  activeFilter === f
+                    ? 'bg-white/10 text-white'
+                    : 'text-gray-600 hover:text-gray-400'
+                }`}
+              >
+                {f === 'all' ? 'ALL' : STRATEGIES.find(s => s.id === f)?.label || f}
+              </button>
+            ))}
           </div>
 
-          {/* Ticker header */}
-          <div className="flex items-center gap-2 px-3 py-1 text-[9px] text-muted-foreground/60 uppercase tracking-wider border-b border-white/5 shrink-0">
-            <span className="w-3"></span>
-            <span className="w-16">Symbol</span>
-            <span>Amount / P&L</span>
-            <span className="ml-auto">Change</span>
-            <span className="w-8 text-right">Age</span>
-          </div>
-
-          {/* Scrolling feed */}
-          <div ref={feedRef} className="flex-1 overflow-y-auto font-mono">
-            {feed.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-muted-foreground/40 gap-2">
-                <Activity className="w-8 h-8" />
-                <span className="text-xs">{isRunning ? 'Scanning for opportunities...' : 'Start sniper to see live trades'}</span>
+          {/* Feed scroll */}
+          <div ref={feedRef} className="flex-1 overflow-y-auto">
+            {filteredFeed.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-gray-700">
+                <Activity className="w-8 h-8 mb-3 opacity-30" />
+                <p className="text-sm">Waiting for events...</p>
+                <p className="text-xs mt-1 opacity-60">Start a strategy to see live trades</p>
               </div>
             ) : (
-              feed.map((ev, i) => <TickerRow key={i} ev={ev} />)
+              filteredFeed.map((e, i) => (
+                <div
+                  key={i}
+                  className={`border-b border-gray-900 px-4 py-2 hover:bg-white/[0.02] transition-colors ${
+                    e.type === 'buy' ? 'border-l-2 border-l-green-500/40' :
+                    e.type === 'sell' ? 'border-l-2 border-l-red-500/40' : ''
+                  }`}
+                >
+                  <div className="flex items-start gap-2">
+                    <span className={`text-sm leading-none mt-0.5 ${eventColor(e.type)}`}>
+                      {eventIcon(e.type)}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      {e.type === 'buy' && e.symbol && (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-green-400 font-bold text-sm">${e.symbol}</span>
+                          {e.amountUsd && <span className="text-white text-xs">${e.amountUsd.toFixed(2)}</span>}
+                          {e.entryPrice && <span className="text-gray-500 text-xs">@ {fmtPrice(e.entryPrice)}</span>}
+                          {e.mcap && <span className="text-gray-600 text-xs">{fmtK(e.mcap)} mc</span>}
+                          {e.walletSource && <span className="text-orange-400/70 text-xs">👁 {e.walletSource}</span>}
+                          {e.strategy && (
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                              STRATEGIES.find(s => s.id === e.strategy)?.color || 'text-gray-500'
+                            } bg-white/5`}>
+                              {STRATEGIES.find(s => s.id === e.strategy)?.label || e.strategy}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      {e.type === 'sell' && e.symbol && (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-red-400 font-bold text-sm">${e.symbol}</span>
+                          {e.exitPrice && <span className="text-gray-400 text-xs">exit {fmtPrice(e.exitPrice)}</span>}
+                          {e.reason && (
+                            <span className={`text-xs ${
+                              e.reason === 'take_profit' ? 'text-green-400' :
+                              e.reason === 'stop_loss' ? 'text-red-400' : 'text-gray-500'
+                            }`}>
+                              {e.reason === 'take_profit' ? '✓TP' : e.reason === 'stop_loss' ? '✗SL' : e.reason}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      {(e.type === 'info' || e.type === 'warn' || e.type === 'error') && e.message && (
+                        <p className={`text-xs leading-relaxed ${eventColor(e.type)}`}>
+                          {e.message}
+                        </p>
+                      )}
+                    </div>
+                    <span className="text-gray-700 text-[10px] tabular-nums shrink-0">
+                      {new Date(e.ts).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    </span>
+                  </div>
+                </div>
+              ))
             )}
           </div>
         </div>
 
-        {/* RIGHT — Controls + Open positions */}
-        <div className="w-72 flex flex-col overflow-hidden shrink-0">
-
-          {/* Controls */}
-          <div className="p-3 border-b border-border space-y-3 shrink-0">
-            <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Controls</div>
-
-            {/* Position size */}
-            <div>
-              <div className="text-[10px] text-muted-foreground mb-1.5 flex items-center justify-between">
-                <span>Position size</span>
-                <span className="font-mono font-bold text-foreground">${posSize}</span>
-              </div>
-              <div className="grid grid-cols-4 gap-1">
-                {[5, 10, 20, 50].map(v => (
-                  <button
-                    key={v}
-                    onClick={() => updateSize(v)}
-                    className={`text-[11px] py-1.5 rounded font-mono font-medium transition-colors ${
-                      posSize === v
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground'
-                    }`}
-                  >
-                    ${v}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Rules display */}
-            <div className="rounded-lg bg-muted/20 border border-border p-2 space-y-1 text-[10px] font-mono">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Take profit</span>
-                <span className="text-green-400">+{((status?.takeProfit ?? 0.5) * 100).toFixed(0)}%</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Stop loss</span>
-                <span className="text-red-400">-{((status?.stopLoss ?? 0.2) * 100).toFixed(0)}%</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Max hold</span>
-                <span className="text-blue-400">{status?.maxHoldHours ?? 3}h</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Max positions</span>
-                <span className="text-muted-foreground">{status?.maxPositions ?? 3}</span>
-              </div>
-            </div>
-
-            {/* Start / Stop */}
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={startSniper}
-                disabled={isRunning || loading}
-                className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-bold transition-all ${
-                  isRunning
-                    ? 'bg-green-900/30 text-green-600 cursor-not-allowed border border-green-900/50'
-                    : 'bg-green-600 hover:bg-green-500 active:bg-green-700 text-white shadow-lg shadow-green-900/20'
-                }`}
-              >
-                <Play className="w-3.5 h-3.5" />
-                {isRunning ? 'Running' : 'Start'}
-              </button>
-              <button
-                onClick={stopSniper}
-                disabled={!isRunning || loading}
-                className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-bold transition-all ${
-                  !isRunning
-                    ? 'bg-muted/30 text-muted-foreground/50 cursor-not-allowed border border-border'
-                    : 'bg-red-600 hover:bg-red-500 active:bg-red-700 text-white shadow-lg shadow-red-900/20'
-                }`}
-              >
-                <Square className="w-3.5 h-3.5" />
-                Stop
-              </button>
-            </div>
-
-            {/* Sniper info */}
-            <div className="text-[9px] text-muted-foreground/50 space-y-0.5">
-              <div>Scans Birdeye for tokens &lt;2h old, mcap &lt;$500k</div>
-              <div>Volume acceleration filter + liquidity check</div>
-              <div>Executes via Jupiter — no API key required</div>
-            </div>
+        {/* Right — Strategy cards */}
+        <div className="flex-1 overflow-y-auto p-4">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 max-w-4xl">
+            {STRATEGIES.map(meta => (
+              <StrategyCard
+                key={meta.id}
+                meta={meta}
+                status={strategies ? strategies[meta.id as keyof AllStrategies] : null}
+                onStart={(size) => startStrategy(meta.id, size)}
+                onStop={() => stopStrategy(meta.id)}
+                onSize={(size) => sizeStrategy(meta.id, size)}
+                loading={!!loading[meta.id]}
+              />
+            ))}
           </div>
 
-          {/* Open positions */}
-          <div className="flex-1 overflow-y-auto">
-            <div className="px-3 py-2 border-b border-border shrink-0">
-              <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-                Open Positions ({openPos.length})
-              </div>
-            </div>
-
-            <div className="p-3 space-y-2">
-              {openPos.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground/40 text-xs">
-                  <Shield className="w-6 h-6 mx-auto mb-2" />
-                  No open positions
-                </div>
-              ) : (
-                openPos.map(pos => (
-                  <PositionCard
-                    key={pos.id}
-                    pos={pos}
-                    livePrice={livePrices[pos.tokenAddress]}
-                  />
-                ))
-              )}
-            </div>
-
-            {/* Session stats */}
-            {(stats.wins + stats.losses) > 0 && (
-              <div className="p-3 border-t border-border">
-                <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-2">Session</div>
-                <div className="grid grid-cols-3 gap-1 text-[10px] text-center font-mono">
-                  <div className="rounded bg-muted/20 p-1.5">
-                    <div className="text-green-400 font-bold">{stats.wins}</div>
-                    <div className="text-muted-foreground text-[9px]">wins</div>
-                  </div>
-                  <div className="rounded bg-muted/20 p-1.5">
-                    <div className="text-red-400 font-bold">{stats.losses}</div>
-                    <div className="text-muted-foreground text-[9px]">losses</div>
-                  </div>
-                  <div className="rounded bg-muted/20 p-1.5">
-                    <div className={`font-bold ${pnlPositive ? 'text-green-400' : 'text-red-400'}`}>
-                      {pnlPositive ? '+' : ''}{fmtUsd(stats.totalPnl)}
-                    </div>
-                    <div className="text-muted-foreground text-[9px]">P&L</div>
-                  </div>
+          {/* All positions summary */}
+          {totalOpen > 0 && strategies && (
+            <div className="mt-4 max-w-4xl">
+              <div className="border border-gray-800 rounded-xl p-4">
+                <h3 className="text-xs text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                  <TrendingDown className="w-3 h-3" /> All Open Positions ({totalOpen})
+                </h3>
+                <div className="space-y-1">
+                  {Object.entries(strategies).flatMap(([key, s]) =>
+                    (s.openPositions || []).map(pos => {
+                      const meta = STRATEGIES.find(m => m.id === key)
+                      return (
+                        <div key={pos.id} className="flex items-center gap-3 text-xs bg-black/30 rounded px-3 py-2">
+                          <span className={`font-bold w-24 truncate ${meta?.color || 'text-gray-400'}`}>{pos.tokenName}</span>
+                          <span className="text-gray-400">${pos.amount.toFixed(0)}</span>
+                          <span className="text-gray-600">@ {fmtPrice(pos.entryPrice)}</span>
+                          <span className="text-gray-600">{ageStr(pos.openedAt)} ago</span>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${meta?.color || 'text-gray-500'} bg-white/5 ml-auto`}>
+                            {meta?.label || key}
+                          </span>
+                        </div>
+                      )
+                    })
+                  )}
                 </div>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
