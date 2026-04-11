@@ -1,712 +1,534 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
-import { Activity, Play, Square, RefreshCw, DollarSign, TrendingUp, TrendingDown, AlertTriangle, Plus, Minus } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { Activity, Play, Square, Zap, TrendingUp, TrendingDown, Circle, DollarSign, Target, Shield } from 'lucide-react'
 
-const RAILWAY = 'https://gsb-swarm-production.up.railway.app'
+// ── Config ────────────────────────────────────────────────────────────────
+const BACKEND = 'https://gsb-swarm-production.up.railway.app'
+const EXECUTOR = 'https://gsb-yield-swarm-production.up.railway.app'  // gsb-yield-swarm Railway URL
 
-type TraderStatus = {
-  running: boolean
-  startedAt: string | null
-  budget: number
-  cashRemaining: number
-  totalPnl: number
-  openPositions: number
-  closedPositions: number
-  targets: Array<{ address: string; win_rate: number; source: string }>
-  recentLog: string[]
-}
-
-type Position = {
-  posId: string
-  tokenName: string
-  tokenAddress: string
-  buyPrice: number
-  amountUsd: number
-  buyTimestamp: number
-  status: string
+// ── Types ─────────────────────────────────────────────────────────────────
+type FeedEvent = {
+  type: 'buy' | 'sell' | 'price_update' | 'info' | 'warn' | 'error' | 'debug'
+  message?: string
+  symbol?: string
+  address?: string
+  entryPrice?: number
+  currentPrice?: number
   exitPrice?: number
   pnlPct?: number
   pnlUsd?: number
-  exitReason?: string
-  source?: string
+  amountUsd?: number
+  mcap?: number
+  volume?: number
+  reason?: string
+  positionId?: string
+  txHash?: string
+  ts: string
 }
 
-type TradeSignal = {
-  signal: string | null
-  token?: string
-  source?: string
-  receivedAt?: string
-  briefSnippet?: string
-  message?: string
+type SniperStatus = {
+  running: boolean
+  startedAt: string | null
+  positionSize: number
+  openCount: number
+  maxPositions: number
+  takeProfit: number
+  stopLoss: number
+  maxHoldHours: number
+  recentLog: FeedEvent[]
+  openPositions: OpenPosition[]
 }
 
-function agentBadgeClass(source?: string): string {
-  if (!source) return 'bg-muted/40 border-border text-muted-foreground'
-  const s = source.toLowerCase()
-  if (s.includes('ceo') || s.includes('alpha')) return 'bg-yellow-950/40 border-yellow-500/40 text-yellow-300'
-  if (s.includes('oracle')) return 'bg-purple-950/40 border-purple-500/40 text-purple-300'
-  if (s.includes('hunt')) return 'bg-blue-950/40 border-blue-500/40 text-blue-300'
-  return 'bg-muted/40 border-border text-muted-foreground'
+type OpenPosition = {
+  id: string
+  tokenName: string
+  tokenAddress: string
+  entryPrice: number
+  amount: number
+  openedAt: string
+  type: string
 }
 
-function agentLabel(source?: string): string {
-  if (!source) return 'Unknown'
-  const s = source.toLowerCase()
-  if (s.includes('ceo') || s.includes('alpha')) return 'CEO Alpha'
-  if (s.includes('oracle')) return 'Oracle'
-  if (s.includes('hunt')) return 'Hunt Mode'
-  return source
+// ── Helpers ───────────────────────────────────────────────────────────────
+const fmt = (n: number, d = 2) => n.toFixed(d)
+const fmtPrice = (p: number) => p < 0.0001 ? p.toExponential(3) : p < 1 ? p.toFixed(6) : p.toFixed(4)
+const fmtUsd = (n: number) => `$${Math.abs(n).toFixed(2)}`
+const fmtK = (n: number) => n >= 1_000_000 ? `$${(n/1_000_000).toFixed(1)}M` : `$${(n/1000).toFixed(0)}k`
+const age = (ts: string) => {
+  const ms = Date.now() - new Date(ts).getTime()
+  if (ms < 60000) return `${Math.floor(ms/1000)}s`
+  if (ms < 3600000) return `${Math.floor(ms/60000)}m`
+  return `${(ms/3600000).toFixed(1)}h`
 }
 
-export default function CopyTraderPage() {
-  const [status, setStatus] = useState<TraderStatus | null>(null)
-  const [tradeSignal, setTradeSignal] = useState<TradeSignal | null>(null)
-  const [positions, setPositions] = useState<Record<string, Position>>({})
-  const [budget, setBudget] = useState(10)
-  const [isLoading, setIsLoading] = useState(false)
-  const [lastAction, setLastAction] = useState<string | null>(null)
-  const [authToken, setAuthToken] = useState('')
-  const [logExpanded, setLogExpanded] = useState(false)
-  const pollRef = useRef<NodeJS.Timeout | null>(null)
-  const signalPollRef = useRef<NodeJS.Timeout | null>(null)
-  // Ref so callbacks always read the latest token without stale closure issues
-  const tokenRef = useRef<string>('')
+// ── Trade ticker item ─────────────────────────────────────────────────────
+function TickerRow({ ev }: { ev: FeedEvent }) {
+  const isBuy  = ev.type === 'buy'
+  const isSell = ev.type === 'sell'
+  const isUp   = (ev.pnlPct ?? 0) >= 0
 
-  // Auth — seed from localStorage immediately, then refresh from Railway
-  useEffect(() => {
-    const cached = typeof window !== 'undefined' ? localStorage.getItem('gsb_op_token') : null
-    if (cached) {
-      setAuthToken(cached)
-      tokenRef.current = cached
-    }
-
-    const getToken = async () => {
-      try {
-        const res = await fetch(`${RAILWAY}/api/auth`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password: 'Erock1976' })
-        })
-        const data = await res.json()
-        if (data.token) {
-          setAuthToken(data.token)
-          tokenRef.current = data.token
-          localStorage.setItem('gsb_op_token', data.token)
-        }
-      } catch {}
-    }
-    getToken()
-    const tokenRefresh = setInterval(getToken, 20 * 60 * 1000)
-    return () => clearInterval(tokenRefresh)
-  }, [])
-
-  // Helper: always uses the latest token from ref
-  const getAuth = () => tokenRef.current || authToken
-
-  const fetchStatus = async () => {
-    const tok = getAuth()
-    if (!tok) return
-    try {
-      const res = await fetch(`${RAILWAY}/api/copy-trader/status`, {
-        headers: { 'Authorization': `Bearer ${tok}` }
-      })
-      const data = await res.json()
-      if (!data.error) setStatus(data)
-    } catch {}
+  if (ev.type === 'price_update') {
+    return (
+      <div className="flex items-center gap-2 px-3 py-1 text-[11px] font-mono border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+        <Circle className="w-2 h-2 text-blue-500 shrink-0" />
+        <span className="text-blue-300 font-medium w-16 shrink-0">{ev.symbol}</span>
+        <span className="text-muted-foreground">{fmtPrice(ev.currentPrice ?? 0)}</span>
+        <span className={`ml-auto font-bold ${isUp ? 'text-green-400' : 'text-red-400'}`}>
+          {isUp ? '+' : ''}{fmt((ev.pnlPct ?? 0) * 100, 1)}%
+        </span>
+        <span className="text-muted-foreground text-[10px] w-8 text-right">{age(ev.ts)}</span>
+      </div>
+    )
   }
 
-  const fetchPositions = async () => {
-    const tok = getAuth()
-    if (!tok) return
-    try {
-      const res = await fetch(`${RAILWAY}/api/copy-trader/positions`, {
-        headers: { 'Authorization': `Bearer ${tok}` }
-      })
-      const data = await res.json()
-      if (data.positions) setPositions(data.positions)
-    } catch {}
+  if (isBuy) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-mono bg-green-950/20 border-b border-green-500/10 hover:bg-green-950/30 transition-colors">
+        <TrendingUp className="w-3 h-3 text-green-400 shrink-0" />
+        <span className="text-green-300 font-bold w-16 shrink-0">{ev.symbol}</span>
+        <span className="text-green-200">{fmtUsd(ev.amountUsd ?? 0)}</span>
+        <span className="text-muted-foreground">@ {fmtPrice(ev.entryPrice ?? 0)}</span>
+        {ev.mcap && <span className="text-muted-foreground ml-1">mc {fmtK(ev.mcap)}</span>}
+        <span className="text-green-400 ml-auto font-bold text-[10px]">BUY</span>
+        <span className="text-muted-foreground text-[10px] w-8 text-right">{age(ev.ts)}</span>
+      </div>
+    )
   }
 
-  const fetchTradeSignal = async () => {
-    const tok = getAuth()
-    if (!tok) return
-    try {
-      const res = await fetch(`${RAILWAY}/api/trade-signal`, {
-        headers: { 'Authorization': `Bearer ${tok}` }
-      })
-      const data = await res.json()
-      setTradeSignal(data)
-    } catch {}
+  if (isSell) {
+    const good = (ev.pnlPct ?? 0) >= 0
+    return (
+      <div className={`flex items-center gap-2 px-3 py-1.5 text-[11px] font-mono border-b transition-colors ${
+        good ? 'bg-emerald-950/20 border-emerald-500/10 hover:bg-emerald-950/30'
+              : 'bg-red-950/20 border-red-500/10 hover:bg-red-950/30'
+      }`}>
+        <TrendingDown className={`w-3 h-3 shrink-0 ${good ? 'text-emerald-400' : 'text-red-400'}`} />
+        <span className={`font-bold w-16 shrink-0 ${good ? 'text-emerald-300' : 'text-red-300'}`}>{ev.symbol}</span>
+        <span className={good ? 'text-emerald-200' : 'text-red-200'}>
+          {good ? '+' : '-'}{fmtUsd(Math.abs(ev.pnlUsd ?? 0))}
+        </span>
+        <span className={`font-bold ${good ? 'text-emerald-400' : 'text-red-400'}`}>
+          {good ? '+' : ''}{fmt((ev.pnlPct ?? 0) * 100, 1)}%
+        </span>
+        <span className="text-muted-foreground text-[10px] uppercase">{ev.reason?.replace('_',' ')}</span>
+        <span className={`ml-auto font-bold text-[10px] ${good ? 'text-emerald-400' : 'text-red-400'}`}>SELL</span>
+        <span className="text-muted-foreground text-[10px] w-8 text-right">{age(ev.ts)}</span>
+      </div>
+    )
   }
 
-  // Initial load — runs once on mount (token will be in ref within ms)
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchStatus()
-      fetchTradeSignal()
-      fetchPositions()
-    }, 300) // small delay to let auth ref populate
-    return () => clearTimeout(timer)
-  }, [])
+  // info/warn/error log line
+  const color = ev.type === 'error' ? 'text-red-400' : ev.type === 'warn' ? 'text-yellow-400' : 'text-muted-foreground'
+  return (
+    <div className={`flex items-center gap-2 px-3 py-0.5 text-[10px] font-mono border-b border-white/5 ${color}`}>
+      <span className="opacity-50 shrink-0">{age(ev.ts)}</span>
+      <span className="truncate">{ev.message}</span>
+    </div>
+  )
+}
 
-  // Re-fetch whenever token state changes (first real token)
-  useEffect(() => {
-    if (authToken) {
-      fetchStatus()
-      fetchTradeSignal()
-      fetchPositions()
-    }
-  }, [authToken])
-
-  // Poll status every 5s when running
-  useEffect(() => {
-    if (pollRef.current) clearInterval(pollRef.current)
-    if (status?.running) {
-      pollRef.current = setInterval(() => {
-        fetchStatus()
-        fetchPositions()
-      }, 5000)
-    }
-    return () => { if (pollRef.current) clearInterval(pollRef.current) }
-  }, [status?.running])
-
-  // Poll trade signal every 30s
-  useEffect(() => {
-    signalPollRef.current = setInterval(fetchTradeSignal, 30000)
-    return () => { if (signalPollRef.current) clearInterval(signalPollRef.current) }
-  }, [])
-
-  const startTrader = async () => {
-    const tok = getAuth()
-    if (!tok || isLoading) return
-    setIsLoading(true)
-    setLastAction('starting')
-    try {
-      const res = await fetch(`${RAILWAY}/api/copy-trader/start`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${tok}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ budget })
-      })
-      const data = await res.json()
-      if (data.ok) {
-        setLastAction('started')
-        await fetchStatus()
-        setTimeout(() => setLastAction(null), 4000)
-      } else {
-        setLastAction('error: ' + (data.error || 'failed'))
-        setTimeout(() => setLastAction(null), 4000)
-      }
-    } catch {
-      setLastAction('error: network')
-      setTimeout(() => setLastAction(null), 4000)
-    }
-    setIsLoading(false)
-  }
-
-  const rehuntWallets = async () => {
-    const tok = getAuth()
-    if (!tok || isLoading) return
-    setIsLoading(true)
-    setLastAction('hunting')
-    try {
-      const res = await fetch(`${RAILWAY}/api/copy-trader/rehunt`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${tok}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ budget })
-      })
-      const data = await res.json()
-      if (data.ok) {
-        setLastAction('hunting — scanning 2000 blocks...')
-        setTimeout(() => { fetchStatus(); setLastAction(null); }, 4000)
-      } else {
-        setLastAction('error: ' + (data.error || 'failed'))
-        setTimeout(() => setLastAction(null), 4000)
-      }
-    } catch {
-      setLastAction('error: network')
-      setTimeout(() => setLastAction(null), 4000)
-    }
-    setIsLoading(false)
-  }
-
-  const stopTrader = async () => {
-    const tok = getAuth()
-    if (!tok || isLoading) return
-    setIsLoading(true)
-    setLastAction('stopping')
-    try {
-      await fetch(`${RAILWAY}/api/copy-trader/stop`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${tok}` }
-      })
-      setLastAction('stopped')
-      await fetchStatus()
-      setTimeout(() => setLastAction(null), 3000)
-    } catch {
-      setLastAction('error: network')
-      setTimeout(() => setLastAction(null), 3000)
-    }
-    setIsLoading(false)
-  }
-
-  const buyToken = async (tokenAddress: string, tokenName: string, usdAmount: number = 2.5) => {
-    const tok = getAuth()
-    if (!tok || isLoading) return
-    setIsLoading(true)
-    setLastAction(`buying ${tokenName}...`)
-    try {
-      const res = await fetch(`${RAILWAY}/api/copy-trader/buy-signal`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${tok}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tokenAddress, tokenName, usdAmount })
-      })
-      const data = await res.json()
-      if (data.ok) {
-        setLastAction(`✅ Buy order sent for ${tokenName}`)
-        setTimeout(() => { fetchStatus(); setLastAction(null); }, 4000)
-      } else {
-        setLastAction(`error: ${data.error || 'failed'}`)
-        setTimeout(() => setLastAction(null), 5000)
-      }
-    } catch {
-      setLastAction('error: network')
-      setTimeout(() => setLastAction(null), 4000)
-    }
-    setIsLoading(false)
-  }
-
-  const approveUsdc = async () => {
-    const tok = getAuth()
-    if (!tok || isLoading) return
-    setIsLoading(true)
-    setLastAction('approving USDC...')
-    try {
-      const res = await fetch(`${RAILWAY}/api/copy-trader/approve`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${tok}` }
-      })
-      const data = await res.json()
-      setLastAction(data.ok ? '✅ USDC approved — swaps now instant' : 'error: ' + (data.error || 'failed'))
-      setTimeout(() => setLastAction(null), 6000)
-    } catch {
-      setLastAction('error: network')
-      setTimeout(() => setLastAction(null), 4000)
-    }
-    setIsLoading(false)
-  }
-
-  // Derived stats for portfolio summary
-  const posArr = Object.values(positions)
-  const closedPositions = posArr.filter(p => p.status !== 'open')
-  const openPositions = posArr.filter(p => p.status === 'open')
-  const profitableClosedCount = closedPositions.filter(p => (p.pnlUsd ?? 0) > 0).length
-  const winRate = closedPositions.length > 0
-    ? (profitableClosedCount / closedPositions.length) * 100
+// ── Position card ─────────────────────────────────────────────────────────
+function PositionCard({ pos, livePrice }: { pos: OpenPosition; livePrice?: number }) {
+  const pnlPct = livePrice && pos.entryPrice
+    ? (livePrice - pos.entryPrice) / pos.entryPrice
     : null
-
-  const totalValue = status
-    ? status.cashRemaining + openPositions.reduce((sum, p) => sum + p.amountUsd, 0)
-    : null
-  const totalReturnPct = status && status.budget > 0
-    ? (status.totalPnl / status.budget) * 100
-    : null
-
-  const pnlColor = (status?.totalPnl ?? 0) >= 0 ? 'text-green-400' : 'text-red-400'
-  const hasSignal = tradeSignal?.signal && tradeSignal.signal !== 'NONE' && tradeSignal.signal !== 'none'
+  const pnlUsd = pnlPct !== null ? pos.amount * pnlPct : null
+  const good = (pnlPct ?? 0) >= 0
+  const ageMs = Date.now() - new Date(pos.openedAt).getTime()
+  const pctOfHold = Math.min(100, (ageMs / (3 * 3600000)) * 100)
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between px-6 py-3 border-b border-border">
-        <div className="flex items-center gap-3">
-          <Activity className="w-5 h-5 text-primary" />
-          <span className="font-bold text-lg">Copy Trader</span>
-          <Badge variant="outline" className={status?.running ? 'text-green-400 border-green-500/50' : ''}>
-            {status?.running ? '● RUNNING' : '○ Stopped'}
-          </Badge>
+    <div className={`rounded-lg border p-3 space-y-2 ${good ? 'border-green-500/20 bg-green-950/10' : 'border-red-500/20 bg-red-950/10'}`}>
+      <div className="flex items-start justify-between">
+        <div>
+          <div className="font-bold text-sm">{pos.tokenName}</div>
+          <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
+            {pos.tokenAddress.slice(0,6)}…{pos.tokenAddress.slice(-4)}
+          </div>
         </div>
-        <Button size="sm" variant="ghost" onClick={() => { fetchStatus(); fetchTradeSignal(); fetchPositions(); }}>
-          <RefreshCw className="w-4 h-4 mr-1" /> Refresh
-        </Button>
+        <div className="text-right">
+          {pnlPct !== null ? (
+            <>
+              <div className={`font-bold text-sm ${good ? 'text-green-400' : 'text-red-400'}`}>
+                {good ? '+' : ''}{fmt(pnlPct * 100, 1)}%
+              </div>
+              <div className={`text-[11px] ${good ? 'text-green-300' : 'text-red-300'}`}>
+                {good ? '+' : '-'}{fmtUsd(Math.abs(pnlUsd ?? 0))}
+              </div>
+            </>
+          ) : (
+            <div className="text-blue-400 font-bold text-sm">● OPEN</div>
+          )}
+        </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 max-w-4xl mx-auto w-full">
+      <div className="grid grid-cols-3 gap-1 text-[10px] text-muted-foreground">
+        <div>
+          <div className="text-[9px] uppercase mb-0.5">Entry</div>
+          <div className="font-mono">{fmtPrice(pos.entryPrice)}</div>
+        </div>
+        <div>
+          <div className="text-[9px] uppercase mb-0.5">Size</div>
+          <div className="font-mono">{fmtUsd(pos.amount)}</div>
+        </div>
+        <div>
+          <div className="text-[9px] uppercase mb-0.5">Age</div>
+          <div className="font-mono">{age(pos.openedAt)}</div>
+        </div>
+      </div>
 
-        {/* Portfolio Summary */}
-        {status && (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Card>
-              <CardContent className="p-4">
-                <div className="text-xs text-muted-foreground mb-1">Total Value</div>
-                <div className="font-mono font-bold text-lg flex items-center gap-1">
-                  <DollarSign className="w-4 h-4 text-muted-foreground" />
-                  {totalValue !== null ? totalValue.toFixed(2) : status.cashRemaining.toFixed(2)}
-                </div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  ${status.cashRemaining.toFixed(2)} cash + {openPositions.length} positions
-                </div>
-              </CardContent>
-            </Card>
+      {/* Time bar — 3h max hold */}
+      <div>
+        <div className="flex justify-between text-[9px] text-muted-foreground mb-0.5">
+          <span>Hold time</span>
+          <span>3h max</span>
+        </div>
+        <div className="h-1 bg-white/10 rounded-full overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all ${pctOfHold > 80 ? 'bg-red-500' : pctOfHold > 50 ? 'bg-yellow-500' : 'bg-blue-500'}`}
+            style={{ width: `${pctOfHold}%` }}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
 
-            <Card>
-              <CardContent className="p-4">
-                <div className="text-xs text-muted-foreground mb-1">Total P&L</div>
-                <div className={`font-mono font-bold text-lg flex items-center gap-1 ${pnlColor}`}>
-                  {status.totalPnl >= 0
-                    ? <TrendingUp className="w-4 h-4" />
-                    : <TrendingDown className="w-4 h-4" />}
-                  {status.totalPnl >= 0 ? '+' : ''}${status.totalPnl.toFixed(2)}
-                </div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  {status.openPositions} open · {status.closedPositions} closed
-                </div>
-              </CardContent>
-            </Card>
+// ── Main Page ─────────────────────────────────────────────────────────────
+export default function CopyTraderPage() {
+  const [status, setStatus] = useState<SniperStatus | null>(null)
+  const [feed, setFeed]     = useState<FeedEvent[]>([])
+  const [posSize, setPosSize] = useState(10)
+  const [loading, setLoading] = useState(false)
+  const [livePrices, setLivePrices] = useState<Record<string, number>>({})
+  const [stats, setStats]   = useState({ totalPnl: 0, wins: 0, losses: 0, buys: 0 })
+  const feedRef = useRef<HTMLDivElement>(null)
+  const esRef   = useRef<EventSource | null>(null)
+  const statsRef = useRef(stats)
+  statsRef.current = stats
 
-            <Card>
-              <CardContent className="p-4">
-                <div className="text-xs text-muted-foreground mb-1">Total Return</div>
-                <div className={`font-mono font-bold text-lg ${totalReturnPct !== null && totalReturnPct >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                  {totalReturnPct !== null
-                    ? `${totalReturnPct >= 0 ? '+' : ''}${totalReturnPct.toFixed(1)}%`
-                    : '—'}
-                </div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  on ${status.budget} budget
-                </div>
-                <div className="mt-2 h-1.5 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-primary rounded-full transition-all"
-                    style={{ width: `${Math.max(0, Math.min(100, (status.cashRemaining / Math.max(status.budget, 1)) * 100))}%` }}
-                  />
-                </div>
-              </CardContent>
-            </Card>
+  // ── Fetch status ──────────────────────────────────────────────────────
+  const fetchStatus = useCallback(async () => {
+    try {
+      const r = await fetch(`${EXECUTOR}/api/sniper/status`)
+      if (r.ok) {
+        const d = await r.json()
+        setStatus(d)
+        if (d.positionSize) setPosSize(d.positionSize)
+      }
+    } catch {}
+  }, [])
 
-            <Card>
-              <CardContent className="p-4">
-                <div className="text-xs text-muted-foreground mb-1">Win Rate</div>
-                <div className={`font-mono font-bold text-lg ${winRate !== null && winRate >= 50 ? 'text-green-400' : winRate !== null ? 'text-red-400' : 'text-muted-foreground'}`}>
-                  {winRate !== null ? `${winRate.toFixed(0)}%` : '—'}
-                </div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  {profitableClosedCount}/{closedPositions.length} closed profitable
-                </div>
-              </CardContent>
-            </Card>
+  useEffect(() => {
+    fetchStatus()
+    const t = setInterval(fetchStatus, 8000)
+    return () => clearInterval(t)
+  }, [fetchStatus])
+
+  // ── SSE feed ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    const connect = () => {
+      if (esRef.current) esRef.current.close()
+      const es = new EventSource(`${EXECUTOR}/api/sniper/feed`)
+      esRef.current = es
+
+      es.onmessage = (e) => {
+        try {
+          const ev: FeedEvent = JSON.parse(e.data)
+
+          setFeed(prev => {
+            const next = [ev, ...prev].slice(0, 200)
+            return next
+          })
+
+          // Live price tracking
+          if (ev.type === 'price_update' && ev.address && ev.currentPrice) {
+            setLivePrices(p => ({ ...p, [ev.address!]: ev.currentPrice! }))
+          }
+
+          // Running P&L stats
+          if (ev.type === 'sell' && ev.pnlUsd !== undefined) {
+            setStats(s => ({
+              totalPnl: s.totalPnl + (ev.pnlUsd ?? 0),
+              wins:     s.wins + ((ev.pnlUsd ?? 0) >= 0 ? 1 : 0),
+              losses:   s.losses + ((ev.pnlUsd ?? 0) < 0 ? 1 : 0),
+              buys:     s.buys,
+            }))
+          }
+          if (ev.type === 'buy') {
+            setStats(s => ({ ...s, buys: s.buys + 1 }))
+          }
+        } catch {}
+      }
+
+      es.onerror = () => {
+        es.close()
+        setTimeout(connect, 5000)
+      }
+    }
+
+    connect()
+    return () => { esRef.current?.close() }
+  }, [])
+
+  // Auto-scroll feed to top (newest is top)
+  useEffect(() => {
+    if (feedRef.current) feedRef.current.scrollTop = 0
+  }, [feed.length])
+
+  // ── Controls ──────────────────────────────────────────────────────────
+  const startSniper = async () => {
+    setLoading(true)
+    try {
+      const r = await fetch(`${EXECUTOR}/api/sniper/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ positionSize: posSize }),
+      })
+      await r.json()
+      setTimeout(fetchStatus, 1000)
+    } catch {}
+    setLoading(false)
+  }
+
+  const stopSniper = async () => {
+    setLoading(true)
+    try {
+      await fetch(`${EXECUTOR}/api/sniper/stop`, { method: 'POST' })
+      setTimeout(fetchStatus, 1000)
+    } catch {}
+    setLoading(false)
+  }
+
+  const updateSize = async (size: number) => {
+    setPosSize(size)
+    if (status?.running) {
+      try {
+        await fetch(`${EXECUTOR}/api/sniper/size`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ positionSize: size }),
+        })
+      } catch {}
+    }
+  }
+
+  const isRunning   = status?.running ?? false
+  const openPos     = status?.openPositions ?? []
+  const winRate     = (stats.wins + stats.losses) > 0
+    ? (stats.wins / (stats.wins + stats.losses)) * 100 : null
+  const pnlPositive = stats.totalPnl >= 0
+
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden bg-background h-full">
+
+      {/* ── Header ─────────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-border shrink-0">
+        <div className="flex items-center gap-2.5">
+          <Zap className="w-4 h-4 text-yellow-400" />
+          <span className="font-bold text-sm">Solana Sniper</span>
+          <div className={`flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full border ${
+            isRunning
+              ? 'bg-green-950/40 border-green-500/40 text-green-400'
+              : 'bg-muted/40 border-border text-muted-foreground'
+          }`}>
+            <div className={`w-1.5 h-1.5 rounded-full ${isRunning ? 'bg-green-400 animate-pulse' : 'bg-muted-foreground'}`} />
+            {isRunning ? 'LIVE' : 'STOPPED'}
           </div>
-        )}
+          {isRunning && openPos.length > 0 && (
+            <span className="text-[11px] text-blue-400">{openPos.length}/{status?.maxPositions} positions</span>
+          )}
+        </div>
 
-        {/* CEO Alpha Signal — live */}
-        <Card className="border border-yellow-500/40 bg-yellow-950/10">
-          <CardHeader className="pb-2 pt-4 px-4">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <span>👑</span> CEO Alpha Signal
-              <span className="ml-auto text-[10px] text-muted-foreground">Live from GSB CEO ACP Agent</span>
-              <button
-                onClick={fetchTradeSignal}
-                className="text-[10px] text-muted-foreground hover:text-foreground ml-1"
-                title="Refresh signal"
-              >
-                ↻
-              </button>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-4 space-y-3">
-            {hasSignal ? (
-              <div className="rounded-lg bg-yellow-950/20 border border-yellow-500/20 p-3">
-                <div className="flex justify-between items-start mb-2">
-                  <div>
-                    <div className="font-bold text-sm text-yellow-300">
-                      {tradeSignal!.signal}
-                    </div>
-                    {tradeSignal!.token && (
-                      <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
-                        {tradeSignal!.token.length > 20
-                          ? `${tradeSignal!.token.slice(0, 8)}...${tradeSignal!.token.slice(-6)}`
-                          : tradeSignal!.token}
-                      </div>
-                    )}
-                  </div>
-                  <div className="text-right">
-                    {tradeSignal!.source && (
-                      <div className="text-[10px] text-yellow-400 font-medium">{tradeSignal!.source}</div>
-                    )}
-                    {tradeSignal!.receivedAt && (
-                      <div className="text-[10px] text-muted-foreground">
-                        {new Date(tradeSignal!.receivedAt).toLocaleTimeString()}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                {tradeSignal!.briefSnippet && (
-                  <p className="text-[10px] text-muted-foreground mb-3">{tradeSignal!.briefSnippet}</p>
-                )}
-                {tradeSignal!.token && (
-                  <Button
-                    size="sm"
-                    className="w-full bg-yellow-600 hover:bg-yellow-500 text-black font-bold text-xs h-8"
-                    disabled={isLoading}
-                    onClick={() => buyToken(tradeSignal!.token!, tradeSignal!.signal ?? 'TOKEN', budget * 0.25)}
-                  >
-                    ⚡ Buy Signal — ${(budget * 0.25).toFixed(2)} ({((budget * 0.25 / budget) * 100).toFixed(0)}% of budget)
-                  </Button>
-                )}
+        {/* Stats row */}
+        <div className="flex items-center gap-4 text-[11px] font-mono">
+          <div className="flex items-center gap-1">
+            <DollarSign className="w-3 h-3 text-muted-foreground" />
+            <span className={pnlPositive ? 'text-green-400' : 'text-red-400'}>
+              {pnlPositive ? '+' : ''}{fmtUsd(stats.totalPnl)}
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <Target className="w-3 h-3 text-muted-foreground" />
+            <span className="text-muted-foreground">
+              {winRate !== null ? `${fmt(winRate, 0)}% WR` : '—'}
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <Activity className="w-3 h-3 text-muted-foreground" />
+            <span className="text-muted-foreground">{stats.buys} buys</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Main layout: left=ticker, right=controls+positions ─────────── */}
+      <div className="flex-1 flex overflow-hidden min-h-0">
+
+        {/* LEFT — Live trade ticker (big screen) */}
+        <div className="flex-1 flex flex-col min-w-0 border-r border-border">
+          <div className="flex items-center justify-between px-3 py-1.5 border-b border-border shrink-0">
+            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Live Trade Feed</span>
+            <span className="text-[10px] text-muted-foreground">{feed.length} events</span>
+          </div>
+
+          {/* Ticker header */}
+          <div className="flex items-center gap-2 px-3 py-1 text-[9px] text-muted-foreground/60 uppercase tracking-wider border-b border-white/5 shrink-0">
+            <span className="w-3"></span>
+            <span className="w-16">Symbol</span>
+            <span>Amount / P&L</span>
+            <span className="ml-auto">Change</span>
+            <span className="w-8 text-right">Age</span>
+          </div>
+
+          {/* Scrolling feed */}
+          <div ref={feedRef} className="flex-1 overflow-y-auto font-mono">
+            {feed.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-muted-foreground/40 gap-2">
+                <Activity className="w-8 h-8" />
+                <span className="text-xs">{isRunning ? 'Scanning for opportunities...' : 'Start sniper to see live trades'}</span>
               </div>
             ) : (
-              <div className="rounded-lg bg-yellow-950/10 border border-yellow-500/10 p-3 text-center">
-                <div className="text-xs text-muted-foreground">Waiting for CEO agent signal...</div>
-                {tradeSignal?.message && (
-                  <div className="text-[10px] text-muted-foreground mt-1">{tradeSignal.message}</div>
-                )}
-              </div>
+              feed.map((ev, i) => <TickerRow key={i} ev={ev} />)
             )}
-            <p className="text-[10px] text-muted-foreground">
-              Signals from GSB CEO Agent via ACP. USDC→WETH→token multi-hop swap. High risk — new tokens. Auto-refreshes every 30s.
-            </p>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
-        {/* Open Positions */}
-        {posArr.length > 0 && (
-          <Card>
-            <CardHeader className="pb-2 pt-4 px-4">
-              <CardTitle className="text-sm flex items-center justify-between">
-                <span>Positions</span>
-                <button onClick={fetchPositions} className="text-[10px] text-muted-foreground hover:text-foreground">↻ Refresh</button>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-4 space-y-2">
-              {posArr.sort((a, b) => b.buyTimestamp - a.buyTimestamp).map(pos => {
-                const isOpen = pos.status === 'open'
-                const posPnlColor = (pos.pnlPct || 0) >= 0 ? 'text-green-400' : 'text-red-400'
-                const ageMs = Date.now() - pos.buyTimestamp
-                const ageStr = ageMs < 3_600_000
-                  ? `${Math.floor(ageMs / 60_000)}m ago`
-                  : `${(ageMs / 3_600_000).toFixed(1)}h ago`
-                const currentValueEst = isOpen && pos.buyPrice > 0
-                  ? pos.amountUsd // without live price feed, show invested amount
-                  : undefined
-                const unrealizedPct = isOpen && pos.pnlPct !== undefined
-                  ? pos.pnlPct * 100
-                  : null
+        {/* RIGHT — Controls + Open positions */}
+        <div className="w-72 flex flex-col overflow-hidden shrink-0">
 
-                return (
-                  <div key={pos.posId} className={`rounded-lg border p-3 ${
-                    isOpen ? 'border-blue-500/30 bg-blue-950/10' : 'border-border bg-muted/20'
-                  }`}>
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-bold text-sm">{pos.tokenName}</span>
-                          {pos.source && (
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${agentBadgeClass(pos.source)}`}>
-                              {agentLabel(pos.source)}
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-[10px] text-muted-foreground mt-0.5">
-                          Entry: ${pos.buyPrice?.toFixed(8)} · ${pos.amountUsd.toFixed(2)} invested · {ageStr}
-                        </div>
-                      </div>
-                      <div className="text-right ml-3 shrink-0">
-                        <div className={`text-sm font-bold ${
-                          isOpen ? 'text-blue-400' : posPnlColor
-                        }`}>
-                          {isOpen ? '● OPEN' : (
-                            `${(pos.pnlPct || 0) >= 0 ? '+' : ''}${((pos.pnlPct || 0) * 100).toFixed(1)}%`
-                          )}
-                        </div>
-                        {!isOpen && pos.exitReason && (
-                          <div className="text-[10px] text-muted-foreground">{pos.exitReason.split(' —')[0]}</div>
-                        )}
-                      </div>
-                    </div>
+          {/* Controls */}
+          <div className="p-3 border-b border-border space-y-3 shrink-0">
+            <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Controls</div>
 
-                    {isOpen && (
-                      <div className="mt-2 flex items-center justify-between text-[10px] text-muted-foreground">
-                        <span>Stop: ${(pos.buyPrice * 0.80).toFixed(8)}</span>
-                        <span>Target: ${(pos.buyPrice * 1.50).toFixed(8)}</span>
-                        <span>Exit monitor active</span>
-                      </div>
-                    )}
-
-                    {isOpen && unrealizedPct !== null && (
-                      <div className={`mt-1 text-[10px] font-medium ${unrealizedPct >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                        Unrealized: {unrealizedPct >= 0 ? '+' : ''}{unrealizedPct.toFixed(1)}%
-                        {currentValueEst !== undefined && ` · ~$${currentValueEst.toFixed(2)} current value`}
-                      </div>
-                    )}
-
-                    {!isOpen && pos.pnlUsd !== undefined && (
-                      <div className={`mt-1 text-[10px] font-medium ${posPnlColor}`}>
-                        P&L: {pos.pnlUsd >= 0 ? '+' : ''}${pos.pnlUsd.toFixed(2)}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Controls */}
-        <Card>
-          <CardHeader className="pb-2 pt-4 px-4">
-            <CardTitle className="text-sm">Manual Controls</CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-4 space-y-4">
-            {/* Budget */}
+            {/* Position size */}
             <div>
-              <div className="text-xs text-muted-foreground mb-2">Budget (USDC)</div>
-              <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" className="w-8 h-8 p-0"
-                  onClick={() => setBudget(b => Math.max(1, b - 5))}>
-                  <Minus className="w-3 h-3" />
-                </Button>
-                <div className="flex-1 text-center font-mono font-bold text-lg">${budget}</div>
-                <Button size="sm" variant="outline" className="w-8 h-8 p-0"
-                  onClick={() => setBudget(b => b + 5)}>
-                  <Plus className="w-3 h-3" />
-                </Button>
+              <div className="text-[10px] text-muted-foreground mb-1.5 flex items-center justify-between">
+                <span>Position size</span>
+                <span className="font-mono font-bold text-foreground">${posSize}</span>
               </div>
-              <div className="flex gap-2 mt-2">
-                {[5, 10, 25, 50].map(v => (
-                  <Button key={v} size="sm" variant={budget === v ? 'default' : 'outline'}
-                    className="flex-1 text-xs h-7"
-                    onClick={() => setBudget(v)}>
+              <div className="grid grid-cols-4 gap-1">
+                {[5, 10, 20, 50].map(v => (
+                  <button
+                    key={v}
+                    onClick={() => updateSize(v)}
+                    className={`text-[11px] py-1.5 rounded font-mono font-medium transition-colors ${
+                      posSize === v
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground'
+                    }`}
+                  >
                     ${v}
-                  </Button>
+                  </button>
                 ))}
               </div>
             </div>
 
-            <Separator />
-
-            {/* Action feedback toast */}
-            {lastAction && (
-              <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium animate-pulse ${
-                lastAction.startsWith('error')
-                  ? 'bg-red-950/40 border border-red-500/40 text-red-400'
-                  : lastAction === 'stopped'
-                  ? 'bg-muted border border-border text-muted-foreground'
-                  : 'bg-green-950/40 border border-green-500/40 text-green-400'
-              }`}>
-                {lastAction.startsWith('error') ? '✗' : lastAction === 'stopped' ? '■' : '●'}
-                &nbsp;{lastAction.charAt(0).toUpperCase() + lastAction.slice(1)}
+            {/* Rules display */}
+            <div className="rounded-lg bg-muted/20 border border-border p-2 space-y-1 text-[10px] font-mono">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Take profit</span>
+                <span className="text-green-400">+{((status?.takeProfit ?? 0.5) * 100).toFixed(0)}%</span>
               </div>
-            )}
-
-            <div className="grid grid-cols-3 gap-2">
-              <Button
-                className={`col-span-1 font-bold transition-all ${
-                  status?.running
-                    ? 'bg-green-700 text-white cursor-not-allowed opacity-60'
-                    : 'bg-green-600 hover:bg-green-500 active:bg-green-700 text-white shadow-lg shadow-green-900/30'
-                }`}
-                disabled={status?.running || isLoading}
-                onClick={startTrader}
-              >
-                {isLoading && lastAction === 'starting'
-                  ? <RefreshCw className="w-4 h-4 animate-spin" />
-                  : <Play className="w-4 h-4" />}
-                <span className="ml-1.5">{isLoading && lastAction === 'starting' ? 'Starting...' : status?.running ? 'Running' : 'Start'}</span>
-              </Button>
-
-              <Button
-                variant="outline"
-                className="col-span-1 border-blue-500/50 text-blue-400 hover:bg-blue-950/30 hover:border-blue-400 active:bg-blue-950/50 font-bold"
-                disabled={isLoading}
-                onClick={rehuntWallets}
-              >
-                {isLoading && lastAction?.startsWith('hunt')
-                  ? <RefreshCw className="w-4 h-4 animate-spin" />
-                  : <RefreshCw className="w-4 h-4" />}
-                <span className="ml-1.5">{isLoading && lastAction?.startsWith('hunt') ? 'Hunting...' : 'Re-Hunt'}</span>
-              </Button>
-
-              <Button
-                variant="destructive"
-                className="col-span-1 font-bold hover:bg-red-600 active:bg-red-800 disabled:opacity-30"
-                disabled={!status?.running || isLoading}
-                onClick={stopTrader}
-              >
-                {isLoading && lastAction === 'stopping'
-                  ? <RefreshCw className="w-4 h-4 animate-spin" />
-                  : <Square className="w-4 h-4" />}
-                <span className="ml-1.5">{isLoading && lastAction === 'stopping' ? 'Stopping...' : 'Stop'}</span>
-              </Button>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Stop loss</span>
+                <span className="text-red-400">-{((status?.stopLoss ?? 0.2) * 100).toFixed(0)}%</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Max hold</span>
+                <span className="text-blue-400">{status?.maxHoldHours ?? 3}h</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Max positions</span>
+                <span className="text-muted-foreground">{status?.maxPositions ?? 3}</span>
+              </div>
             </div>
 
-            {/* One-time approve button */}
-            <button
-              onClick={approveUsdc}
-              disabled={isLoading}
-              className="w-full text-xs text-muted-foreground hover:text-yellow-400 hover:border-yellow-500/30 border border-transparent rounded py-1.5 transition-colors disabled:opacity-30"
-            >
-              ⚡ Pre-approve USDC for instant swaps (one-time setup)
-            </button>
-          </CardContent>
-        </Card>
+            {/* Start / Stop */}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={startSniper}
+                disabled={isRunning || loading}
+                className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-bold transition-all ${
+                  isRunning
+                    ? 'bg-green-900/30 text-green-600 cursor-not-allowed border border-green-900/50'
+                    : 'bg-green-600 hover:bg-green-500 active:bg-green-700 text-white shadow-lg shadow-green-900/20'
+                }`}
+              >
+                <Play className="w-3.5 h-3.5" />
+                {isRunning ? 'Running' : 'Start'}
+              </button>
+              <button
+                onClick={stopSniper}
+                disabled={!isRunning || loading}
+                className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-bold transition-all ${
+                  !isRunning
+                    ? 'bg-muted/30 text-muted-foreground/50 cursor-not-allowed border border-border'
+                    : 'bg-red-600 hover:bg-red-500 active:bg-red-700 text-white shadow-lg shadow-red-900/20'
+                }`}
+              >
+                <Square className="w-3.5 h-3.5" />
+                Stop
+              </button>
+            </div>
 
-        {/* Target Wallets */}
-        {status?.targets && status.targets.length > 0 && (
-          <Card>
-            <CardHeader className="pb-2 pt-4 px-4">
-              <CardTitle className="text-sm">Watching Wallets</CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-4 space-y-2">
-              {status.targets.map((t, i) => (
-                <div key={i} className="flex items-center justify-between text-xs py-1 border-b border-border/50 last:border-0">
-                  <span className="font-mono text-muted-foreground">{t.address.slice(0, 14)}...</span>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="text-[10px] h-4">{t.source}</Badge>
-                    <span className="text-green-400 font-medium">{(t.win_rate * 100).toFixed(0)}% WR</span>
+            {/* Sniper info */}
+            <div className="text-[9px] text-muted-foreground/50 space-y-0.5">
+              <div>Scans Birdeye for tokens &lt;2h old, mcap &lt;$500k</div>
+              <div>Volume acceleration filter + liquidity check</div>
+              <div>Executes via Jupiter — no API key required</div>
+            </div>
+          </div>
+
+          {/* Open positions */}
+          <div className="flex-1 overflow-y-auto">
+            <div className="px-3 py-2 border-b border-border shrink-0">
+              <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                Open Positions ({openPos.length})
+              </div>
+            </div>
+
+            <div className="p-3 space-y-2">
+              {openPos.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground/40 text-xs">
+                  <Shield className="w-6 h-6 mx-auto mb-2" />
+                  No open positions
+                </div>
+              ) : (
+                openPos.map(pos => (
+                  <PositionCard
+                    key={pos.id}
+                    pos={pos}
+                    livePrice={livePrices[pos.tokenAddress]}
+                  />
+                ))
+              )}
+            </div>
+
+            {/* Session stats */}
+            {(stats.wins + stats.losses) > 0 && (
+              <div className="p-3 border-t border-border">
+                <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-2">Session</div>
+                <div className="grid grid-cols-3 gap-1 text-[10px] text-center font-mono">
+                  <div className="rounded bg-muted/20 p-1.5">
+                    <div className="text-green-400 font-bold">{stats.wins}</div>
+                    <div className="text-muted-foreground text-[9px]">wins</div>
+                  </div>
+                  <div className="rounded bg-muted/20 p-1.5">
+                    <div className="text-red-400 font-bold">{stats.losses}</div>
+                    <div className="text-muted-foreground text-[9px]">losses</div>
+                  </div>
+                  <div className="rounded bg-muted/20 p-1.5">
+                    <div className={`font-bold ${pnlPositive ? 'text-green-400' : 'text-red-400'}`}>
+                      {pnlPositive ? '+' : ''}{fmtUsd(stats.totalPnl)}
+                    </div>
+                    <div className="text-muted-foreground text-[9px]">P&L</div>
                   </div>
                 </div>
-              ))}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Live Log */}
-        {status?.recentLog && status.recentLog.length > 0 && (
-          <Card>
-            <CardHeader className="pb-2 pt-4 px-4">
-              <CardTitle className="text-sm flex items-center justify-between">
-                <span>Live Log</span>
-                <button
-                  onClick={() => setLogExpanded(!logExpanded)}
-                  className="text-xs text-muted-foreground hover:text-foreground"
-                >
-                  {logExpanded ? 'Collapse' : 'Expand'}
-                </button>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-4">
-              <div className="font-mono text-[10px] text-muted-foreground space-y-0.5 max-h-40 overflow-y-auto">
-                {(logExpanded ? status.recentLog : status.recentLog.slice(-8)).map((line, i) => (
-                  <div key={i} className={line.includes('❌') || line.includes('ERR') ? 'text-red-400' :
-                                          line.includes('✅') || line.includes('🚨') ? 'text-green-400' : ''}>
-                    {line}
-                  </div>
-                ))}
               </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {!status && authToken && (
-          <div className="text-center text-muted-foreground text-sm py-8">
-            <Activity className="w-8 h-8 mx-auto mb-2 opacity-20" />
-            <p>Trader is stopped. Set your budget and hit Start.</p>
+            )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   )
