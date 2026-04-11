@@ -54,7 +54,8 @@ function detectBrandUrl(mission: string): string | null {
 function signOAuth1(
   method: string,
   url: string,
-  keys: { apiKey: string; apiSecret: string; accessToken: string; accessTokenSecret: string }
+  keys: { apiKey: string; apiSecret: string; accessToken: string; accessTokenSecret: string },
+  extraParams: Record<string, string> = {}
 ): string {
   const oauth: Record<string, string> = {
     oauth_consumer_key: keys.apiKey,
@@ -64,9 +65,10 @@ function signOAuth1(
     oauth_token: keys.accessToken,
     oauth_version: "1.0",
   };
-  const sortedParams = Object.keys(oauth)
+  const allParams = { ...extraParams, ...oauth };
+  const sortedParams = Object.keys(allParams)
     .sort()
-    .map((k) => `${encodeURIComponent(k)}=${encodeURIComponent(oauth[k])}`)
+    .map((k) => `${encodeURIComponent(k)}=${encodeURIComponent(allParams[k])}`)
     .join("&");
   const baseString = `${method}&${encodeURIComponent(url)}&${encodeURIComponent(sortedParams)}`;
   const signingKey = `${encodeURIComponent(keys.apiSecret)}&${encodeURIComponent(keys.accessTokenSecret)}`;
@@ -105,6 +107,51 @@ async function postTweetToX(
   } catch (e) {
     console.error('[preacher] postTweetToX error:', e);
     return null;
+  }
+}
+
+// Search X/Twitter for recent tweets on a topic — gives Preacher real context
+async function searchX(
+  query: string,
+  keys: { apiKey: string; apiSecret: string; accessToken: string; accessTokenSecret: string }
+): Promise<string> {
+  try {
+    const url = 'https://api.twitter.com/2/tweets/search/recent';
+    const params = new URLSearchParams({
+      query: query.slice(0, 80) + ' -is:retweet lang:en',
+      max_results: '10',
+      'tweet.fields': 'text,public_metrics,created_at',
+    });
+    const fullUrl = url + '?' + params.toString();
+    const extraParams: Record<string, string> = {};
+    params.forEach((v, k) => { extraParams[k] = v; });
+    const auth = signOAuth1('GET', url, keys, extraParams);
+    const res = await fetch(fullUrl, {
+      headers: { Authorization: auth },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) {
+      console.warn('[preacher] X search failed: ' + res.status);
+      return '';
+    }
+    const data = await res.json();
+    const tweets: Array<{ text: string; public_metrics?: { like_count: number; retweet_count: number } }> = data.data || [];
+    if (!tweets.length) return '';
+    const sorted = tweets
+      .sort((a, b) =>
+        ((b.public_metrics?.like_count || 0) + (b.public_metrics?.retweet_count || 0)) -
+        ((a.public_metrics?.like_count || 0) + (a.public_metrics?.retweet_count || 0))
+      )
+      .slice(0, 5);
+    const resultLines = sorted.map((t, i) => {
+      const likes = t.public_metrics?.like_count || 0;
+      const rts = t.public_metrics?.retweet_count || 0;
+      return (i + 1) + '. "' + t.text.slice(0, 200) + '" (' + likes + ' likes ' + rts + ' rt)';
+    });
+    return 'Recent X conversation about "' + query.slice(0, 40) + '":\n' + resultLines.join('\n');
+  } catch (e) {
+    console.warn('[preacher] searchX error:', e);
+    return '';
   }
 }
 
@@ -222,6 +269,21 @@ export async function runPreacher({ mission, context }: PreacherInput): Promise<
     };
   }
 
+  // Search X for real conversation context on the topic
+  let xSearchContext = '';
+  const searchKeys = creds || (process.env.X_API_KEY ? {
+    apiKey: process.env.X_API_KEY,
+    apiSecret: process.env.X_API_SECRET || '',
+    accessToken: process.env.X_ACCESS_TOKEN || '',
+    accessTokenSecret: process.env.X_ACCESS_TOKEN_SECRET || '',
+  } : null);
+  if (searchKeys?.apiKey) {
+    // Build a search query from the mission — extract key nouns/tickers
+    const searchQuery = mission.length > 80 ? mission.slice(0, 80) : mission;
+    xSearchContext = await searchX(searchQuery, searchKeys);
+    if (xSearchContext) console.log('[preacher] X search context fetched');
+  }
+
   // Fetch grounded context based on topic type
   let groundedContext = '';
 
@@ -272,7 +334,7 @@ export async function runPreacher({ mission, context }: PreacherInput): Promise<
   const rawContent = await callModel(
     'preacher',
     SYSTEM_PROMPT,
-    `Platform: ${platform}\nReal Data (USE THESE NUMBERS ONLY — do not invent stats):\n${groundedContext}\n\nContext: ${JSON.stringify(context || {})}\n\nMission: ${mission}`,
+    `Platform: ${platform}\nReal Data (USE THESE NUMBERS ONLY — do not invent stats):\n${groundedContext}\n\n${xSearchContext ? `Live X conversation context (use to understand current sentiment and angles):\n${xSearchContext}\n\n` : ''}Context: ${JSON.stringify(context || {})}\n\nMission: ${mission}`,
     anthropicKey || undefined
   );
 
