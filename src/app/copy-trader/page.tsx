@@ -36,6 +36,7 @@ type StrategyStatus = {
   takeProfit?: number
   stopLoss?: number
   maxHoldHours?: number
+  buyDelayMs?: number
   mirrorRatio?: number
   minRate?: number
   volMultiplier?: number
@@ -158,6 +159,7 @@ function StrategyCard({
   onStart,
   onStop,
   onSize,
+  onDelay,
   loading,
 }: {
   meta: typeof STRATEGIES[0]
@@ -165,6 +167,7 @@ function StrategyCard({
   onStart: (size: number) => void
   onStop: () => void
   onSize: (size: number) => void
+  onDelay: (ms: number) => void
   loading: boolean
 }) {
   const [size, setSize] = useState(meta.defaultSize)
@@ -206,6 +209,24 @@ function StrategyCard({
             }`}
           >${s}</button>
         ))}
+      </div>
+
+      {/* Buy delay */}
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] text-gray-600 w-16 shrink-0">Buy delay</span>
+        <div className="flex gap-1 flex-wrap">
+          {[1000, 2500, 5000, 10000].map(ms => (
+            <button
+              key={ms}
+              onClick={() => onDelay(ms)}
+              className={`px-2 py-0.5 rounded text-[10px] font-mono transition-all ${
+                status?.buyDelayMs === ms
+                  ? 'text-gray-300 border border-gray-500 bg-white/5'
+                  : 'text-gray-700 border border-gray-900 hover:border-gray-700 hover:text-gray-500'
+              }`}
+            >{ms >= 1000 ? `${ms/1000}s` : `${ms}ms`}</button>
+          ))}
+        </div>
       </div>
 
       {/* Open positions */}
@@ -325,6 +346,15 @@ export default function CopyTraderPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ positionSize: size }),
     })
+  }
+
+  const delayStrategy = async (id: string, ms: number) => {
+    await fetch(`${EXECUTOR}/api/strategies/${id}/delay`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ delayMs: ms }),
+    })
+    setTimeout(fetchStatuses, 500)
   }
 
   // ── Derived stats ─────────────────────────────────────────────────────
@@ -464,6 +494,7 @@ export default function CopyTraderPage() {
                 onStart={(size) => startStrategy(meta.id, size)}
                 onStop={() => stopStrategy(meta.id)}
                 onSize={(size) => sizeStrategy(meta.id, size)}
+                onDelay={(ms) => delayStrategy(meta.id, ms)}
                 loading={!!loading[meta.id]}
               />
             ))}
