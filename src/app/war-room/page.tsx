@@ -435,24 +435,28 @@ export default function WarRoom() {
             setCooking(false);
             const brief = sd.latestBrief;
             // Map brief into playbook shape the UI expects
-            const steps = Object.entries(brief.results || {}).map(([worker, res]: [string, any], i) => ({
+            const steps: PlaybookStep[] = Object.entries(brief.results || {}).map(([worker, res]: [string, any], i) => ({
               step: i + 1,
-              worker,
+              agentId: worker,
               action: res.raw ? res.raw.slice(0, 120) + "…" : (res.error || "No result"),
+              token: "",
               chain: "base",
+              amount: 0,
+              timeframe: "immediate",
               expectedPnl: 0,
-              risk: "medium" as const,
-              status: res.error ? "failed" : "ready",
+              confidence: 0,
+              reasoning: res.raw || res.error || "",
+              requiresApproval: false,
+              status: res.error ? "failed" as const : "pending" as const,
             }));
             const synthesized = brief.ceoSynthesis?.recommendation || brief.ceoSynthesis?.raw || "";
-            const pb = {
+            const pb: Playbook = {
               steps,
-              totalExpectedPnl: 0,
+              totalExpectedPnl: "0",
               conflicts: [],
               entanglementWarnings: [],
               generatedAt: new Date().toISOString(),
               requiresBoardApproval: false,
-              ceoVerdict: synthesized,
             };
             setPlaybook(pb);
             setFeed(prev => [{ type: "playbook_ready", message: `Playbook ready — ${steps.length} workers reported`, severity: "success", ts: new Date().toISOString() }, ...prev]);
