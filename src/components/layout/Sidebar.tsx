@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
-  LayoutDashboard, Bot, DollarSign, Plug, Settings, ChevronLeft, ChevronRight, Gauge, Activity, Swords
+  LayoutDashboard, Bot, DollarSign, Plug, Settings, ChevronLeft, ChevronRight, Gauge, Activity, Swords, Zap
 } from "lucide-react";
 import { useState } from "react";
 
@@ -15,6 +15,7 @@ const NAV = [
   { href: "/earnings",    label: "Earnings",       icon: DollarSign,      tip: "USDC earned, payouts, withdraw" },
   { href: "/war-room",   label: "War Room",      icon: Swords,          tip: "Game theory strategy engine — all agents, all chains" },
   { href: "/copy-trader", label: "Copy Trader",    icon: Activity,        tip: "Compute signal copy trader — AKT/RNDR/IO signals" },
+  { href: "/throw",        label: "THROW App",      icon: Zap,             tip: "THROW — phone-to-phone stablecoin payments on Tempo" },
   { href: "/connections", label: "API Connections",icon: Plug,            tip: "Telegram, X, x402, wallet keys" },
   { href: "/settings",    label: "Settings",       icon: Settings,        tip: "Dashboard & agent preferences" },
 ];
@@ -106,6 +107,18 @@ export default function Sidebar() {
           {collapsed && (
             <span className="absolute left-full ml-2.5 px-2 py-1 text-xs bg-secondary border border-border rounded whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-50 shadow-lg">
               bleeding.cash
+            </span>
+          )}
+        </a>
+        <a href="https://www.perplexity.ai/computer/a/throw-nzr2VtR3S6q6vTur7FGhlw" target="_blank" rel="noopener noreferrer"
+          className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors group relative"
+          title="THROW — phone-to-phone cash on Tempo"
+        >
+          <Zap size={17} className="shrink-0" style={{color:"#00e5a0"}} />
+          {!collapsed && <span className="text-xs" style={{color:"#00e5a0"}}>⚡ throw5onit.com</span>}
+          {collapsed && (
+            <span className="absolute left-full ml-2.5 px-2 py-1 text-xs bg-secondary border border-border rounded whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-50 shadow-lg">
+              THROW App
             </span>
           )}
         </a>
