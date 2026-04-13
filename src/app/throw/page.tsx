@@ -189,6 +189,7 @@ export default function ThrowWatcherPage() {
   const [error, setError]         = useState<string | null>(null);
   const [lastFetch, setLastFetch] = useState<Date | null>(null);
   const [online, setOnline]       = useState(true);
+  const [throwOnly, setThrowOnly] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -217,6 +218,18 @@ export default function ThrowWatcherPage() {
     const id = setInterval(fetchData, 15_000);
     return () => clearInterval(id);
   }, [fetchData]);
+
+  // Registered wallet addresses (from status)
+  const registeredAddrs = new Set(
+    (status as WatcherStatus & { registeredAddresses?: string[] })?.registeredAddresses?.map((a: string) => a.toLowerCase()) ?? []
+  );
+
+  const filteredThrows = throwOnly
+    ? throws.filter(t =>
+        registeredAddrs.has(t.from.toLowerCase()) ||
+        registeredAddrs.has(t.to.toLowerCase())
+      )
+    : throws;
 
   const statusColor = {
     active: "text-green-400",
@@ -327,13 +340,27 @@ export default function ThrowWatcherPage() {
             <div className="flex items-center gap-2">
               <Zap size={14} className="text-primary" />
               <span className="text-sm font-semibold">Live Throw Feed</span>
-              {throws.length > 0 && (
+              {filteredThrows.length > 0 && (
                 <Badge variant="secondary" className="text-[10px] h-4 px-1.5">
-                  {throws.length}
+                  {filteredThrows.length}
                 </Badge>
               )}
             </div>
-            <span className="text-[11px] text-muted-foreground">Tempo Chain · USDC.e + pathUSD</span>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setThrowOnly(v => !v)}
+                className={cn(
+                  "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors",
+                  throwOnly
+                    ? "bg-primary/20 border-primary/40 text-primary"
+                    : "bg-secondary/40 border-border text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <span className={cn("w-1.5 h-1.5 rounded-full", throwOnly ? "bg-primary" : "bg-muted-foreground")} />
+                {throwOnly ? "THROW only" : "All Tempo"}
+              </button>
+              <span className="text-[11px] text-muted-foreground">USDC.e + pathUSD</span>
+            </div>
           </div>
 
           {/* Table header */}
@@ -353,13 +380,15 @@ export default function ThrowWatcherPage() {
               Connecting to watcher…
             </div>
           )}
-          {!loading && throws.length === 0 && (
+          {!loading && filteredThrows.length === 0 && (
             <div className="px-4 py-10 text-center text-muted-foreground text-sm">
               <Activity size={20} className="mx-auto mb-2 opacity-30" />
-              No throws detected yet — waiting for first transaction
+              {throwOnly
+                ? "No THROW app transactions yet — register a wallet to see yours here"
+                : "No throws detected yet — waiting for first transaction"}
             </div>
           )}
-          {throws.map((t, i) => (
+          {filteredThrows.map((t, i) => (
             <ThrowRow key={t.txHash + i} t={t} idx={i} />
           ))}
         </div>
