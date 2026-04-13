@@ -41,7 +41,7 @@ interface WatcherStatus {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 // Watcher URL — will be set once deployed to Railway
-const WATCHER_BASE = process.env.NEXT_PUBLIC_THROW_WATCHER_URL || "https://throw-watcher.up.railway.app";
+const WATCHER_BASE = process.env.NEXT_PUBLIC_THROW_WATCHER_URL || "https://throw-watcher-production.up.railway.app";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
