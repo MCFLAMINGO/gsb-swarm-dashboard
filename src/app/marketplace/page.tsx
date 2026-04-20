@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import {
   ExternalLink, Star, Zap, Clock, CheckCircle2, AlertTriangle,
   BarChart3, Globe, Eye, Coins, TrendingDown, FlaskConical, ShieldCheck,
-  ArrowRight, RefreshCw
+  ArrowRight, RefreshCw, UploadCloud
 } from "lucide-react";
 
 const RAILWAY_URL = "https://gsb-swarm-production.up.railway.app";
@@ -159,6 +159,8 @@ export default function MarketplacePage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [skillStatuses, setSkillStatuses] = useState<SkillStatus>({});
   const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
   const fetchSkillReport = async () => {
     setLoading(true);
@@ -174,6 +176,29 @@ export default function MarketplacePage() {
       }
     } catch {}
     setLoading(false);
+  };
+
+  const syncAcp = async () => {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const secret = process.env.NEXT_PUBLIC_OPERATOR_SECRET || "";
+      const res = await fetch(`${RAILWAY_URL}/api/acp-sync`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ secret }),
+      });
+      const data = await res.json();
+      setSyncResult(
+        data.ok
+          ? { ok: true,  msg: `Synced in ${data.elapsed}` }
+          : { ok: false, msg: data.error || "Sync failed" }
+      );
+    } catch (e: unknown) {
+      setSyncResult({ ok: false, msg: e instanceof Error ? e.message : "Network error" });
+    }
+    setSyncing(false);
+    setTimeout(() => setSyncResult(null), 8000);
   };
 
   useEffect(() => { fetchSkillReport(); }, []);
@@ -192,11 +217,25 @@ export default function MarketplacePage() {
             {" "}· Live skill confidence scores from Railway
           </p>
         </div>
-        <button onClick={fetchSkillReport} disabled={loading}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-secondary text-xs text-muted-foreground hover:text-foreground transition-all disabled:opacity-40">
-          <RefreshCw className={`w-3 h-3 ${loading ? "animate-spin" : ""}`} />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          {syncResult && (
+            <span className={`text-xs font-medium px-2 py-1 rounded-md ${
+              syncResult.ok ? "bg-green-500/15 text-green-400" : "bg-red-500/15 text-red-400"
+            }`}>
+              {syncResult.ok ? "✓" : "✗"} {syncResult.msg}
+            </span>
+          )}
+          <button onClick={syncAcp} disabled={syncing}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-secondary text-xs text-muted-foreground hover:text-foreground transition-all disabled:opacity-40">
+            <UploadCloud className={`w-3 h-3 ${syncing ? "animate-pulse" : ""}`} />
+            {syncing ? "Syncing..." : "Sync ACP"}
+          </button>
+          <button onClick={fetchSkillReport} disabled={loading}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-secondary text-xs text-muted-foreground hover:text-foreground transition-all disabled:opacity-40">
+            <RefreshCw className={`w-3 h-3 ${loading ? "animate-spin" : ""}`} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       <div className="flex h-[calc(100vh-120px)]">
