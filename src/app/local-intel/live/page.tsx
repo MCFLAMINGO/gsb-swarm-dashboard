@@ -273,20 +273,83 @@ export default function LocalIntelLivePage() {
   const fetchAll = useCallback(async () => {
     const errs: Record<string, boolean> = {};
 
-    const [cov, enr, bcast, q] = await Promise.all([
-      safeFetch<CoverageStats | null>(`${RAILWAY}/api/local-intel/coverage-stats`, null).catch(() => { errs.coverage = true; return null; }),
-      safeFetch<EnrichmentLog | null>(`${RAILWAY}/api/local-intel/enrichment-log`, null).catch(() => { errs.enrichment = true; return null; }),
-      safeFetch<BroadcastLog | null>(`${RAILWAY}/api/local-intel/broadcast-log`, null).catch(() => { errs.broadcast = true; return null; }),
-      safeFetch<ZipQueue | null>(`${RAILWAY}/api/local-intel/zip-queue`, null).catch(() => { errs.queue = true; return null; }),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const [rawCov, rawEnr, rawBcast, rawQ, rawSrc] = await Promise.all([
+      safeFetch<any>(`${RAILWAY}/api/local-intel/coverage-stats`, null).catch(() => { errs.coverage = true; return null; }),
+      safeFetch<any>(`${RAILWAY}/api/local-intel/enrichment-log`, null).catch(() => { errs.enrichment = true; return null; }),
+      safeFetch<any>(`${RAILWAY}/api/local-intel/broadcast-log`, null).catch(() => { errs.broadcast = true; return null; }),
+      safeFetch<any>(`${RAILWAY}/api/local-intel/zip-queue`, null).catch(() => { errs.queue = true; return null; }),
+      safeFetch<any>(`${RAILWAY}/api/local-intel/source-log`, null).catch(() => null),
     ]);
 
-    // Also fetch source log and merge into coverage
-    const srcLog = await safeFetch<{ sources: SourceHealth[] } | null>(
-      `${RAILWAY}/api/local-intel/source-log`, null
-    ).catch(() => null);
+    // ── Normalize coverage-stats (API uses camelCase, page expects snake_case) ──
+    let cov: CoverageStats | null = null;
+    if (rawCov) {
+      // source-log returns { sources: { [name]: { status, checked_at } } } — convert to array
+      const sourceHealth: SourceHealth[] = rawSrc?.sources
+        ? Object.entries(rawSrc.sources).map(([source, info]: [string, any]) => ({
+            source,
+            status: info.status === "ok" ? "ok" : info.status === "unavailable" ? "unavailable" : "error",
+            last_checked: info.checked_at ?? "",
+          }))
+        : [];
 
-    if (cov && srcLog?.sources) {
-      cov.source_health = srcLog.sources;
+      // recentZips from coverage-stats → ZipRow[]
+      const covered_zips: ZipRow[] = (rawCov.recentZips ?? []).map((z: any) => ({
+        zip:         z.zip ?? "",
+        name:        z.name ?? "",
+        businesses:  z.businesses ?? 0,
+        confidence:  z.confidence ?? z.avgConfidence ?? 0,
+        completedAt: z.completedAt ?? "",
+      }));
+
+      cov = {
+        zips_covered:       rawCov.zipsCompleted   ?? 0,
+        businesses_mapped:  rawCov.totalBusinesses ?? 0,
+        avg_confidence:     rawCov.avgConfidence   ?? 0,
+        active_agents:      rawCov.activeAgents    ?? 0,
+        covered_zips,
+        source_health: sourceHealth,
+      };
+    }
+
+    // ── Normalize enrichment-log ──
+    let enr: EnrichmentLog | null = null;
+    if (rawEnr) {
+      enr = {
+        enriched_today:  rawEnr.enrichedToday ?? rawEnr.enriched_today ?? 0,
+        pipeline_status: rawEnr.pipelineStatus ?? rawEnr.pipeline_status ?? "idle",
+        entries: (rawEnr.recent ?? rawEnr.entries ?? []).map((e: any) => ({
+          business_name: e.business_name ?? e.name ?? "",
+          zip:           e.zip ?? "",
+          confidence:    e.confidence ?? 0,
+          sources_used:  e.sources_used ?? e.sources ?? [],
+          enriched_at:   e.enriched_at ?? e.enrichedAt ?? "",
+        })),
+      };
+    }
+
+    // ── Normalize broadcast-log ──
+    let bcast: BroadcastLog | null = null;
+    if (rawBcast) {
+      bcast = {
+        entries: (rawBcast.recent ?? rawBcast.entries ?? []).map((e: any) => ({
+          registry:   e.registry  ?? "",
+          status:     e.status    ?? "",
+          timestamp:  e.timestamp ?? "",
+          zipsCount:  e.zipsCount ?? 0,
+        })),
+        last_smithery_at: rawBcast.last_smithery_at ?? rawBcast.lastSmitheryAt ?? undefined,
+      };
+    }
+
+    // ── Normalize zip-queue ──
+    let q: ZipQueue | null = null;
+    if (rawQ) {
+      q = {
+        active_count: rawQ.inProgress ?? rawQ.active_count ?? 0,
+        queued: (rawQ.active ?? []).map((z: any) => z.zip ?? z),
+      };
     }
 
     setCoverage(cov);
