@@ -279,14 +279,35 @@ export default function LocalIntelRevenuePage() {
   const fetchAll = useCallback(async () => {
     const errs: Record<string, boolean> = {};
 
-    const [rev, bgt] = await Promise.all([
-      safeFetch<RevenueSummary | null>(
+    const [rawRev, bgt] = await Promise.all([
+      safeFetch<Record<string, unknown> | null>(
         `${RAILWAY}/api/local-intel/revenue-summary`, null
       ).catch(() => { errs.revenue = true; return null; }),
       safeFetch<BudgetStatus | null>(
         `${RAILWAY}/api/local-intel/budget-status`, null
       ).catch(() => { errs.budget = true; return null; }),
     ]);
+
+    // Normalise revenue-summary — API returns nested {calls, revenue_pathusd} objects
+    let rev: RevenueSummary | null = null;
+    if (rawRev) {
+      const g = (key: string) => (rawRev[key] as Record<string, number> | undefined);
+      rev = {
+        today:        g('today')?.revenue_pathusd       ?? 0,
+        this_week:    g('week')?.revenue_pathusd        ?? 0,
+        this_month:   g('month')?.revenue_pathusd       ?? 0,
+        all_time:     g('allTime')?.revenue_pathusd     ?? 0,
+        calls_today:  g('today')?.calls                 ?? 0,
+        calls_week:   g('week')?.calls                  ?? 0,
+        calls_month:  g('month')?.calls                 ?? 0,
+        top_tools:    (rawRev.topTools   as ToolStat[])   ?? [],
+        top_callers:  ((rawRev.topCallers ?? []) as Record<string, unknown>[]).map(c => ({
+          agent_id: (c.caller as string | undefined) ?? (c.agent_id as string | undefined) ?? 'unknown',
+          calls:    (c.calls as number | undefined)   ?? 0,
+          revenue:  (c.revenue as number | undefined) ?? 0,
+        })),
+      };
+    }
 
     setRevenue(rev);
     setBudget(bgt);
