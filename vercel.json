@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/heartbeat",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/inbox-watcher",
+      "schedule": "0 */6 * * *"
     }
   ],
   "functions": {
