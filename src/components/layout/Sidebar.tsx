@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
-  LayoutDashboard, Bot, DollarSign, Plug, Settings, ChevronLeft, ChevronRight, Gauge, Activity, Swords, Zap, FlaskConical, ShoppingBag, Globe
+  LayoutDashboard, Bot, DollarSign, Plug, Settings, ChevronLeft, ChevronRight, Gauge, Activity, Swords, Zap, FlaskConical, ShoppingBag, Globe, Radio, TrendingUp
 } from "lucide-react";
 import { useState } from "react";
 
@@ -19,6 +19,8 @@ const NAV = [
   { href: "/marketplace",  label: "Marketplace",    icon: ShoppingBag,     tip: "Hire any agent — skill catalogue, live confidence scores, ACP hire links" },
   { href: "/testing",     label: "App Tests",      icon: FlaskConical,    tip: "5-agent UI testing — THROW, VolunTrack, PassItHere" },
   { href: "/local-intel", label: "Local Intel",     icon: Globe,           tip: "32081/32082 business intelligence — agentic Google Maps" },
+  { href: "/local-intel/live",    label: "↳ Live Feed",      icon: Radio,     tip: "Real-time ZIP coverage, enrichment pipeline, broadcast log" },
+  { href: "/local-intel/revenue", label: "↳ Revenue",        icon: TrendingUp, tip: "Revenue stats, top tools, budget gate, agentic visibility" },
   { href: "/connections", label: "API Connections",icon: Plug,            tip: "Telegram, X, x402, wallet keys" },
   { href: "/settings",    label: "Settings",       icon: Settings,        tip: "Dashboard & agent preferences" },
 ];
