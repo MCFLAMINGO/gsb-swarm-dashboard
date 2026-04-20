@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import Link from "next/link";
 import { LOCAL_INTEL_DATA } from "@/lib/localIntelData";
 import {
   MapPin, Download, RefreshCw, Filter, TrendingUp,
   Store, Building2, Utensils, Heart, Landmark, Zap,
-  Search, ChevronDown, BarChart2, Globe
+  Search, ChevronDown, BarChart2, Globe, PlusCircle
 } from "lucide-react";
 
 const CATEGORY_GROUPS: Record<string, { label: string; icon: React.ElementType; color: string }> = {
@@ -148,6 +149,10 @@ export default function LocalIntelPage() {
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-secondary text-xs text-muted-foreground hover:text-foreground transition-all">
             <Download className="w-3 h-3" /> CSV
           </button>
+          <Link href="/local-intel/claim"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all">
+            <PlusCircle className="w-3 h-3" /> Claim Business
+          </Link>
         </div>
       </div>
 
