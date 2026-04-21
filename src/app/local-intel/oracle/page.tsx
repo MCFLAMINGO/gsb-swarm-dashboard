@@ -681,41 +681,69 @@ export default function OracleSignalPage() {
 // ── ZIP Ask ─────────────────────────────────────────────────────────────────
 
 const SUGGESTED = [
-  "housing starts 32082",
-  "major construction projects 32082",
-  "new developments 32081",
-  "building permits 32082",
-  "commercial real estate 32082",
+  "What restaurant categories are missing in 32082?",
+  "Investment signals for 32081",
+  "Healthcare provider gaps in 32082",
+  "Construction activity in Ponte Vedra Beach",
+  "Retail saturation near A1A 32082",
 ];
+
+interface AskSource { tool: string; layer: string; zip: string; }
+interface AskResult {
+  question: string;
+  zip: string;
+  zip_label: string;
+  intent: string;
+  tools_used: string[];
+  answer: string;
+  confidence: number;
+  data_points: number;
+  sources: AskSource[];
+  ts: string;
+}
+
+const INTENT_COLORS: Record<string, string> = {
+  demographics:        "text-blue-400 bg-blue-400/10",
+  market_opportunity:  "text-emerald-400 bg-emerald-400/10",
+  construction:        "text-orange-400 bg-orange-400/10",
+  investment_signal:   "text-yellow-400 bg-yellow-400/10",
+  corridor:            "text-purple-400 bg-purple-400/10",
+  recent_changes:      "text-pink-400 bg-pink-400/10",
+  healthcare:          "text-cyan-400 bg-cyan-400/10",
+  food_beverage:       "text-red-400 bg-red-400/10",
+  retail:              "text-indigo-400 bg-indigo-400/10",
+  nearby:              "text-teal-400 bg-teal-400/10",
+  general:             "text-muted-foreground bg-muted/30",
+};
 
 function ZipAsk() {
   const [query, setQuery]     = useState("");
   const [zip, setZip]         = useState("32082");
   const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState<Array<{name:string;category:string;address:string;phone?:string;website?:string}> | null>(null);
+  const [result, setResult]   = useState<AskResult | null>(null);
   const [error, setError]     = useState<string | null>(null);
 
   const run = useCallback(async (q: string, z: string) => {
     if (!q.trim()) return;
     setLoading(true);
     setError(null);
-    setResults(null);
+    setResult(null);
     try {
       const res = await fetch(`${RAILWAY}/api/local-intel/mcp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           jsonrpc: "2.0", id: 1, method: "tools/call",
-          params: { name: "local_intel_search", arguments: { query: q, zip: z, limit: 10 } },
+          params: { name: "local_intel_ask", arguments: { question: q, zip: z } },
         }),
       });
       const data = await res.json();
       const text = data?.result?.content?.[0]?.text;
-      if (!text) throw new Error("No result");
-      const parsed = JSON.parse(text);
-      setResults(parsed.results || []);
+      if (!text) throw new Error(data?.error?.message || "No result");
+      const parsed: AskResult = JSON.parse(text);
+      setResult(parsed);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Search failed");
+      setError(e instanceof Error ? e.message : "Query failed");
     } finally {
       setLoading(false);
     }
@@ -731,7 +759,7 @@ function ZipAsk() {
       <div className="flex items-center gap-2">
         <Search size={14} className="text-primary" />
         <span className="text-sm font-semibold">Ask LocalIntel</span>
-        <span className="text-[10px] text-muted-foreground">· search businesses &amp; signals by ZIP</span>
+        <span className="text-[10px] text-muted-foreground">· plain-English query, synthesized answer</span>
       </div>
 
       <form onSubmit={handleSubmit} className="flex gap-2">
@@ -745,7 +773,7 @@ function ZipAsk() {
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="housing starts, construction projects, dentist…"
+          placeholder="What restaurant categories are missing here?"
           className="flex-1 bg-muted/30 border border-border/40 rounded-md px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
         />
         <button
@@ -765,8 +793,9 @@ function ZipAsk() {
             onClick={() => {
               const parts = s.match(/(\d{5})/);
               if (parts) setZip(parts[1]);
-              setQuery(s.replace(/\s*\d{5}\s*/, " ").trim());
-              run(s.replace(/\s*\d{5}\s*/, " ").trim(), parts?.[1] ?? zip);
+              const cleaned = s.replace(/\s*\d{5}\s*/g, " ").trim();
+              setQuery(cleaned);
+              run(cleaned, parts?.[1] ?? zip);
             }}
             className="text-[10px] bg-muted/30 hover:bg-muted/60 text-muted-foreground rounded px-2 py-0.5 transition-colors"
           >
@@ -775,34 +804,85 @@ function ZipAsk() {
         ))}
       </div>
 
-      {/* Results */}
-      {loading && <p className="text-xs text-muted-foreground animate-pulse">Searching…</p>}
+      {/* Loading */}
+      {loading && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground animate-pulse">
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-ping" />
+          Routing query across data layers…
+        </div>
+      )}
+
+      {/* Error */}
       {error && <p className="text-xs text-red-400">{error}</p>}
-      {results !== null && (
-        <div className="space-y-1.5">
-          {results.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No matches in {zip} — try a broader query or different ZIP.</p>
-          ) : (
-            results.map((b, i) => (
-              <div key={i} className="bg-muted/20 rounded-lg px-3 py-2 flex flex-col gap-0.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium text-foreground">{b.name}</span>
-                  <span className="text-[10px] text-muted-foreground capitalize">{b.category}</span>
-                </div>
-                {b.address && <p className="text-[10px] text-muted-foreground">{b.address}</p>}
-                <div className="flex gap-3">
-                  {b.phone && <span className="text-[10px] text-primary">{b.phone}</span>}
-                  {b.website && (
-                    <a href={b.website} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-400 hover:underline truncate max-w-[200px]">
-                      {b.website.replace(/^https?:\/\/(www\.)?/, "")}
-                    </a>
-                  )}
-                </div>
-              </div>
-            ))
+
+      {/* Rich synthesized answer */}
+      {result && (
+        <div className="space-y-3">
+          {/* Intent + confidence header */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full capitalize ${INTENT_COLORS[result.intent] ?? INTENT_COLORS.general}`}>
+              {result.intent.replace(/_/g, " ")}
+            </span>
+            <span className="text-[10px] text-muted-foreground">{result.zip_label}</span>
+            <span className="ml-auto text-[10px] font-mono text-muted-foreground">
+              {result.confidence}% confidence · {result.data_points} data point{result.data_points !== 1 ? "s" : ""}
+            </span>
+          </div>
+
+          {/* Answer text */}
+          <div className="bg-muted/20 rounded-lg px-3 py-2.5">
+            {result.answer.split("\n").map((line, i) => (
+              <p key={i} className={`text-xs ${line.startsWith("  •") || line.startsWith("•") ? "text-muted-foreground pl-2" : "text-foreground font-medium"} leading-relaxed`}>
+                {line || <>&nbsp;</>}
+              </p>
+            ))}
+          </div>
+
+          {/* Sources */}
+          {result.sources.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              <span className="text-[10px] text-muted-foreground">Sources:</span>
+              {result.sources.map((s, i) => (
+                <span key={i} className="text-[10px] bg-muted/30 text-muted-foreground rounded px-1.5 py-0.5">
+                  {s.tool.replace("local_intel_", "")}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Tools used */}
+          {result.tools_used.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {result.tools_used.map((t) => (
+                <span key={t} className="text-[9px] font-mono bg-muted/20 text-muted-foreground/60 rounded px-1.5 py-0.5">
+                  {t}
+                </span>
+              ))}
+            </div>
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── (legacy) flat business result card — kept for reference, not used in ZipAsk ──
+function _LegacyBusinessCard({ b }: { b: {name:string;category:string;address:string;phone?:string;website?:string} }) {
+  return (
+    <div className="bg-muted/20 rounded-lg px-3 py-2 flex flex-col gap-0.5">
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-medium text-foreground">{b.name}</span>
+        <span className="text-[10px] text-muted-foreground capitalize">{b.category}</span>
+      </div>
+      {b.address && <p className="text-[10px] text-muted-foreground">{b.address}</p>}
+      <div className="flex gap-3">
+        {b.phone && <span className="text-[10px] text-primary">{b.phone}</span>}
+        {b.website && (
+          <a href={b.website} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-400 hover:underline truncate max-w-[200px]">
+            {b.website.replace(/^https?:\/\/(www\.)?/, "")}
+          </a>
+        )}
+      </div>
     </div>
   );
 }
