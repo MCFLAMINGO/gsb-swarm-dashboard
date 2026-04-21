@@ -75,24 +75,34 @@ function detectOracleIntent(q: string): { triggered: boolean; zip: string | null
 // Strip search noise so backend gets clean terms
 // e.g. "restaurants in Nocatee" → "restaurant"
 // e.g. "dentists near Ponte Vedra" → "dentist"
+const STOP_WORDS = new Set(['best','top','good','great','closest','nearby','around','here','places','spots','shops','open','now','today','local','find','show','get','near','the','and','for','in','at','of','a','an']);
+
 function cleanQueryTerm(term: string): string {
   const QUERY_ALIASES: Record<string, string> = {
     'restaurants': 'restaurant', 'dining': 'restaurant', 'food': 'restaurant',
+    'eats': 'restaurant', 'eateries': 'restaurant', 'eatery': 'restaurant',
     'cafes': 'cafe', 'coffee': 'cafe', 'coffee shops': 'cafe',
-    'bars': 'bar', 'pubs': 'bar', 'fast food': 'fast_food',
-    'dentists': 'dentist', 'doctors': 'clinic', 'clinics': 'clinic',
+    'bars': 'bar', 'pubs': 'bar', 'pub': 'bar', 'fast food': 'fast_food',
+    'dentists': 'dentist', 'doctors': 'clinic', 'doctor': 'clinic', 'clinics': 'clinic', 'medical': 'clinic',
+    'vet': 'veterinary', 'vets': 'veterinary',
     'gym': 'fitness_centre', 'gyms': 'fitness_centre', 'fitness': 'fitness_centre',
     'grocery': 'supermarket', 'groceries': 'supermarket',
     'gas': 'fuel', 'gas station': 'fuel', 'gas stations': 'fuel',
-    'pharmacy': 'chemist', 'pharmacies': 'chemist',
-    'salons': 'hairdresser', 'salon': 'hairdresser',
-    'banks': 'bank', 'realtors': 'estate_agent', 'realtor': 'estate_agent',
-    'real estate': 'estate_agent', 'hotels': 'hotel',
+    'pharmacy': 'chemist', 'pharmacies': 'chemist', 'drug store': 'chemist',
+    'salons': 'hairdresser', 'salon': 'hairdresser', 'hair': 'hairdresser', 'beauty': 'hairdresser',
+    'banks': 'bank', 'atms': 'atm',
+    'realtors': 'estate_agent', 'realtor': 'estate_agent', 'real estate': 'estate_agent',
+    'lawyers': 'legal', 'attorney': 'legal', 'attorneys': 'legal',
+    'hotels': 'hotel', 'motels': 'hotel',
+    'pizza': 'restaurant', 'sushi': 'restaurant', 'tacos': 'restaurant',
   };
-  const t = term.toLowerCase().trim();
+  // Strip stop words from multi-word terms before alias lookup
+  const t = term.toLowerCase().trim()
+    .split(/\s+/).filter(w => !STOP_WORDS.has(w)).join(' ');
+  if (!t) return term.toLowerCase().trim();
   if (QUERY_ALIASES[t]) return QUERY_ALIASES[t];
-  // Simple de-plural
-  if (t.endsWith('s') && t.length > 4) {
+  // Simple de-plural (min length 5 to avoid clobbering short words like 'pub')
+  if (t.endsWith('s') && t.length >= 5) {
     const singular = t.slice(0, -1);
     if (QUERY_ALIASES[singular]) return QUERY_ALIASES[singular];
     return singular;
