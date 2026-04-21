@@ -14,127 +14,289 @@ interface Business {
   website?: string;
   hours?: string;
   confidence: number;
+  zip?: string;
   distance_miles?: number;
   possibly_closed?: boolean;
   staleness?: { tier: string; grade: string; age_days: number | null; freshness_warning: string | null };
 }
 
-interface SearchResult {
-  total: number;
-  returned: number;
-  results: Business[];
-  data_freshness?: { grade: string; freshness_warning: string | null };
+interface OracleData {
+  zip: string;
+  name: string;
+  oracle_narrative: string;
+  restaurant_capacity: {
+    restaurant_count: number;
+    capture_rate_pct: number;
+    saturation_status: string;
+    gap_count: number;
+    tier_breakdown: Record<string, number>;
+  };
+  market_gaps: {
+    price_tier_gaps: Array<{ tier: string; gap: number; status: string; description: string; actual_count: number; expected_count: number }>;
+    top_gap: { tier: string; description: string; gap: number };
+  };
+  growth_trajectory: { state: string; label: string; confidence: string };
+  top_questions: Array<{ question: string; answer: string; signal_strength: string; category: string }>;
+  demographics: { population: number; median_household_income: number; median_home_value: number };
+  trend?: { cycles: number; capture_rate: string; saturation_streak: number };
 }
 
-// ── Intent parser ─────────────────────────────────────────────────────────────
-// Maps natural language to MCP tool + params without an LLM
+// ── Intent detection ──────────────────────────────────────────────────────────
+
+const ORACLE_TRIGGERS = [
+  /room for (a|another)/i,
+  /should i open/i,
+  /is there (a )?gap/i,
+  /market.*saturat/i,
+  /saturat/i,
+  /upscale|fine dining|casual dining/i,
+  /price.*gap|gap.*price/i,
+  /growing|empty nest|trajectory/i,
+  /opportunity/i,
+  /restaurant.*32\d{3}/i,
+  /32\d{3}.*restaurant/i,
+  /dining.*32\d{3}/i,
+  /what.*missing/i,
+  /how many restaurant/i,
+  /demand|supply/i,
+];
+
+function detectOracleIntent(q: string): { triggered: boolean; zip: string | null } {
+  const zipMatch = q.match(/\b(32081|32082)\b/);
+  const zip = zipMatch ? zipMatch[1] : null;
+  const triggered = ORACLE_TRIGGERS.some(r => r.test(q));
+  // Also trigger if query is about restaurants + has a ZIP
+  const restaurantZip = zip && /restaurant|dining|food|eat|cafe|bar/i.test(q);
+  return { triggered: triggered || !!restaurantZip, zip };
+}
+
+// ── Query parser ──────────────────────────────────────────────────────────────
 
 function parseQuery(q: string): { tool: string; params: Record<string, string | number> } {
   const s = q.toLowerCase().trim();
 
-  // Phone lookup: "phone number for X" / "call X"
-  const phoneMatch = s.match(/(?:phone|number|call|contact)\s+(?:for|of)?\s*(.+)/);
-  if (phoneMatch) {
-    return { tool: "local_intel_search", params: { query: phoneMatch[1].trim(), limit: 5 } };
-  }
-
-  // Hours: "hours for X" / "is X open"
-  const hoursMatch = s.match(/(?:hours?|open|close|closing)\s+(?:for|of)?\s*(.+)/);
-  if (hoursMatch) {
-    return { tool: "local_intel_search", params: { query: hoursMatch[1].trim(), limit: 5 } };
-  }
-
-  // Nearby: "near me" / "closest X" / "X near"
   const nearbyMatch = s.match(/(?:near(?:by|est)?|closest|around)\s+(.+)|(.+)\s+near(?:by)?/);
   if (nearbyMatch) {
     const cat = (nearbyMatch[1] || nearbyMatch[2] || "").trim();
-    return {
-      tool: "local_intel_nearby",
-      params: { lat: 30.1893, lon: -81.3815, radius_miles: 2, category: cat, limit: 10 },
-    };
+    return { tool: "local_intel_nearby", params: { lat: 30.1893, lon: -81.3815, radius_miles: 2, category: cat, limit: 10 } };
   }
 
-  // Category searches: "all restaurants in 32082"
   const catZipMatch = s.match(/(?:all\s+)?(\w+)\s+in\s+(\d{5})/);
   if (catZipMatch) {
-    return {
-      tool: "local_intel_search",
-      params: { zip: catZipMatch[2], query: catZipMatch[1], limit: 20 },
-    };
+    return { tool: "local_intel_search", params: { zip: catZipMatch[2], query: catZipMatch[1], limit: 20 } };
   }
 
-  // ZIP context: "what's in 32082" / "show me 32081"
-  const zipMatch = s.match(/\b(3\d{4})\b/);
-  if (zipMatch && (s.includes("what") || s.includes("show") || s.includes("in") || s.includes("around"))) {
-    return { tool: "local_intel_search", params: { zip: zipMatch[1], limit: 20 } };
-  }
-
-  // Default: keyword search
-  return { tool: "local_intel_search", params: { query: q, limit: 10 } };
+  return { tool: "local_intel_search", params: { query: q, limit: 15 } };
 }
 
-// ── Format answer ─────────────────────────────────────────────────────────────
+// ── MCP call ──────────────────────────────────────────────────────────────────
 
-function formatAnswer(query: string, biz: Business): string {
-  const s = query.toLowerCase();
-  if (s.includes("phone") || s.includes("number") || s.includes("call") || s.includes("contact")) {
-    return biz.phone ? `${biz.phone}` : "No phone number on record.";
-  }
-  if (s.includes("hour") || s.includes("open") || s.includes("close")) {
-    return biz.hours ? `${biz.hours}` : "Hours not on record.";
-  }
-  if (s.includes("website") || s.includes("url") || s.includes("web") || s.includes("online")) {
-    return biz.website ? `${biz.website}` : "No website on record.";
-  }
-  if (s.includes("address") || s.includes("where") || s.includes("located")) {
-    return biz.address ? `${biz.address}` : "Address not on record.";
-  }
-  return biz.address || biz.phone || biz.hours || "Found — see details below.";
+async function callMCP(tool: string, args: Record<string, unknown>) {
+  const res = await fetch(`${RAILWAY}/api/local-intel/mcp`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: tool, arguments: args } }),
+  });
+  const json = await res.json();
+  const raw = json.result ?? json;
+  try {
+    if (raw?.content?.[0]?.text) return JSON.parse(raw.content[0].text);
+  } catch { /* fall through */ }
+  return raw;
 }
 
-// ── Suggestion chips ──────────────────────────────────────────────────────────
+// ── Signal strength color ─────────────────────────────────────────────────────
 
-const SUGGESTIONS = [
-  "phone number for Aqua Bar and Grill",
-  "restaurants in 32082",
-  "dentist near Ponte Vedra",
-  "hours for Publix Nocatee",
-  "what's in 32081",
-  "banks near me",
-];
+function signalColor(s: string) {
+  if (s === "strong") return "#137333";
+  if (s === "moderate") return "#e37400";
+  return "#5f6368";
+}
 
 // ── Staleness badge ───────────────────────────────────────────────────────────
 
 function FreshnessBadge({ tier }: { tier?: string }) {
-  if (!tier) return null;
+  if (!tier || tier === "FRESH") return null;
   const colors: Record<string, { bg: string; text: string }> = {
-    FRESH: { bg: "#dcfce7", text: "#166534" },
     WARM:  { bg: "#fef9c3", text: "#854d0e" },
     STALE: { bg: "#ffedd5", text: "#9a3412" },
     COLD:  { bg: "#fee2e2", text: "#991b1b" },
   };
   const c = colors[tier] ?? { bg: "#f3f4f6", text: "#374151" };
   return (
-    <span style={{
-      fontSize: 10, fontWeight: 600, padding: "1px 6px", borderRadius: 99,
-      background: c.bg, color: c.text, letterSpacing: "0.04em",
-    }}>
+    <span style={{ fontSize: 10, fontWeight: 600, padding: "1px 6px", borderRadius: 99, background: c.bg, color: c.text }}>
       {tier}
     </span>
+  );
+}
+
+// ── Suggestions ───────────────────────────────────────────────────────────────
+
+const SUGGESTIONS = [
+  "Is there room for another restaurant in 32082?",
+  "What's missing in Ponte Vedra Beach?",
+  "upscale dining 32082",
+  "dentist near Ponte Vedra",
+  "phone number for Publix Nocatee",
+  "restaurants in 32081",
+];
+
+// ── Oracle Answer Card ────────────────────────────────────────────────────────
+
+function OracleCard({ oracle, query }: { oracle: OracleData; query: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const rc = oracle.restaurant_capacity;
+  const tg = oracle.growth_trajectory;
+  const topGap = oracle.market_gaps?.top_gap;
+
+  // Pick the most relevant question based on query
+  const q = query.toLowerCase();
+  let featuredQ = oracle.top_questions?.[0];
+  if (/gap|missing|upscale|price|what/.test(q)) {
+    featuredQ = oracle.top_questions?.find(tq => tq.category === "category_gap") ?? featuredQ;
+  } else if (/room|another|open|should/.test(q)) {
+    featuredQ = oracle.top_questions?.find(tq => tq.category === "restaurant_gap") ?? featuredQ;
+  } else if (/grow|trend|empty|stable/.test(q)) {
+    featuredQ = oracle.top_questions?.find(tq => tq.category === "growth_trajectory") ?? featuredQ;
+  }
+
+  return (
+    <div style={{
+      border: "1px solid #1a73e8",
+      borderRadius: 12,
+      padding: "20px 24px",
+      marginBottom: 20,
+      background: "#f8fbff",
+    }}>
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <span style={{ fontSize: 12, color: "#1a73e8", fontWeight: 600, letterSpacing: "0.03em" }}>
+          LOCALINTEL ORACLE · {oracle.name} ({oracle.zip})
+        </span>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {oracle.trend && oracle.trend.cycles >= 2 && (
+            <span style={{ fontSize: 11, color: "#5f6368" }}>
+              {oracle.trend.capture_rate === "up" ? "↑" : oracle.trend.capture_rate === "down" ? "↓" : "→"} {oracle.trend.cycles} cycles
+            </span>
+          )}
+          <span style={{
+            fontSize: 11, padding: "2px 8px", borderRadius: 99,
+            background: rc.saturation_status === "undersupplied" ? "#dcfce7" : "#fee2e2",
+            color: rc.saturation_status === "undersupplied" ? "#166534" : "#991b1b",
+            fontWeight: 600,
+          }}>
+            {rc.saturation_status === "undersupplied" ? "GAP EXISTS" : "SATURATED"}
+          </span>
+        </div>
+      </div>
+
+      {/* Featured answer */}
+      {featuredQ && (
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 13, color: "#5f6368", marginBottom: 4 }}>{featuredQ.question}</div>
+          <div style={{ fontSize: 17, color: "#202124", fontWeight: 500, lineHeight: 1.4 }}>
+            {featuredQ.answer}
+          </div>
+        </div>
+      )}
+
+      {/* Key stats row */}
+      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 12 }}>
+        <div style={{ fontSize: 12, color: "#5f6368" }}>
+          <span style={{ fontWeight: 600, color: "#202124" }}>{rc.restaurant_count}</span> restaurants
+        </div>
+        <div style={{ fontSize: 12, color: "#5f6368" }}>
+          <span style={{ fontWeight: 600, color: "#202124" }}>{rc.capture_rate_pct}%</span> demand captured
+        </div>
+        <div style={{ fontSize: 12, color: "#5f6368" }}>
+          <span style={{ fontWeight: 600, color: rc.gap_count > 0 ? "#137333" : "#5f6368" }}>
+            {rc.gap_count > 0 ? `+${rc.gap_count}` : "0"}
+          </span> more the market can support
+        </div>
+        <div style={{ fontSize: 12, color: "#5f6368" }}>
+          <span style={{ fontWeight: 600, color: "#202124" }}>{tg.label}</span>
+        </div>
+        {topGap && (
+          <div style={{ fontSize: 12, color: "#5f6368" }}>
+            Top gap: <span style={{ fontWeight: 600, color: "#1a73e8" }}>{topGap.description}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Expand toggle */}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        style={{ fontSize: 12, color: "#1a73e8", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+        {expanded ? "▲ Less detail" : "▼ Full oracle report"}
+      </button>
+
+      {expanded && (
+        <div style={{ marginTop: 14, borderTop: "1px solid #e8eaed", paddingTop: 14 }}>
+          {/* Narrative */}
+          <div style={{ fontSize: 13, color: "#202124", lineHeight: 1.6, marginBottom: 14 }}>
+            {oracle.oracle_narrative}
+          </div>
+
+          {/* Price tier gaps */}
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "#5f6368", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Price Tier Analysis
+            </div>
+            {oracle.market_gaps.price_tier_gaps.map((tier, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+                <div style={{ width: 70, fontSize: 12, color: "#202124", fontWeight: 500, textTransform: "capitalize" }}>{tier.tier}</div>
+                <div style={{ flex: 1, height: 6, borderRadius: 99, background: "#e8eaed", overflow: "hidden" }}>
+                  <div style={{
+                    height: "100%", borderRadius: 99,
+                    background: tier.actual_count === 0 ? "#d93025" : tier.gap > 0 ? "#f9ab00" : "#137333",
+                    width: `${Math.min(100, (tier.actual_count / Math.max(tier.expected_count, 1)) * 100)}%`,
+                  }} />
+                </div>
+                <div style={{ fontSize: 11, color: "#5f6368", whiteSpace: "nowrap" }}>
+                  {tier.actual_count}/{tier.expected_count} · {tier.description}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* All 3 questions */}
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "#5f6368", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Oracle Q&A
+            </div>
+            {oracle.top_questions.map((tq, i) => (
+              <div key={i} style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 12, color: "#5f6368", marginBottom: 2 }}>{tq.question}</div>
+                <div style={{ fontSize: 13, color: "#202124", lineHeight: 1.5 }}
+                  dangerouslySetInnerHTML={{ __html: tq.answer }} />
+                <div style={{ fontSize: 10, color: signalColor(tq.signal_strength), marginTop: 2, fontWeight: 600 }}>
+                  {tq.signal_strength.toUpperCase()} SIGNAL
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Demo + income */}
+          <div style={{ fontSize: 12, color: "#70757a", marginTop: 10, paddingTop: 10, borderTop: "1px solid #e8eaed" }}>
+            Pop. {oracle.demographics.population.toLocaleString()} ·
+            Median HHI ${oracle.demographics.median_household_income.toLocaleString()} ·
+            Median home ${oracle.demographics.median_home_value.toLocaleString()}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function LocalIntelSearchPage() {
-  const [query, setQuery]         = useState("");
-  const [loading, setLoading]     = useState(false);
-  const [results, setResults]     = useState<Business[] | null>(null);
-  const [answer, setAnswer]       = useState<string | null>(null);
-  const [topMatch, setTopMatch]   = useState<Business | null>(null);
-  const [error, setError]         = useState<string | null>(null);
-  const [freshness, setFreshness] = useState<{ grade: string; freshness_warning: string | null } | null>(null);
-  const [total, setTotal]         = useState<number>(0);
+  const [query, setQuery]       = useState("");
+  const [loading, setLoading]   = useState(false);
+  const [results, setResults]   = useState<Business[] | null>(null);
+  const [oracle, setOracle]     = useState<OracleData | null>(null);
+  const [total, setTotal]       = useState(0);
+  const [error, setError]       = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
@@ -143,45 +305,26 @@ export default function LocalIntelSearchPage() {
     if (!q.trim()) return;
     setLoading(true);
     setResults(null);
-    setAnswer(null);
-    setTopMatch(null);
+    setOracle(null);
     setError(null);
-    setFreshness(null);
 
     try {
+      const { triggered, zip } = detectOracleIntent(q);
       const { tool, params } = parseQuery(q);
-      const body = {
-        jsonrpc: "2.0",
-        id: 1,
-        method: "tools/call",
-        params: { name: tool, arguments: params },
-      };
-      const res = await fetch(`${RAILWAY}/api/local-intel/mcp`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const json = await res.json();
-      // MCP wraps tool output in result.content[0].text (JSON string) — unwrap it
-      const raw = json.result ?? json;
-      const data: SearchResult = (() => {
-        try {
-          if (raw?.content?.[0]?.text) return JSON.parse(raw.content[0].text);
-        } catch { /* fall through */ }
-        return raw;
-      })();
 
-      if (data.results && data.results.length > 0) {
-        setResults(data.results);
-        setTotal(data.total ?? data.results.length);
-        setTopMatch(data.results[0]);
-        setAnswer(formatAnswer(q, data.results[0]));
-        setFreshness(data.data_freshness ?? null);
-      } else {
-        setResults([]);
-        setAnswer("No results found in the LocalIntel dataset for that query.");
-      }
-    } catch (e) {
+      // Run search + oracle in parallel when oracle is triggered
+      const searchPromise = callMCP(tool, params as Record<string, unknown>);
+      const oraclePromise = triggered
+        ? callMCP("local_intel_oracle", { zip: zip ?? "32082" })
+        : Promise.resolve(null);
+
+      const [searchData, oracleData] = await Promise.all([searchPromise, oraclePromise]);
+
+      setResults(searchData.results ?? []);
+      setTotal(searchData.total ?? searchData.results?.length ?? 0);
+      if (oracleData && !oracleData.error) setOracle(oracleData);
+
+    } catch {
       setError("Could not reach LocalIntel. Check Railway backend.");
     } finally {
       setLoading(false);
@@ -194,21 +337,10 @@ export default function LocalIntelSearchPage() {
   }
 
   return (
-    <div style={{
-      minHeight: "100vh",
-      background: "#fff",
-      fontFamily: "arial, sans-serif",
-      color: "#202124",
-    }}>
+    <div style={{ minHeight: "100vh", background: "#fff", fontFamily: "arial, sans-serif", color: "#202124" }}>
 
-      {/* ── Header ── */}
-      <div style={{
-        borderBottom: "1px solid #e8eaed",
-        padding: "12px 24px",
-        display: "flex",
-        alignItems: "center",
-        gap: 24,
-      }}>
+      {/* Header */}
+      <div style={{ borderBottom: "1px solid #e8eaed", padding: "12px 24px", display: "flex", alignItems: "center", gap: 24 }}>
         <span style={{ fontSize: 22, fontWeight: 400, color: "#5f6368", letterSpacing: "-0.5px" }}>
           Local<span style={{ color: "#1a73e8", fontWeight: 700 }}>Intel</span>
         </span>
@@ -217,32 +349,26 @@ export default function LocalIntelSearchPage() {
         </span>
       </div>
 
-      {/* ── Search area ── */}
+      {/* Search area */}
       <div style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        padding: results ? "24px 24px 16px" : "80px 24px 0",
+        display: "flex", flexDirection: "column", alignItems: "center",
+        padding: results !== null ? "24px 24px 16px" : "80px 24px 0",
         transition: "padding 300ms",
       }}>
-        {!results && (
+        {results === null && (
           <div style={{ fontSize: 42, fontWeight: 400, color: "#5f6368", marginBottom: 28, letterSpacing: "-1px" }}>
             Local<span style={{ color: "#1a73e8", fontWeight: 700 }}>Intel</span>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} style={{ width: "100%", maxWidth: 600 }}>
+        <form onSubmit={handleSubmit} style={{ width: "100%", maxWidth: 620 }}>
           <div style={{
-            display: "flex",
-            alignItems: "center",
-            border: "1px solid #dfe1e5",
-            borderRadius: 24,
+            display: "flex", alignItems: "center",
+            border: "1px solid #dfe1e5", borderRadius: 24,
             padding: "10px 16px",
             boxShadow: "0 1px 6px rgba(32,33,36,.28)",
-            background: "#fff",
-            gap: 10,
+            background: "#fff", gap: 10,
           }}>
-            {/* Search icon */}
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9aa0a6" strokeWidth="2.5">
               <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
             </svg>
@@ -250,14 +376,12 @@ export default function LocalIntelSearchPage() {
               ref={inputRef}
               value={query}
               onChange={e => setQuery(e.target.value)}
-              placeholder="Ask anything about local businesses…"
-              style={{
-                flex: 1, border: "none", outline: "none",
-                fontSize: 16, color: "#202124", background: "transparent",
-              }}
+              placeholder="Ask anything — 'room for a restaurant in 32082?' or 'dentist near Ponte Vedra'"
+              style={{ flex: 1, border: "none", outline: "none", fontSize: 15, color: "#202124", background: "transparent" }}
             />
             {query && (
-              <button type="button" onClick={() => { setQuery(""); setResults(null); setAnswer(null); inputRef.current?.focus(); }}
+              <button type="button"
+                onClick={() => { setQuery(""); setResults(null); setOracle(null); inputRef.current?.focus(); }}
                 style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: "#9aa0a6" }}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                   <path d="M18 6 6 18M6 6l12 12"/>
@@ -265,31 +389,20 @@ export default function LocalIntelSearchPage() {
               </button>
             )}
             {loading && (
-              <div style={{
-                width: 18, height: 18, border: "2px solid #e8eaed",
-                borderTopColor: "#1a73e8", borderRadius: "50%",
-                animation: "spin 0.7s linear infinite",
-              }} />
+              <div style={{ width: 18, height: 18, border: "2px solid #e8eaed", borderTopColor: "#1a73e8", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
             )}
           </div>
 
-          {/* Suggestion chips — only on empty state */}
-          {!results && !loading && (
+          {results === null && !loading && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", marginTop: 20 }}>
               {SUGGESTIONS.map(s => (
-                <button
-                  key={s}
-                  type="button"
+                <button key={s} type="button"
                   onClick={() => { setQuery(s); runSearch(s); }}
                   style={{
                     padding: "6px 14px", borderRadius: 99,
                     border: "1px solid #dfe1e5", background: "#fff",
                     fontSize: 13, color: "#202124", cursor: "pointer",
-                    transition: "box-shadow 150ms",
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.boxShadow = "0 1px 4px rgba(32,33,36,.2)")}
-                  onMouseLeave={e => (e.currentTarget.style.boxShadow = "none")}
-                >
+                  }}>
                   {s}
                 </button>
               ))}
@@ -298,123 +411,29 @@ export default function LocalIntelSearchPage() {
         </form>
       </div>
 
-      {/* ── Results ── */}
+      {/* Results */}
       {error && (
-        <div style={{ maxWidth: 600, margin: "24px auto", padding: "0 24px", fontSize: 14, color: "#d93025" }}>
+        <div style={{ maxWidth: 620, margin: "24px auto", padding: "0 24px", fontSize: 14, color: "#d93025" }}>
           {error}
         </div>
       )}
 
-      {results && !loading && (
-        <div style={{ maxWidth: 700, margin: "0 auto", padding: "0 24px 48px" }}>
+      {results !== null && !loading && (
+        <div style={{ maxWidth: 720, margin: "0 auto", padding: "0 24px 48px" }}>
 
-          {/* ── Top answer card ── */}
-          {topMatch && answer && (
-            <div style={{
-              border: "1px solid #e8eaed",
-              borderRadius: 12,
-              padding: "20px 24px",
-              marginBottom: 20,
-              boxShadow: "0 1px 3px rgba(32,33,36,.1)",
-            }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
-                <span style={{ fontSize: 12, color: "#1a73e8", fontWeight: 500 }}>LocalIntel · Best match</span>
-                <FreshnessBadge tier={topMatch.staleness?.tier} />
-              </div>
-              <div style={{ fontSize: 22, color: "#202124", fontWeight: 400, marginBottom: 2 }}>
-                {answer}
-              </div>
-              <div style={{ fontSize: 14, color: "#5f6368", marginBottom: 12 }}>
-                {topMatch.name} · {topMatch.category}
-                {topMatch.address && ` · ${topMatch.address}`}
-              </div>
+          {/* Oracle card — shown when intent detected */}
+          {oracle && <OracleCard oracle={oracle} query={query} />}
 
-              {/* Detail pills */}
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {topMatch.phone && (
-                  <a href={`tel:${topMatch.phone}`} style={{
-                    fontSize: 13, padding: "4px 12px", borderRadius: 99,
-                    border: "1px solid #dfe1e5", color: "#1a73e8",
-                    textDecoration: "none", display: "flex", alignItems: "center", gap: 5,
-                  }}>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13.1a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 2.48h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 10a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
-                    </svg>
-                    {topMatch.phone}
-                  </a>
-                )}
-                {topMatch.hours && (
-                  <span style={{
-                    fontSize: 13, padding: "4px 12px", borderRadius: 99,
-                    border: "1px solid #dfe1e5", color: "#202124",
-                    display: "flex", alignItems: "center", gap: 5,
-                  }}>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
-                    </svg>
-                    {topMatch.hours}
-                  </span>
-                )}
-                {topMatch.website && (
-                  <a href={topMatch.website} target="_blank" rel="noopener noreferrer" style={{
-                    fontSize: 13, padding: "4px 12px", borderRadius: 99,
-                    border: "1px solid #dfe1e5", color: "#1a73e8",
-                    textDecoration: "none", display: "flex", alignItems: "center", gap: 5,
-                  }}>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-                    </svg>
-                    Website
-                  </a>
-                )}
-                {topMatch.possibly_closed && (
-                  <span style={{
-                    fontSize: 13, padding: "4px 12px", borderRadius: 99,
-                    border: "1px solid #fde68a", color: "#92400e", background: "#fffbeb",
-                  }}>
-                    ⚠ May be closed — verify before visiting
-                  </span>
-                )}
-              </div>
-
-              {/* Confidence bar */}
-              <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ flex: 1, height: 3, borderRadius: 99, background: "#f1f3f4", overflow: "hidden" }}>
-                  <div style={{
-                    height: "100%", borderRadius: 99, background: "#1a73e8",
-                    width: `${topMatch.confidence}%`,
-                  }} />
-                </div>
-                <span style={{ fontSize: 11, color: "#9aa0a6", whiteSpace: "nowrap" }}>
-                  {topMatch.confidence}% confidence
-                  {topMatch.staleness?.age_days != null ? ` · ${topMatch.staleness.age_days}d old` : ""}
-                </span>
-              </div>
+          {/* Result count */}
+          {results.length > 0 && (
+            <div style={{ fontSize: 13, color: "#70757a", marginBottom: 12 }}>
+              {oracle ? "Related businesses — " : ""}About {total.toLocaleString()} result{total !== 1 ? "s" : ""}
             </div>
           )}
 
-          {/* ── Result count + freshness ── */}
-          <div style={{
-            fontSize: 13, color: "#70757a", marginBottom: 12,
-            display: "flex", justifyContent: "space-between", alignItems: "center",
-          }}>
-            <span>
-              About {total.toLocaleString()} result{total !== 1 ? "s" : ""}
-            </span>
-            {freshness && (
-              <span style={{ fontSize: 12, color: freshness.grade === "A" ? "#137333" : "#e37400" }}>
-                Data freshness: {freshness.grade}
-                {freshness.freshness_warning ? ` · ${freshness.freshness_warning}` : ""}
-              </span>
-            )}
-          </div>
-
-          {/* ── Result list ── */}
+          {/* Business list */}
           {results.map((biz, i) => (
-            <div key={i} style={{
-              padding: "16px 0",
-              borderBottom: i < results.length - 1 ? "1px solid #e8eaed" : "none",
-            }}>
+            <div key={i} style={{ padding: "16px 0", borderBottom: i < results.length - 1 ? "1px solid #e8eaed" : "none" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
                 {biz.website ? (
                   <a href={biz.website} target="_blank" rel="noopener noreferrer"
@@ -431,35 +450,31 @@ export default function LocalIntelSearchPage() {
               <div style={{ fontSize: 13, color: "#006621", marginBottom: 4 }}>
                 {biz.category}
                 {biz.address && ` · ${biz.address}`}
+                {biz.zip && ` · ${biz.zip}`}
                 {biz.distance_miles != null && ` · ${biz.distance_miles.toFixed(1)}mi`}
               </div>
               <div style={{ fontSize: 14, color: "#4d5156", display: "flex", flexWrap: "wrap", gap: 14 }}>
                 {biz.phone && <span>{biz.phone}</span>}
                 {biz.hours && <span>{biz.hours}</span>}
-                {biz.possibly_closed && (
-                  <span style={{ color: "#e37400" }}>⚠ May be closed</span>
-                )}
+                {biz.possibly_closed && <span style={{ color: "#e37400" }}>⚠ May be closed</span>}
               </div>
             </div>
           ))}
 
-          {results.length === 0 && (
+          {results.length === 0 && !oracle && (
             <div style={{ fontSize: 14, color: "#5f6368", padding: "20px 0" }}>
               No businesses matched that query in the current LocalIntel dataset.
             </div>
           )}
 
-          {/* ── Footer attribution ── */}
-          <div style={{
-            marginTop: 32, paddingTop: 16, borderTop: "1px solid #e8eaed",
-            fontSize: 12, color: "#9aa0a6",
-          }}>
-            LocalIntel · Agent-native business intelligence · St. Johns County FL ·{" "}
-            <a href="https://gsb-swarm-production.up.railway.app/api/local-intel/mcp/manifest"
-              target="_blank" rel="noopener noreferrer"
-              style={{ color: "#1a73e8", textDecoration: "none" }}>
-              MCP manifest
-            </a>
+          {results.length === 0 && oracle && (
+            <div style={{ fontSize: 14, color: "#5f6368", padding: "12px 0" }}>
+              No individual business listings matched — oracle data above is based on full ZIP dataset.
+            </div>
+          )}
+
+          <div style={{ marginTop: 32, paddingTop: 16, borderTop: "1px solid #e8eaed", fontSize: 12, color: "#9aa0a6" }}>
+            LocalIntel · {oracle ? "Oracle + " : ""}Live dataset · St. Johns County FL
           </div>
         </div>
       )}
