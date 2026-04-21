@@ -162,7 +162,14 @@ export default function LocalIntelSearchPage() {
         body: JSON.stringify(body),
       });
       const json = await res.json();
-      const data: SearchResult = json.result ?? json;
+      // MCP wraps tool output in result.content[0].text (JSON string) — unwrap it
+      const raw = json.result ?? json;
+      const data: SearchResult = (() => {
+        try {
+          if (raw?.content?.[0]?.text) return JSON.parse(raw.content[0].text);
+        } catch { /* fall through */ }
+        return raw;
+      })();
 
       if (data.results && data.results.length > 0) {
         setResults(data.results);
