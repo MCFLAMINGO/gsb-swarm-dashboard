@@ -339,13 +339,13 @@ function SignalCard({
         <div className="flex-shrink-0 flex items-center gap-1.5">
           {/* Trend direction arrow */}
           {signal.trend_capture === "up" && (
-            <ArrowUpRight size={12} className="text-emerald-400" title="Capture rate rising" />
+            <ArrowUpRight size={12} className="text-emerald-400" />
           )}
           {signal.trend_capture === "down" && (
-            <TrendingDown size={12} className="text-red-400" title="Capture rate falling" />
+            <TrendingDown size={12} className="text-red-400" />
           )}
           {signal.trend_capture === "flat" && (
-            <Minus size={12} className="text-muted-foreground" title="Stable" />
+            <Minus size={12} className="text-muted-foreground" />
           )}
           {/* Streak badge — only show if 3+ cycles for conviction */}
           {(signal.trend_streak ?? 0) >= 3 && (
