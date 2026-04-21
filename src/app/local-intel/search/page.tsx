@@ -72,21 +72,76 @@ function detectOracleIntent(q: string): { triggered: boolean; zip: string | null
 
 // ── Query parser ──────────────────────────────────────────────────────────────
 
+// Strip search noise so backend gets clean terms
+// e.g. "restaurants in Nocatee" → "restaurant"
+// e.g. "dentists near Ponte Vedra" → "dentist"
+function cleanQueryTerm(term: string): string {
+  const QUERY_ALIASES: Record<string, string> = {
+    'restaurants': 'restaurant', 'dining': 'restaurant', 'food': 'restaurant',
+    'cafes': 'cafe', 'coffee': 'cafe', 'coffee shops': 'cafe',
+    'bars': 'bar', 'pubs': 'bar', 'fast food': 'fast_food',
+    'dentists': 'dentist', 'doctors': 'clinic', 'clinics': 'clinic',
+    'gym': 'fitness_centre', 'gyms': 'fitness_centre', 'fitness': 'fitness_centre',
+    'grocery': 'supermarket', 'groceries': 'supermarket',
+    'gas': 'fuel', 'gas station': 'fuel', 'gas stations': 'fuel',
+    'pharmacy': 'chemist', 'pharmacies': 'chemist',
+    'salons': 'hairdresser', 'salon': 'hairdresser',
+    'banks': 'bank', 'realtors': 'estate_agent', 'realtor': 'estate_agent',
+    'real estate': 'estate_agent', 'hotels': 'hotel',
+  };
+  const t = term.toLowerCase().trim();
+  if (QUERY_ALIASES[t]) return QUERY_ALIASES[t];
+  // Simple de-plural
+  if (t.endsWith('s') && t.length > 4) {
+    const singular = t.slice(0, -1);
+    if (QUERY_ALIASES[singular]) return QUERY_ALIASES[singular];
+    return singular;
+  }
+  return t;
+}
+
 function parseQuery(q: string): { tool: string; params: Record<string, string | number> } {
   const s = q.toLowerCase().trim();
 
+  // Extract any 5-digit ZIP from the query
+  const zipMatch = s.match(/\b(\d{5})\b/);
+  const zip = zipMatch ? zipMatch[1] : null;
+
   const nearbyMatch = s.match(/(?:near(?:by|est)?|closest|around)\s+(.+)|(.+)\s+near(?:by)?/);
   if (nearbyMatch) {
-    const cat = (nearbyMatch[1] || nearbyMatch[2] || "").trim();
+    const cat = cleanQueryTerm((nearbyMatch[1] || nearbyMatch[2] || "").trim());
     return { tool: "local_intel_nearby", params: { lat: 30.1893, lon: -81.3815, radius_miles: 2, category: cat, limit: 10 } };
   }
 
-  const catZipMatch = s.match(/(?:all\s+)?(\w+)\s+in\s+(\d{5})/);
+  // "X in ZIPCODE" or "X in city name"
+  const catZipMatch = s.match(/(?:all\s+)?([\w\s]+?)\s+in\s+(?:(\d{5})|nocatee|ponte vedra|st\.?\s*johns?|st\.?\s*augustine|jacksonville|tampa|orlando)/);
   if (catZipMatch) {
-    return { tool: "local_intel_search", params: { zip: catZipMatch[2], query: catZipMatch[1], limit: 20 } };
+    const rawTerm = catZipMatch[1].trim();
+    const term = cleanQueryTerm(rawTerm);
+    // Resolve city name to ZIP if no numeric ZIP found
+    const cityToZip: Record<string, string> = {
+      'nocatee': '32081', 'ponte vedra': '32082', 'ponte vedra beach': '32082',
+      'st johns': '32092', 'saint johns': '32092', 'st augustine': '32084',
+      'saint augustine': '32084',
+    };
+    const cityMatch = s.match(/in\s+([a-z\s.]+?)(?:\s*$|\s+\d)/);
+    const cityKey = cityMatch ? cityMatch[1].trim().replace(/\.$/, '') : '';
+    const resolvedZip = zip || cityToZip[cityKey] || null;
+    const params: Record<string, string | number> = { query: term, limit: 20 };
+    if (resolvedZip) params.zip = resolvedZip;
+    return { tool: "local_intel_search", params };
   }
 
-  return { tool: "local_intel_search", params: { query: q, limit: 15 } };
+  // Bare category query with a ZIP somewhere in the string
+  if (zip) {
+    const withoutZip = s.replace(/\b\d{5}\b/, '').trim();
+    const term = cleanQueryTerm(withoutZip || s);
+    return { tool: "local_intel_search", params: { query: term, zip, limit: 20 } };
+  }
+
+  // Default: pass cleaned query, no ZIP filter (search all)
+  const term = cleanQueryTerm(s);
+  return { tool: "local_intel_search", params: { query: term, limit: 20 } };
 }
 
 // ── MCP call ──────────────────────────────────────────────────────────────────
@@ -133,12 +188,12 @@ function FreshnessBadge({ tier }: { tier?: string }) {
 // ── Suggestions ───────────────────────────────────────────────────────────────
 
 const SUGGESTIONS = [
+  "restaurants in Nocatee",
+  "dentists in Ponte Vedra Beach",
+  "coffee shops 32081",
+  "gyms in 32082",
+  "Publix",
   "Is there room for another restaurant in 32082?",
-  "What's missing in Ponte Vedra Beach?",
-  "upscale dining 32082",
-  "dentist near Ponte Vedra",
-  "phone number for Publix Nocatee",
-  "restaurants in 32081",
 ];
 
 // ── Oracle Answer Card ────────────────────────────────────────────────────────
