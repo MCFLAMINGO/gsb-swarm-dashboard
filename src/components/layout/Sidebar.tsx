@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
-  LayoutDashboard, Bot, DollarSign, Plug, Settings, ChevronLeft, ChevronRight, Gauge, Activity, Swords, Zap, FlaskConical, ShoppingBag, Globe, Radio, TrendingUp
+  LayoutDashboard, Bot, DollarSign, Plug, Settings, ChevronLeft, ChevronRight, Gauge, Activity, Swords, Zap, FlaskConical, ShoppingBag, Globe, Radio, TrendingUp, Eye
 } from "lucide-react";
 import { useState } from "react";
 
@@ -21,6 +21,7 @@ const NAV = [
   { href: "/local-intel", label: "Local Intel",     icon: Globe,           tip: "32081/32082 business intelligence — agentic Google Maps" },
   { href: "/local-intel/live",    label: "↳ Live Feed",      icon: Radio,     tip: "Real-time ZIP coverage, enrichment pipeline, broadcast log" },
   { href: "/local-intel/revenue", label: "↳ Revenue",        icon: TrendingUp, tip: "Revenue stats, top tools, budget gate, agentic visibility" },
+  { href: "/local-intel/oracle",  label: "↳ Oracle Signals", icon: Eye,        tip: "Live signal layer — opportunities, gaps, growth anomalies across all ZIPs" },
   { href: "/connections", label: "API Connections",icon: Plug,            tip: "Telegram, X, x402, wallet keys" },
   { href: "/settings",    label: "Settings",       icon: Settings,        tip: "Dashboard & agent preferences" },
 ];
