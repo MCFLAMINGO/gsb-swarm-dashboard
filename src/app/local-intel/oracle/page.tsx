@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, FormEvent } from "react";
 import {
   Zap, TrendingUp, TrendingDown, AlertTriangle, Target,
   Utensils, DollarSign, Home, Building2, RefreshCw,
   Eye, Radio, ChevronRight, Minus, ArrowUpRight,
-  BarChart2, Users, Flame
+  BarChart2, Users, Flame, Search, SendHorizontal
 } from "lucide-react";
 
 const RAILWAY = "https://gsb-swarm-production.up.railway.app";
@@ -572,7 +572,7 @@ export default function OracleSignalPage() {
   const zipCount    = index ? Object.keys(index.zips).length : 0;
 
   return (
-    <div className="flex flex-col gap-6 p-6 max-w-3xl mx-auto">
+    <div className="flex flex-col gap-6 p-6 max-w-3xl mx-auto overflow-y-auto">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -664,11 +664,143 @@ export default function OracleSignalPage() {
         ))}
       </div>
 
+      {/* ZIP Ask */}
+      <ZipAsk />
+
       {/* Placeholder when no oracle data yet */}
       {!error && !fetching && signals.length === 0 && (
         <div className="text-center py-12 space-y-2">
           <Zap size={24} className="text-muted-foreground mx-auto" />
           <p className="text-sm text-muted-foreground">Oracle worker is initializing — signals appear within 60 seconds of first deploy</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── ZIP Ask ─────────────────────────────────────────────────────────────────
+
+const SUGGESTED = [
+  "housing starts 32082",
+  "major construction projects 32082",
+  "new developments 32081",
+  "building permits 32082",
+  "commercial real estate 32082",
+];
+
+function ZipAsk() {
+  const [query, setQuery]     = useState("");
+  const [zip, setZip]         = useState("32082");
+  const [loading, setLoading] = useState(false);
+  const [results, setResults] = useState<Array<{name:string;category:string;address:string;phone?:string;website?:string}> | null>(null);
+  const [error, setError]     = useState<string | null>(null);
+
+  const run = useCallback(async (q: string, z: string) => {
+    if (!q.trim()) return;
+    setLoading(true);
+    setError(null);
+    setResults(null);
+    try {
+      const res = await fetch(`${RAILWAY}/api/local-intel/mcp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0", id: 1, method: "tools/call",
+          params: { name: "local_intel_search", arguments: { query: q, zip: z, limit: 10 } },
+        }),
+      });
+      const data = await res.json();
+      const text = data?.result?.content?.[0]?.text;
+      if (!text) throw new Error("No result");
+      const parsed = JSON.parse(text);
+      setResults(parsed.results || []);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Search failed");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    run(query, zip);
+  };
+
+  return (
+    <div className="border border-border/30 rounded-xl p-4 bg-muted/10 flex flex-col gap-3">
+      <div className="flex items-center gap-2">
+        <Search size={14} className="text-primary" />
+        <span className="text-sm font-semibold">Ask LocalIntel</span>
+        <span className="text-[10px] text-muted-foreground">· search businesses &amp; signals by ZIP</span>
+      </div>
+
+      <form onSubmit={handleSubmit} className="flex gap-2">
+        <input
+          value={zip}
+          onChange={(e) => setZip(e.target.value)}
+          placeholder="ZIP"
+          className="w-20 bg-muted/30 border border-border/40 rounded-md px-2 py-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-primary"
+          maxLength={5}
+        />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="housing starts, construction projects, dentist…"
+          className="flex-1 bg-muted/30 border border-border/40 rounded-md px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+        />
+        <button
+          type="submit"
+          disabled={loading || !query.trim()}
+          className="bg-primary text-primary-foreground rounded-md px-3 py-1.5 disabled:opacity-40 hover:opacity-90 transition-opacity"
+        >
+          <SendHorizontal size={13} />
+        </button>
+      </form>
+
+      {/* Suggested prompts */}
+      <div className="flex flex-wrap gap-1.5">
+        {SUGGESTED.map((s) => (
+          <button
+            key={s}
+            onClick={() => {
+              const parts = s.match(/(\d{5})/);
+              if (parts) setZip(parts[1]);
+              setQuery(s.replace(/\s*\d{5}\s*/, " ").trim());
+              run(s.replace(/\s*\d{5}\s*/, " ").trim(), parts?.[1] ?? zip);
+            }}
+            className="text-[10px] bg-muted/30 hover:bg-muted/60 text-muted-foreground rounded px-2 py-0.5 transition-colors"
+          >
+            {s}
+          </button>
+        ))}
+      </div>
+
+      {/* Results */}
+      {loading && <p className="text-xs text-muted-foreground animate-pulse">Searching…</p>}
+      {error && <p className="text-xs text-red-400">{error}</p>}
+      {results !== null && (
+        <div className="space-y-1.5">
+          {results.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No matches in {zip} — try a broader query or different ZIP.</p>
+          ) : (
+            results.map((b, i) => (
+              <div key={i} className="bg-muted/20 rounded-lg px-3 py-2 flex flex-col gap-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-foreground">{b.name}</span>
+                  <span className="text-[10px] text-muted-foreground capitalize">{b.category}</span>
+                </div>
+                {b.address && <p className="text-[10px] text-muted-foreground">{b.address}</p>}
+                <div className="flex gap-3">
+                  {b.phone && <span className="text-[10px] text-primary">{b.phone}</span>}
+                  {b.website && (
+                    <a href={b.website} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-400 hover:underline truncate max-w-[200px]">
+                      {b.website.replace(/^https?:\/\/(www\.)?/, "")}
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
         </div>
       )}
     </div>
