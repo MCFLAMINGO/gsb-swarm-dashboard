@@ -267,6 +267,7 @@ export default function LocalIntelLivePage() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [secondsAgo, setSecondsAgo] = useState(0);
   const [errors, setErrors]         = useState<Record<string, boolean>>({});
+  const [resetting, setResetting]   = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const counterRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -323,7 +324,10 @@ export default function LocalIntelLivePage() {
           business_name: e.business_name ?? e.name ?? "",
           zip:           e.zip ?? "",
           confidence:    e.confidence ?? 0,
-          sources_used:  e.sources_used ?? e.sources ?? [],
+          sources_used:  Array.isArray(e.sources_used) ? e.sources_used
+                           : Array.isArray(e.sources) ? e.sources
+                           : typeof e.sources === "string" ? e.sources.split("+")
+                           : [],
           enriched_at:   e.enriched_at ?? e.enrichedAt ?? "",
         })),
       };
@@ -411,6 +415,29 @@ export default function LocalIntelLivePage() {
             <Clock size={11} />
             {lastUpdated ? `Updated ${secondsAgo}s ago` : "Loading…"}
           </span>
+          <button
+            onClick={async () => {
+              setResetting(true);
+              try {
+                const r = await fetch(`${RAILWAY}/api/local-intel/reset-queue`, { method: "POST" });
+                const d = await r.json();
+                console.log("[reset-queue]", d);
+                setTimeout(fetchAll, 3000); // re-fetch after 3s
+              } catch(e) { console.error(e); }
+              finally { setResetting(false); }
+            }}
+            disabled={resetting}
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              padding: "6px 12px", borderRadius: 8, fontSize: 12,
+              background: resetting ? "hsl(0 0% 7%)" : "hsl(4 85% 44% / 0.15)",
+              border: "1px solid hsl(4 85% 44% / 0.4)",
+              color: resetting ? "hsl(0 0% 40%)" : "hsl(4 85% 65%)", cursor: resetting ? "default" : "pointer"
+            }}
+          >
+            <Zap size={12} />
+            {resetting ? "Restarting…" : "Restart Pipeline"}
+          </button>
           <button
             onClick={fetchAll}
             style={{
@@ -600,9 +627,14 @@ export default function LocalIntelLivePage() {
                 fontSize: 13, fontWeight: 600,
                 color: pipelineStatus === "enriching" ? "#22c55e" : "#eab308"
               }}>
-                {loading ? "—" : pipelineStatus}
+                {loading ? "—" : pipelineStatus ?? "idle"}
               </span>
             </div>
+            {enrichEntries.length > 0 && (
+              <div style={{ fontSize: 10, color: "hsl(0 0% 40%)", marginTop: 6 }}>
+                Last: {timeAgo(enrichEntries[0]?.enriched_at)}
+              </div>
+            )}
           </Panel>
         </div>
 
