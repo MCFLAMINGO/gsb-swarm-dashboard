@@ -21,6 +21,11 @@ interface ZipIndexEntry {
   consumer_profile: string;
   top_gap: string | null;          // "budget" | "midrange" | "upscale" | "fine" | null
   computed_at: string;
+  // trend fields (populated after 2+ cycles)
+  trend_capture?: string;          // "up" | "down" | "flat" | "new"
+  trend_streak?: number;           // consecutive cycles in same saturation state
+  trend_biz_delta?: number;        // net new businesses since last cycle
+  trend_cycles?: number;           // total cycles computed
 }
 
 interface OracleIndex {
@@ -32,6 +37,16 @@ interface OracleDetail {
   zip: string;
   name: string;
   computed_at: string;
+  trend?: {
+    cycles: number;
+    capture_rate: string;
+    capture_delta: number;
+    growth_state: string;
+    saturation_streak: number;
+    biz_delta: number;
+    restaurant_delta: number;
+    infra_delta: number;
+  } | null;
   demographics: {
     population: number;
     median_household_income: number;
@@ -91,38 +106,56 @@ interface Signal {
   icon: React.ElementType;
   detail?: OracleDetail;
   loading?: boolean;
+  // trend
+  trend_capture?: string;
+  trend_streak?: number;
+  trend_biz_delta?: number;
+  trend_cycles?: number;
 }
 
 function buildSignalsFromIndex(index: OracleIndex): Signal[] {
   const signals: Signal[] = [];
 
   for (const [zip, entry] of Object.entries(index.zips)) {
+    const trendFields = {
+      trend_capture:   entry.trend_capture,
+      trend_streak:    entry.trend_streak,
+      trend_biz_delta: entry.trend_biz_delta,
+      trend_cycles:    entry.trend_cycles,
+    };
+
     // ── Undersupplied market ─────────────────────────────────────────────────
     if (entry.saturation_status === "undersupplied") {
       const gap = Math.max(0, 100 - entry.capture_rate_pct);
+      // Conviction boost: streak makes it stronger
+      const streak = entry.trend_streak || 1;
+      const strength = gap > 40 || streak >= 3 ? "high" : gap > 20 || streak >= 2 ? "medium" : "low";
       signals.push({
         id: `${zip}-undersupplied`,
         zip,
         name: entry.name || zip,
         type: "opportunity",
-        strength: gap > 40 ? "high" : gap > 20 ? "medium" : "low",
+        strength,
         headline: `${entry.name || zip} has room for more restaurants`,
-        subline: `Market only ${entry.capture_rate_pct.toFixed(0)}% captured — ${gap.toFixed(0)}% of demand unmet`,
+        subline: `Market only ${entry.capture_rate_pct.toFixed(0)}% captured — ${gap.toFixed(0)}% of demand unmet${streak >= 2 ? ` · ${streak} cycles confirmed` : ""}`,
         icon: Utensils,
+        ...trendFields,
       });
     }
 
     // ── Oversaturated market ─────────────────────────────────────────────────
     if (entry.saturation_status === "oversaturated") {
+      const streak = entry.trend_streak || 1;
       signals.push({
         id: `${zip}-oversaturated`,
         zip,
         name: entry.name || zip,
         type: "caution",
-        strength: "high",
+        strength: streak >= 3 ? "high" : "medium",
         headline: `${entry.name || zip} — restaurant market oversaturated`,
-        subline: `${entry.capture_rate_pct.toFixed(0)}% capture rate: existing supply exceeds demand`,
+        subline: `${entry.capture_rate_pct.toFixed(0)}% capture rate: supply exceeds demand${streak >= 2 ? ` · ${streak} consecutive cycles` : ""}`,
         icon: AlertTriangle,
+        ...trendFields,
       });
     }
 
@@ -134,6 +167,7 @@ function buildSignalsFromIndex(index: OracleIndex): Signal[] {
         upscale: "upscale dining",
         fine: "fine dining",
       };
+      const gapStreak = entry.trend_streak || 1;
       signals.push({
         id: `${zip}-gap-${entry.top_gap}`,
         zip,
@@ -141,13 +175,15 @@ function buildSignalsFromIndex(index: OracleIndex): Signal[] {
         type: "gap",
         strength: entry.top_gap === "upscale" || entry.top_gap === "fine" ? "high" : "medium",
         headline: `Price tier gap: ${tierLabel[entry.top_gap] || entry.top_gap} in ${entry.name || zip}`,
-        subline: `Income profile demands more ${entry.top_gap} options than currently exist`,
+        subline: `Income profile demands more ${entry.top_gap} options${gapStreak >= 2 ? ` · gap persists ${gapStreak} cycles` : ""}`,
         icon: DollarSign,
+        ...trendFields,
       });
     }
 
     // ── Active growth zones ──────────────────────────────────────────────────
     if (entry.growth_state === "growing") {
+      const bizDelta = entry.trend_biz_delta || 0;
       signals.push({
         id: `${zip}-growing`,
         zip,
@@ -155,8 +191,9 @@ function buildSignalsFromIndex(index: OracleIndex): Signal[] {
         type: "growth",
         strength: "high",
         headline: `${entry.name || zip} — active family formation`,
-        subline: `High ownership + schools = customer base being built now`,
+        subline: `High ownership + schools = customer base building now${bizDelta > 0 ? ` · +${bizDelta} businesses this cycle` : ""}`,
         icon: TrendingUp,
+        ...trendFields,
       });
     }
 
@@ -171,6 +208,7 @@ function buildSignalsFromIndex(index: OracleIndex): Signal[] {
         headline: `${entry.name || zip} — empty nest shift`,
         subline: `Aging owner base, high home values, fewer kids: pivot to leisure + health`,
         icon: Home,
+        ...trendFields,
       });
     }
 
@@ -188,6 +226,7 @@ function buildSignalsFromIndex(index: OracleIndex): Signal[] {
         headline: `${entry.name || zip} — high-income balanced market`,
         subline: `${entry.consumer_profile} consumer base, market not yet oversupplied`,
         icon: Target,
+        ...trendFields,
       });
     }
   }
@@ -296,8 +335,24 @@ function SignalCard({
           <p className="text-xs text-muted-foreground mt-0.5">{signal.subline}</p>
         </div>
 
-        {/* ZIP tag + expand */}
-        <div className="flex-shrink-0 flex items-center gap-2">
+        {/* Trend + ZIP tag + expand */}
+        <div className="flex-shrink-0 flex items-center gap-1.5">
+          {/* Trend direction arrow */}
+          {signal.trend_capture === "up" && (
+            <ArrowUpRight size={12} className="text-emerald-400" title="Capture rate rising" />
+          )}
+          {signal.trend_capture === "down" && (
+            <TrendingDown size={12} className="text-red-400" title="Capture rate falling" />
+          )}
+          {signal.trend_capture === "flat" && (
+            <Minus size={12} className="text-muted-foreground" title="Stable" />
+          )}
+          {/* Streak badge — only show if 3+ cycles for conviction */}
+          {(signal.trend_streak ?? 0) >= 3 && (
+            <span className="text-[9px] bg-primary/15 text-primary rounded px-1 py-0.5 font-bold" title={`${signal.trend_streak} cycles confirmed`}>
+              {signal.trend_streak}x
+            </span>
+          )}
           <span className="text-[10px] bg-muted/40 rounded px-1.5 py-0.5 text-muted-foreground font-mono">
             {signal.zip}
           </span>
@@ -391,7 +446,7 @@ function DetailPanel({ detail }: { detail: OracleDetail }) {
       )}
 
       {/* Growth */}
-      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+      <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
         <span>Growth: <span className="text-foreground">{growth.label}</span></span>
         <span>·</span>
         <span>Owner-occ: <span className="text-foreground">{growth.owner_occupied_pct}%</span></span>
@@ -404,6 +459,28 @@ function DetailPanel({ detail }: { detail: OracleDetail }) {
           </>
         )}
       </div>
+
+      {/* Trend strip — shows once we have history */}
+      {detail.trend && detail.trend.cycles >= 2 && (
+        <div className="flex flex-wrap items-center gap-3 text-xs border-t border-border/20 pt-3">
+          <span className="text-muted-foreground uppercase tracking-wide text-[10px]">Trend ({detail.trend.cycles} cycles)</span>
+          <span className={detail.trend.capture_rate === "up" ? "text-emerald-400" : detail.trend.capture_rate === "down" ? "text-red-400" : "text-muted-foreground"}>
+            Capture {detail.trend.capture_rate === "up" ? "↑" : detail.trend.capture_rate === "down" ? "↓" : "→"} {detail.trend.capture_delta > 0 ? "+" : ""}{detail.trend.capture_delta?.toFixed(1)}%
+          </span>
+          <span>·</span>
+          <span className={detail.trend.biz_delta > 0 ? "text-emerald-400" : detail.trend.biz_delta < 0 ? "text-red-400" : "text-muted-foreground"}>
+            Businesses {detail.trend.biz_delta > 0 ? "+" : ""}{detail.trend.biz_delta}
+          </span>
+          <span>·</span>
+          <span className={detail.trend.restaurant_delta > 0 ? "text-emerald-400" : detail.trend.restaurant_delta < 0 ? "text-red-400" : "text-muted-foreground"}>
+            Restaurants {detail.trend.restaurant_delta > 0 ? "+" : ""}{detail.trend.restaurant_delta}
+          </span>
+          <span>·</span>
+          <span className="text-muted-foreground">
+            {detail.trend.saturation_streak} cycles same status
+          </span>
+        </div>
+      )}
     </div>
   );
 }
