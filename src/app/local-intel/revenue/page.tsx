@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import {
   DollarSign, TrendingUp, Zap, Users, BarChart2,
   Clock, RefreshCw, XCircle, Globe, CheckCircle2,
-  Shield, ExternalLink
+  Shield, ExternalLink, Activity
 } from "lucide-react";
 
 const RAILWAY = "https://gsb-swarm-production.up.railway.app";
@@ -40,6 +40,23 @@ interface BudgetStatus {
   concurrent_agents: number;
   gate_status: "throttled" | "normal" | "accelerated";
   revenue_7d: number;
+}
+
+interface CallEntry {
+  ts: string | null;
+  tool: string;
+  caller: string;
+  entry: string;
+  zip: string | null;
+  intent: string | null;
+  latency: number | null;
+  cost: number;
+  paid: boolean;
+}
+
+interface CallLog {
+  count: number;
+  calls: CallEntry[];
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -269,6 +286,7 @@ const VISIBILITY_CARDS = [
 export default function LocalIntelRevenuePage() {
   const [revenue, setRevenue]     = useState<RevenueSummary | null>(null);
   const [budget, setBudget]       = useState<BudgetStatus | null>(null);
+  const [callLog, setCallLog]     = useState<CallLog | null>(null);
   const [loading, setLoading]     = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [secondsAgo, setSecondsAgo] = useState(0);
@@ -279,13 +297,16 @@ export default function LocalIntelRevenuePage() {
   const fetchAll = useCallback(async () => {
     const errs: Record<string, boolean> = {};
 
-    const [rawRev, bgt] = await Promise.all([
+    const [rawRev, bgt, log] = await Promise.all([
       safeFetch<Record<string, unknown> | null>(
         `${RAILWAY}/api/local-intel/revenue-summary`, null
       ).catch(() => { errs.revenue = true; return null; }),
       safeFetch<BudgetStatus | null>(
         `${RAILWAY}/api/local-intel/budget-status`, null
       ).catch(() => { errs.budget = true; return null; }),
+      safeFetch<CallLog | null>(
+        `${RAILWAY}/api/local-intel/call-log?limit=50`, null
+      ).catch(() => null),
     ]);
 
     // Normalise revenue-summary — API returns nested {calls, revenue_pathusd} objects
@@ -311,6 +332,7 @@ export default function LocalIntelRevenuePage() {
 
     setRevenue(rev);
     setBudget(bgt);
+    setCallLog(log);
     setErrors(errs);
     setLoading(false);
     setLastUpdated(new Date());
@@ -635,6 +657,104 @@ export default function LocalIntelRevenuePage() {
             </a>
           );
         })}
+      </div>
+
+      {/* ══════════════════════════════════════════════════════════
+          SECTION F — LIVE CALL LOG
+          ══════════════════════════════════════════════════════════ */}
+      <div style={{ marginTop: 24 }}>
+        <SectionDiv icon={Activity} letter="F" title="Live Call Log" />
+      </div>
+
+      <div style={{
+        background: "hsl(0 0% 5%)",
+        border: "1px solid hsl(0 0% 12%)",
+        borderRadius: 12,
+        overflow: "hidden",
+        marginBottom: 24,
+      }}>
+        {/* Header row */}
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "100px 1fr 90px 80px 60px 52px",
+          gap: 8,
+          padding: "8px 14px",
+          borderBottom: "1px solid hsl(0 0% 10%)",
+          fontSize: 9,
+          color: "hsl(0 0% 38%)",
+          textTransform: "uppercase" as const,
+          letterSpacing: "0.06em",
+          fontWeight: 600,
+        }}>
+          <span>Time</span>
+          <span>Tool</span>
+          <span>Caller</span>
+          <span>ZIP · Intent</span>
+          <span>Latency</span>
+          <span>Cost</span>
+        </div>
+
+        {loading ? (
+          Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} style={{ padding: "8px 14px", borderBottom: "1px solid hsl(0 0% 8%)" }}>
+              <Skeleton h={10} w={`${60 + (i % 3) * 15}%`} />
+            </div>
+          ))
+        ) : !callLog || callLog.calls.length === 0 ? (
+          <div style={{ padding: "20px 14px", fontSize: 12, color: "hsl(0 0% 35%)", textAlign: "center" as const }}>
+            No calls logged yet — make a tool call to see it here.
+          </div>
+        ) : (
+          callLog.calls.map((c, i) => {
+            const tool = c.tool.replace("local_intel_", "");
+            const ts   = c.ts ? new Date(c.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "—";
+            const entryColor = c.entry === "x402-premium" ? "#eab308" : c.entry === "x402" ? "#22c55e" : "hsl(0 0% 40%)";
+            return (
+              <div key={i} style={{
+                display: "grid",
+                gridTemplateColumns: "100px 1fr 90px 80px 60px 52px",
+                gap: 8,
+                padding: "7px 14px",
+                borderBottom: "1px solid hsl(0 0% 8%)",
+                alignItems: "center",
+              }}>
+                <span style={{ fontSize: 10, color: "hsl(0 0% 40%)", fontFamily: "monospace" }}>{ts}</span>
+
+                <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: "#f0ebe3", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>
+                    {tool}
+                  </span>
+                  <span style={{
+                    fontSize: 9, fontWeight: 600, padding: "1px 5px", borderRadius: 99,
+                    background: `${entryColor}18`, color: entryColor, whiteSpace: "nowrap" as const,
+                  }}>
+                    {c.entry}
+                  </span>
+                </div>
+
+                <span style={{
+                  fontSize: 10, color: c.caller === "unknown" ? "hsl(0 0% 35%)" : "#00e5a0",
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const,
+                }}>
+                  {c.caller}
+                </span>
+
+                <div style={{ overflow: "hidden" }}>
+                  {c.zip && <span style={{ fontSize: 10, color: "hsl(0 0% 55%)", fontFamily: "monospace" }}>{c.zip}</span>}
+                  {c.intent && <span style={{ fontSize: 9, color: "hsl(0 0% 38%)", display: "block", whiteSpace: "nowrap" as const, overflow: "hidden", textOverflow: "ellipsis" }}>{c.intent.replace(/_/g, " ")}</span>}
+                </div>
+
+                <span style={{ fontSize: 10, color: c.latency && c.latency > 1000 ? "#eab308" : "hsl(0 0% 45%)", fontFamily: "monospace" }}>
+                  {c.latency != null ? `${c.latency}ms` : "—"}
+                </span>
+
+                <span style={{ fontSize: 10, fontWeight: 600, color: c.cost > 0 ? "#00e5a0" : "hsl(0 0% 35%)", fontFamily: "monospace" }}>
+                  {c.cost > 0 ? `$${c.cost.toFixed(3)}` : "free"}
+                </span>
+              </div>
+            );
+          })
+        )}
       </div>
     </div>
   );
