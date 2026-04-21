@@ -1,7 +1,40 @@
-// Auto-generated from OSM pull — 90 businesses in 32081/32082
-// Last updated: 2026-04-19
+// Auto-generated — 91 businesses in 32081/32082
+// Last updated: 2026-04-20
 
 export const LOCAL_INTEL_DATA = [
+  {
+    "name": "MCFLAMINGO",
+    "category": "office",
+    "zip": "32082",
+    "lat": 30.2365,
+    "lon": -81.3912,
+    "address": "880 A1A N Suite 12",
+    "city": "Ponte Vedra Beach",
+    "phone": "",
+    "website": "https://mcflamingo.com",
+    "hours": "",
+    "confidence": 95,
+    "sources": [
+      "owner_verified"
+    ],
+    "claimed": true,
+    "notes": "Owner-verified listing \u2014 MCFL Restaurant Holdings LLC / MCFLAMINGO"
+  },
+  {
+    "name": "Six Mile Landing Boat Ramp",
+    "category": "slipway",
+    "zip": "32082",
+    "lat": 30.110058,
+    "lon": -81.345155,
+    "address": "",
+    "phone": "",
+    "website": "",
+    "hours": "",
+    "confidence": 50,
+    "sources": [
+      "OSM"
+    ]
+  },
   {
     "name": "Publix",
     "category": "supermarket",
@@ -13,6 +46,51 @@ export const LOCAL_INTEL_DATA = [
     "website": "https://www.publix.com/locations/1243",
     "hours": "Mo-Su 07:00-22:00",
     "confidence": 100,
+    "sources": [
+      "OSM"
+    ]
+  },
+  {
+    "name": "Publix Liquors",
+    "category": "alcohol",
+    "zip": "32081",
+    "lat": 30.110983,
+    "lon": -81.419467,
+    "address": "",
+    "phone": "",
+    "website": "",
+    "hours": "",
+    "confidence": 50,
+    "sources": [
+      "OSM"
+    ]
+  },
+  {
+    "name": "Dick's Wings & Grill",
+    "category": "restaurant",
+    "zip": "32081",
+    "lat": 30.11129,
+    "lon": -81.419545,
+    "address": "",
+    "phone": "",
+    "website": "",
+    "hours": "",
+    "confidence": 50,
+    "sources": [
+      "OSM"
+    ]
+  },
+  {
+    "name": "Beach Diner",
+    "category": "restaurant",
+    "zip": "32082",
+    "lat": 30.189104,
+    "lon": -81.38092,
+    "address": "# 2",
+    "phone": "",
+    "website": "",
+    "hours": "06:00-14:30",
+    "confidence": 80,
     "sources": [
       "OSM"
     ]
@@ -33,6 +111,21 @@ export const LOCAL_INTEL_DATA = [
     ]
   },
   {
+    "name": "Anastasia Club",
+    "category": "social_centre",
+    "zip": "32082",
+    "lat": 30.082484,
+    "lon": -81.394117,
+    "address": "",
+    "phone": "",
+    "website": "https://www.delwebb.com/homes/florida/northeast-florida/ponte-vedra/del-webb-ponte-vedra-100237",
+    "hours": "",
+    "confidence": 60,
+    "sources": [
+      "OSM"
+    ]
+  },
+  {
     "name": "Phyllis Frankel Realty Group",
     "category": "estate_agent",
     "zip": "32082",
@@ -48,121 +141,31 @@ export const LOCAL_INTEL_DATA = [
     ]
   },
   {
-    "name": "Greenwise Market",
-    "category": "supermarket",
+    "name": "Gate Express Carwash",
+    "category": "car_wash",
     "zip": "32081",
-    "lat": 30.110241,
-    "lon": -81.415316,
-    "address": "250 Pine Lake Drive",
-    "phone": "+1 904-826-3356",
-    "website": "https://www.publix.com/locations/1701",
-    "hours": "Mo-Su 08:00-08:00",
-    "confidence": 100,
+    "lat": 30.123709,
+    "lon": -81.397397,
+    "address": "2545 Palm Valley Rd",
+    "phone": "",
+    "website": "",
+    "hours": "",
+    "confidence": 70,
     "sources": [
       "OSM"
     ]
   },
   {
-    "name": "Ecowise Cleaners",
-    "category": "dry_cleaning",
-    "zip": "32081",
-    "lat": 30.109838,
-    "lon": -81.415243,
-    "address": "250 Pine Lake Drive",
-    "phone": "+1-904-302-6000",
-    "website": "https://ecowisecleaners.com",
-    "hours": "Mo-Fr 07:00-18:30; Sa 09:00 - 14:00",
-    "confidence": 100,
-    "sources": [
-      "OSM"
-    ]
-  },
-  {
-    "name": "Sol Renewed Health",
-    "category": "clinic",
-    "zip": "32081",
-    "lat": 30.109645,
-    "lon": -81.421463,
-    "address": "380 Town Plaza Avenue",
-    "phone": "+1-904-621-2348",
-    "website": "https://solrenewed.com/",
-    "hours": "Mo-Th 9:00-17:00",
-    "confidence": 100,
-    "sources": [
-      "OSM"
-    ]
-  },
-  {
-    "name": "Wendy's",
-    "category": "fast_food",
-    "zip": "32081",
-    "lat": 30.109752,
-    "lon": -81.417231,
-    "address": "153 Capital Green",
-    "phone": "+1 904-567-3157",
-    "website": "https://locations.wendys.com/united-states/fl/ponte-vedra/153-capital-green",
-    "hours": "06:30-22:00",
-    "confidence": 100,
-    "sources": [
-      "OSM"
-    ]
-  },
-  {
-    "name": "Saint John Paul II Catholic Church",
-    "category": "place_of_worship",
-    "zip": "32081",
-    "lat": 30.123026,
-    "lon": -81.435076,
-    "address": "127 Stonemason Way",
-    "phone": "+1-904-330-0153",
-    "website": "https://stjp2.net/",
-    "hours": "Mo-Fr 09:00-16:00, 09:00-18:00; Su 08:30-23:30",
-    "confidence": 100,
-    "sources": [
-      "OSM"
-    ]
-  },
-  {
-    "name": "McDonald's",
-    "category": "fast_food",
+    "name": "Palm Valley Outdoors Bar & Grill",
+    "category": "restaurant",
     "zip": "32082",
-    "lat": 30.192292,
-    "lon": -81.380857,
-    "address": "100 Ponte Vedra boulevard",
-    "phone": "+1 904-273-7490",
-    "website": "https://www.mcdonalds.com/us/en-us/location/12869.html",
-    "hours": "06:00-22:00",
-    "confidence": 100,
-    "sources": [
-      "OSM"
-    ]
-  },
-  {
-    "name": "Publix",
-    "category": "supermarket",
-    "zip": "32082",
-    "lat": 30.150684,
-    "lon": -81.375527,
-    "address": "3777 Palm Valley Road",
-    "phone": "+1 904-273-6565",
-    "website": "https://www.publix.com/locations/1028",
-    "hours": "Mo-Su 07:00-22:00",
-    "confidence": 100,
-    "sources": [
-      "OSM"
-    ]
-  },
-  {
-    "name": "Panera Bread",
-    "category": "fast_food",
-    "zip": "32081",
-    "lat": 30.111425,
-    "lon": -81.41776,
-    "address": "35 Capital Green Drive",
-    "phone": "+1 904-686-3031",
-    "website": "https://locations.panerabread.com/fl/ponte-vedra/35-capital-green-drive.html",
-    "hours": "Mo-Sa 06:00-21:00; Su 07:00-21:00",
-    "confidence": 100,
+    "lat": 30.133472,
+    "lon": -81.385307,
+    "address": "377 S Roscoe Blvd #2",
+    "phone": "+1-904-834-7183",
+    "website": "",
+    "hours": "",
+    "confidence": 80,
     "sources": [
       "OSM"
     ]
@@ -198,46 +201,16 @@ export const LOCAL_INTEL_DATA = [
     ]
   },
   {
-    "name": "Starbucks",
-    "category": "cafe",
+    "name": "Gate Gas Statation",
+    "category": "fuel",
     "zip": "32081",
-    "lat": 30.110139,
-    "lon": -81.417387,
-    "address": "41 Settlement Drive",
-    "phone": "+1 904-460-3685",
-    "website": "https://www.starbucks.com/store-locator/store/1018312/nocatee-parkway-crosswater-p-41-settlement-dr-ponte-vedra-beach-fl-320810947-us",
-    "hours": "",
-    "confidence": 90,
-    "sources": [
-      "OSM"
-    ]
-  },
-  {
-    "name": "Beach Diner",
-    "category": "restaurant",
-    "zip": "32082",
-    "lat": 30.189104,
-    "lon": -81.38092,
-    "address": "# 2",
+    "lat": 30.123205,
+    "lon": -81.39801,
+    "address": "",
     "phone": "",
     "website": "",
-    "hours": "06:00-14:30",
-    "confidence": 80,
-    "sources": [
-      "OSM"
-    ]
-  },
-  {
-    "name": "Palm Valley Outdoors Bar & Grill",
-    "category": "restaurant",
-    "zip": "32082",
-    "lat": 30.133472,
-    "lon": -81.385307,
-    "address": "377 S Roscoe Blvd #2",
-    "phone": "+1-904-834-7183",
-    "website": "",
     "hours": "",
-    "confidence": 80,
+    "confidence": 50,
     "sources": [
       "OSM"
     ]
@@ -273,66 +246,6 @@ export const LOCAL_INTEL_DATA = [
     ]
   },
   {
-    "name": "Orangetheory Fitness",
-    "category": "fitness_centre",
-    "zip": "32081",
-    "lat": 30.109717,
-    "lon": -81.418091,
-    "address": "152 Capital Green Drive",
-    "phone": "+1 904-900-7644",
-    "website": "",
-    "hours": "",
-    "confidence": 80,
-    "sources": [
-      "OSM"
-    ]
-  },
-  {
-    "name": "Ponte Vedra High School",
-    "category": "school",
-    "zip": "32081",
-    "lat": 30.114914,
-    "lon": -81.394701,
-    "address": "460 Davis Park Road",
-    "phone": "",
-    "website": "https://www-pvhs.stjohns.k12.fl.us/",
-    "hours": "",
-    "confidence": 80,
-    "sources": [
-      "OSM"
-    ]
-  },
-  {
-    "name": "Chase",
-    "category": "bank",
-    "zip": "32081",
-    "lat": 30.109316,
-    "lon": -81.417147,
-    "address": "",
-    "phone": "+1 904-686-3000",
-    "website": "https://locator.chase.com/fl/ponte-vedra/187-capital-green-dr",
-    "hours": "Mo-Fr 09:00-17:00; Sa-Su closed",
-    "confidence": 80,
-    "sources": [
-      "OSM"
-    ]
-  },
-  {
-    "name": "Gate Express Carwash",
-    "category": "car_wash",
-    "zip": "32081",
-    "lat": 30.123709,
-    "lon": -81.397397,
-    "address": "2545 Palm Valley Rd",
-    "phone": "",
-    "website": "",
-    "hours": "",
-    "confidence": 70,
-    "sources": [
-      "OSM"
-    ]
-  },
-  {
     "name": "Ponte Vedra United Methodist Church",
     "category": "place_of_worship",
     "zip": "32081",
@@ -363,171 +276,6 @@ export const LOCAL_INTEL_DATA = [
     ]
   },
   {
-    "name": "Tijuana Flats",
-    "category": "restaurant",
-    "zip": "32081",
-    "lat": 30.110222,
-    "lon": -81.417428,
-    "address": "41 Settlement Drive",
-    "phone": "",
-    "website": "",
-    "hours": "",
-    "confidence": 70,
-    "sources": [
-      "OSM"
-    ]
-  },
-  {
-    "name": "Nineteen",
-    "category": "restaurant",
-    "zip": "32082",
-    "lat": 30.198841,
-    "lon": -81.395122,
-    "address": "110 Championship Way",
-    "phone": "",
-    "website": "",
-    "hours": "",
-    "confidence": 70,
-    "sources": [
-      "OSM"
-    ]
-  },
-  {
-    "name": "St. Johns Smile Co.",
-    "category": "dentist",
-    "zip": "32081",
-    "lat": 30.11213,
-    "lon": -81.422474,
-    "address": "40 Tavernier Drive",
-    "phone": "",
-    "website": "",
-    "hours": "",
-    "confidence": 70,
-    "sources": [
-      "OSM"
-    ]
-  },
-  {
-    "name": "Shell",
-    "category": "fuel",
-    "zip": "32081",
-    "lat": 30.110903,
-    "lon": -81.417564,
-    "address": "40 Settlement Drive",
-    "phone": "",
-    "website": "",
-    "hours": "",
-    "confidence": 70,
-    "sources": [
-      "OSM"
-    ]
-  },
-  {
-    "name": "Crosswater Community Church",
-    "category": "church",
-    "zip": "32081",
-    "lat": 30.121562,
-    "lon": -81.396727,
-    "address": "211 Davis Park Road",
-    "phone": "",
-    "website": "",
-    "hours": "",
-    "confidence": 70,
-    "sources": [
-      "OSM"
-    ]
-  },
-  {
-    "name": "Palm Valley Academy",
-    "category": "school",
-    "zip": "32081",
-    "lat": 30.120555,
-    "lon": -81.407632,
-    "address": "700 Bobcat Lane",
-    "phone": "",
-    "website": "",
-    "hours": "",
-    "confidence": 70,
-    "sources": [
-      "OSM"
-    ]
-  },
-  {
-    "name": "Crosswater Dental Care",
-    "category": "dentist",
-    "zip": "32081",
-    "lat": 30.107557,
-    "lon": -81.415361,
-    "address": "685 Crosswater Parkway",
-    "phone": "",
-    "website": "",
-    "hours": "",
-    "confidence": 70,
-    "sources": [
-      "OSM"
-    ]
-  },
-  {
-    "name": "Forever Vets Animal Hospital",
-    "category": "veterinary",
-    "zip": "32081",
-    "lat": 30.107695,
-    "lon": -81.414642,
-    "address": "80 Pine Lake Drive",
-    "phone": "",
-    "website": "",
-    "hours": "",
-    "confidence": 70,
-    "sources": [
-      "OSM"
-    ]
-  },
-  {
-    "name": "Family Bible Church",
-    "category": "place_of_worship",
-    "zip": "32081",
-    "lat": 30.175807,
-    "lon": -81.388236,
-    "address": "",
-    "phone": "+1-904-280-5694",
-    "website": "https://www.familybiblepvb.com/",
-    "hours": "",
-    "confidence": 70,
-    "sources": [
-      "OSM"
-    ]
-  },
-  {
-    "name": "Palmer Catholic Academy",
-    "category": "school",
-    "zip": "32082",
-    "lat": 30.179139,
-    "lon": -81.388154,
-    "address": "4889 Palm Valley Road",
-    "phone": "",
-    "website": "",
-    "hours": "",
-    "confidence": 70,
-    "sources": [
-      "OSM"
-    ]
-  },
-  {
-    "name": "Anastasia Club",
-    "category": "social_centre",
-    "zip": "32082",
-    "lat": 30.082484,
-    "lon": -81.394117,
-    "address": "",
-    "phone": "",
-    "website": "https://www.delwebb.com/homes/florida/northeast-florida/ponte-vedra/del-webb-ponte-vedra-100237",
-    "hours": "",
-    "confidence": 60,
-    "sources": [
-      "OSM"
-    ]
-  },
-  {
     "name": "Ponte Vedra Presbyterian Church",
     "category": "place_of_worship",
     "zip": "32081",
@@ -538,6 +286,21 @@ export const LOCAL_INTEL_DATA = [
     "website": "",
     "hours": "",
     "confidence": 60,
+    "sources": [
+      "OSM"
+    ]
+  },
+  {
+    "name": "Crosswater Community Church",
+    "category": "place_of_worship",
+    "zip": "32081",
+    "lat": 30.121549,
+    "lon": -81.396721,
+    "address": "",
+    "phone": "",
+    "website": "",
+    "hours": "",
+    "confidence": 50,
     "sources": [
       "OSM"
     ]
@@ -618,156 +381,6 @@ export const LOCAL_INTEL_DATA = [
     ]
   },
   {
-    "name": "Jersey Mike's Subs",
-    "category": "fast_food",
-    "zip": "32081",
-    "lat": 30.10973,
-    "lon": -81.418016,
-    "address": "",
-    "phone": "",
-    "website": "https://www.jerseymikes.com/13148/ponte-vedra-beach-fl",
-    "hours": "",
-    "confidence": 60,
-    "sources": [
-      "OSM"
-    ]
-  },
-  {
-    "name": "Baptist HealthPlace at Nocatee",
-    "category": "clinic",
-    "zip": "32081",
-    "lat": 30.112757,
-    "lon": -81.429209,
-    "address": "",
-    "phone": "",
-    "website": "https://news.nocatee.com/ymca-opening-october-2020-in-nocatee",
-    "hours": "",
-    "confidence": 60,
-    "sources": [
-      "OSM"
-    ]
-  },
-  {
-    "name": "CVS Pharmacy",
-    "category": "chemist",
-    "zip": "32081",
-    "lat": 30.108397,
-    "lon": -81.416913,
-    "address": "",
-    "phone": "",
-    "website": "https://www.cvs.com/store-locator/ponte-vedra-beach-fl-pharmacies/630-crosswater-pkwy-ponte-vedra-beach-fl-32081/storeid=11469",
-    "hours": "",
-    "confidence": 60,
-    "sources": [
-      "OSM"
-    ]
-  },
-  {
-    "name": "Anastasia Club",
-    "category": "social_centre",
-    "zip": "32082",
-    "lat": 30.08238,
-    "lon": -81.394032,
-    "address": "",
-    "phone": "",
-    "website": "https://www.delwebb.com/homes/florida/northeast-florida/ponte-vedra/del-webb-ponte-vedra-100237",
-    "hours": "",
-    "confidence": 60,
-    "sources": [
-      "OSM"
-    ]
-  },
-  {
-    "name": "Walgreens",
-    "category": "chemist",
-    "zip": "32081",
-    "lat": 30.193136,
-    "lon": -81.381051,
-    "address": "",
-    "phone": "",
-    "website": "https://www.walgreens.com/locator/walgreens-860+a1a+n-ponte+vedra-fl-32082/id=4657",
-    "hours": "",
-    "confidence": 60,
-    "sources": [
-      "OSM"
-    ]
-  },
-  {
-    "name": "Six Mile Landing Boat Ramp",
-    "category": "slipway",
-    "zip": "32082",
-    "lat": 30.110058,
-    "lon": -81.345155,
-    "address": "",
-    "phone": "",
-    "website": "",
-    "hours": "",
-    "confidence": 50,
-    "sources": [
-      "OSM"
-    ]
-  },
-  {
-    "name": "Publix Liquors",
-    "category": "alcohol",
-    "zip": "32081",
-    "lat": 30.110983,
-    "lon": -81.419467,
-    "address": "",
-    "phone": "",
-    "website": "",
-    "hours": "",
-    "confidence": 50,
-    "sources": [
-      "OSM"
-    ]
-  },
-  {
-    "name": "Dick's Wings & Grill",
-    "category": "restaurant",
-    "zip": "32081",
-    "lat": 30.11129,
-    "lon": -81.419545,
-    "address": "",
-    "phone": "",
-    "website": "",
-    "hours": "",
-    "confidence": 50,
-    "sources": [
-      "OSM"
-    ]
-  },
-  {
-    "name": "Gate Gas Statation",
-    "category": "fuel",
-    "zip": "32081",
-    "lat": 30.123205,
-    "lon": -81.39801,
-    "address": "",
-    "phone": "",
-    "website": "",
-    "hours": "",
-    "confidence": 50,
-    "sources": [
-      "OSM"
-    ]
-  },
-  {
-    "name": "Crosswater Community Church",
-    "category": "place_of_worship",
-    "zip": "32081",
-    "lat": 30.121549,
-    "lon": -81.396721,
-    "address": "",
-    "phone": "",
-    "website": "",
-    "hours": "",
-    "confidence": 50,
-    "sources": [
-      "OSM"
-    ]
-  },
-  {
     "name": "South Kitchen & Spirits",
     "category": "restaurant",
     "zip": "32081",
@@ -823,6 +436,66 @@ export const LOCAL_INTEL_DATA = [
     "website": "",
     "hours": "",
     "confidence": 50,
+    "sources": [
+      "OSM"
+    ]
+  },
+  {
+    "name": "Starbucks",
+    "category": "cafe",
+    "zip": "32081",
+    "lat": 30.110139,
+    "lon": -81.417387,
+    "address": "41 Settlement Drive",
+    "phone": "+1 904-460-3685",
+    "website": "https://www.starbucks.com/store-locator/store/1018312/nocatee-parkway-crosswater-p-41-settlement-dr-ponte-vedra-beach-fl-320810947-us",
+    "hours": "",
+    "confidence": 90,
+    "sources": [
+      "OSM"
+    ]
+  },
+  {
+    "name": "Tijuana Flats",
+    "category": "restaurant",
+    "zip": "32081",
+    "lat": 30.110222,
+    "lon": -81.417428,
+    "address": "41 Settlement Drive",
+    "phone": "",
+    "website": "",
+    "hours": "",
+    "confidence": 70,
+    "sources": [
+      "OSM"
+    ]
+  },
+  {
+    "name": "Jersey Mike's Subs",
+    "category": "fast_food",
+    "zip": "32081",
+    "lat": 30.10973,
+    "lon": -81.418016,
+    "address": "",
+    "phone": "",
+    "website": "https://www.jerseymikes.com/13148/ponte-vedra-beach-fl",
+    "hours": "",
+    "confidence": 60,
+    "sources": [
+      "OSM"
+    ]
+  },
+  {
+    "name": "Orangetheory Fitness",
+    "category": "fitness_centre",
+    "zip": "32081",
+    "lat": 30.109717,
+    "lon": -81.418091,
+    "address": "152 Capital Green Drive",
+    "phone": "+1 904-900-7644",
+    "website": "",
+    "hours": "",
+    "confidence": 80,
     "sources": [
       "OSM"
     ]
@@ -993,6 +666,36 @@ export const LOCAL_INTEL_DATA = [
     ]
   },
   {
+    "name": "Greenwise Market",
+    "category": "supermarket",
+    "zip": "32081",
+    "lat": 30.110241,
+    "lon": -81.415316,
+    "address": "250 Pine Lake Drive",
+    "phone": "+1 904-826-3356",
+    "website": "https://www.publix.com/locations/1701",
+    "hours": "Mo-Su 08:00-08:00",
+    "confidence": 100,
+    "sources": [
+      "OSM"
+    ]
+  },
+  {
+    "name": "Ecowise Cleaners",
+    "category": "dry_cleaning",
+    "zip": "32081",
+    "lat": 30.109838,
+    "lon": -81.415243,
+    "address": "250 Pine Lake Drive",
+    "phone": "+1-904-302-6000",
+    "website": "https://ecowisecleaners.com",
+    "hours": "Mo-Fr 07:00-18:30; Sa 09:00 - 14:00",
+    "confidence": 100,
+    "sources": [
+      "OSM"
+    ]
+  },
+  {
     "name": "V pizza",
     "category": "restaurant",
     "zip": "32081",
@@ -1003,6 +706,21 @@ export const LOCAL_INTEL_DATA = [
     "website": "",
     "hours": "",
     "confidence": 50,
+    "sources": [
+      "OSM"
+    ]
+  },
+  {
+    "name": "Baptist HealthPlace at Nocatee",
+    "category": "clinic",
+    "zip": "32081",
+    "lat": 30.112757,
+    "lon": -81.429209,
+    "address": "",
+    "phone": "",
+    "website": "https://news.nocatee.com/ymca-opening-october-2020-in-nocatee",
+    "hours": "",
+    "confidence": 60,
     "sources": [
       "OSM"
     ]
@@ -1038,6 +756,36 @@ export const LOCAL_INTEL_DATA = [
     ]
   },
   {
+    "name": "Nineteen",
+    "category": "restaurant",
+    "zip": "32082",
+    "lat": 30.198841,
+    "lon": -81.395122,
+    "address": "110 Championship Way",
+    "phone": "",
+    "website": "",
+    "hours": "",
+    "confidence": 70,
+    "sources": [
+      "OSM"
+    ]
+  },
+  {
+    "name": "CVS Pharmacy",
+    "category": "chemist",
+    "zip": "32081",
+    "lat": 30.108397,
+    "lon": -81.416913,
+    "address": "",
+    "phone": "",
+    "website": "https://www.cvs.com/store-locator/ponte-vedra-beach-fl-pharmacies/630-crosswater-pkwy-ponte-vedra-beach-fl-32081/storeid=11469",
+    "hours": "",
+    "confidence": 60,
+    "sources": [
+      "OSM"
+    ]
+  },
+  {
     "name": "Burn Boot Camp",
     "category": "fitness_centre",
     "zip": "32081",
@@ -1053,6 +801,36 @@ export const LOCAL_INTEL_DATA = [
     ]
   },
   {
+    "name": "St. Johns Smile Co.",
+    "category": "dentist",
+    "zip": "32081",
+    "lat": 30.11213,
+    "lon": -81.422474,
+    "address": "40 Tavernier Drive",
+    "phone": "",
+    "website": "",
+    "hours": "",
+    "confidence": 70,
+    "sources": [
+      "OSM"
+    ]
+  },
+  {
+    "name": "Sol Renewed Health",
+    "category": "clinic",
+    "zip": "32081",
+    "lat": 30.109645,
+    "lon": -81.421463,
+    "address": "380 Town Plaza Avenue",
+    "phone": "+1-904-621-2348",
+    "website": "https://solrenewed.com/",
+    "hours": "Mo-Th 9:00-17:00",
+    "confidence": 100,
+    "sources": [
+      "OSM"
+    ]
+  },
+  {
     "name": "Ponte Vedra High School",
     "category": "school",
     "zip": "32081",
@@ -1063,6 +841,21 @@ export const LOCAL_INTEL_DATA = [
     "website": "",
     "hours": "",
     "confidence": 50,
+    "sources": [
+      "OSM"
+    ]
+  },
+  {
+    "name": "Shell",
+    "category": "fuel",
+    "zip": "32081",
+    "lat": 30.110903,
+    "lon": -81.417564,
+    "address": "40 Settlement Drive",
+    "phone": "",
+    "website": "",
+    "hours": "",
+    "confidence": 70,
     "sources": [
       "OSM"
     ]
@@ -1093,6 +886,21 @@ export const LOCAL_INTEL_DATA = [
     "website": "",
     "hours": "",
     "confidence": 50,
+    "sources": [
+      "OSM"
+    ]
+  },
+  {
+    "name": "Wendy's",
+    "category": "fast_food",
+    "zip": "32081",
+    "lat": 30.109752,
+    "lon": -81.417231,
+    "address": "153 Capital Green",
+    "phone": "+1 904-567-3157",
+    "website": "https://locations.wendys.com/united-states/fl/ponte-vedra/153-capital-green",
+    "hours": "06:30-22:00",
+    "confidence": 100,
     "sources": [
       "OSM"
     ]
@@ -1158,6 +966,36 @@ export const LOCAL_INTEL_DATA = [
     ]
   },
   {
+    "name": "Crosswater Community Church",
+    "category": "church",
+    "zip": "32081",
+    "lat": 30.121562,
+    "lon": -81.396727,
+    "address": "211 Davis Park Road",
+    "phone": "",
+    "website": "",
+    "hours": "",
+    "confidence": 70,
+    "sources": [
+      "OSM"
+    ]
+  },
+  {
+    "name": "Saint John Paul II Catholic Church",
+    "category": "place_of_worship",
+    "zip": "32081",
+    "lat": 30.123026,
+    "lon": -81.435076,
+    "address": "127 Stonemason Way",
+    "phone": "+1-904-330-0153",
+    "website": "https://stjp2.net/",
+    "hours": "Mo-Fr 09:00-16:00, 09:00-18:00; Su 08:30-23:30",
+    "confidence": 100,
+    "sources": [
+      "OSM"
+    ]
+  },
+  {
     "name": "United States Post Office",
     "category": "post_office",
     "zip": "32081",
@@ -1188,6 +1026,66 @@ export const LOCAL_INTEL_DATA = [
     ]
   },
   {
+    "name": "McDonald's",
+    "category": "fast_food",
+    "zip": "32082",
+    "lat": 30.192292,
+    "lon": -81.380857,
+    "address": "100 Ponte Vedra boulevard",
+    "phone": "+1 904-273-7490",
+    "website": "https://www.mcdonalds.com/us/en-us/location/12869.html",
+    "hours": "06:00-22:00",
+    "confidence": 100,
+    "sources": [
+      "OSM"
+    ]
+  },
+  {
+    "name": "Ponte Vedra High School",
+    "category": "school",
+    "zip": "32081",
+    "lat": 30.114914,
+    "lon": -81.394701,
+    "address": "460 Davis Park Road",
+    "phone": "",
+    "website": "https://www-pvhs.stjohns.k12.fl.us/",
+    "hours": "",
+    "confidence": 80,
+    "sources": [
+      "OSM"
+    ]
+  },
+  {
+    "name": "Palm Valley Academy",
+    "category": "school",
+    "zip": "32081",
+    "lat": 30.120555,
+    "lon": -81.407632,
+    "address": "700 Bobcat Lane",
+    "phone": "",
+    "website": "",
+    "hours": "",
+    "confidence": 70,
+    "sources": [
+      "OSM"
+    ]
+  },
+  {
+    "name": "Publix",
+    "category": "supermarket",
+    "zip": "32082",
+    "lat": 30.150684,
+    "lon": -81.375527,
+    "address": "3777 Palm Valley Road",
+    "phone": "+1 904-273-6565",
+    "website": "https://www.publix.com/locations/1028",
+    "hours": "Mo-Su 07:00-22:00",
+    "confidence": 100,
+    "sources": [
+      "OSM"
+    ]
+  },
+  {
     "name": "Wells Fargo",
     "category": "bank",
     "zip": "32081",
@@ -1203,6 +1101,96 @@ export const LOCAL_INTEL_DATA = [
     ]
   },
   {
+    "name": "Chase",
+    "category": "bank",
+    "zip": "32081",
+    "lat": 30.109316,
+    "lon": -81.417147,
+    "address": "",
+    "phone": "+1 904-686-3000",
+    "website": "https://locator.chase.com/fl/ponte-vedra/187-capital-green-dr",
+    "hours": "Mo-Fr 09:00-17:00; Sa-Su closed",
+    "confidence": 80,
+    "sources": [
+      "OSM"
+    ]
+  },
+  {
+    "name": "Crosswater Dental Care",
+    "category": "dentist",
+    "zip": "32081",
+    "lat": 30.107557,
+    "lon": -81.415361,
+    "address": "685 Crosswater Parkway",
+    "phone": "",
+    "website": "",
+    "hours": "",
+    "confidence": 70,
+    "sources": [
+      "OSM"
+    ]
+  },
+  {
+    "name": "Forever Vets Animal Hospital",
+    "category": "veterinary",
+    "zip": "32081",
+    "lat": 30.107695,
+    "lon": -81.414642,
+    "address": "80 Pine Lake Drive",
+    "phone": "",
+    "website": "",
+    "hours": "",
+    "confidence": 70,
+    "sources": [
+      "OSM"
+    ]
+  },
+  {
+    "name": "Anastasia Club",
+    "category": "social_centre",
+    "zip": "32082",
+    "lat": 30.08238,
+    "lon": -81.394032,
+    "address": "",
+    "phone": "",
+    "website": "https://www.delwebb.com/homes/florida/northeast-florida/ponte-vedra/del-webb-ponte-vedra-100237",
+    "hours": "",
+    "confidence": 60,
+    "sources": [
+      "OSM"
+    ]
+  },
+  {
+    "name": "Walgreens",
+    "category": "chemist",
+    "zip": "32081",
+    "lat": 30.193136,
+    "lon": -81.381051,
+    "address": "",
+    "phone": "",
+    "website": "https://www.walgreens.com/locator/walgreens-860+a1a+n-ponte+vedra-fl-32082/id=4657",
+    "hours": "",
+    "confidence": 60,
+    "sources": [
+      "OSM"
+    ]
+  },
+  {
+    "name": "Family Bible Church",
+    "category": "place_of_worship",
+    "zip": "32081",
+    "lat": 30.175807,
+    "lon": -81.388236,
+    "address": "",
+    "phone": "+1-904-280-5694",
+    "website": "https://www.familybiblepvb.com/",
+    "hours": "",
+    "confidence": 70,
+    "sources": [
+      "OSM"
+    ]
+  },
+  {
     "name": "Palm Valley Baptist Church",
     "category": "place_of_worship",
     "zip": "32081",
@@ -1213,6 +1201,21 @@ export const LOCAL_INTEL_DATA = [
     "website": "",
     "hours": "",
     "confidence": 50,
+    "sources": [
+      "OSM"
+    ]
+  },
+  {
+    "name": "Panera Bread",
+    "category": "fast_food",
+    "zip": "32081",
+    "lat": 30.111425,
+    "lon": -81.41776,
+    "address": "35 Capital Green Drive",
+    "phone": "+1 904-686-3031",
+    "website": "https://locations.panerabread.com/fl/ponte-vedra/35-capital-green-drive.html",
+    "hours": "Mo-Sa 06:00-21:00; Su 07:00-21:00",
+    "confidence": 100,
     "sources": [
       "OSM"
     ]
@@ -1348,6 +1351,21 @@ export const LOCAL_INTEL_DATA = [
     "website": "",
     "hours": "",
     "confidence": 50,
+    "sources": [
+      "OSM"
+    ]
+  },
+  {
+    "name": "Palmer Catholic Academy",
+    "category": "school",
+    "zip": "32082",
+    "lat": 30.179139,
+    "lon": -81.388154,
+    "address": "4889 Palm Valley Road",
+    "phone": "",
+    "website": "",
+    "hours": "",
+    "confidence": 70,
     "sources": [
       "OSM"
     ]
