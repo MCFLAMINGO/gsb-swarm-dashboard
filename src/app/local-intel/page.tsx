@@ -1,13 +1,32 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
-import { LOCAL_INTEL_DATA } from "@/lib/localIntelData";
 import {
   MapPin, Download, RefreshCw, Filter, TrendingUp,
   Store, Building2, Utensils, Heart, Landmark, Zap,
-  Search, ChevronDown, BarChart2, Globe, PlusCircle
+  Search, ChevronDown, BarChart2, Globe, PlusCircle, Loader2
 } from "lucide-react";
+
+const RAILWAY = "https://gsb-swarm-production.up.railway.app";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+interface Business {
+  name: string;
+  category: string;
+  zip?: string;
+  lat?: number;
+  lon?: number;
+  address?: string;
+  phone?: string;
+  website?: string;
+  hours?: string;
+  confidence: number;
+  sources?: string[];
+  possibly_closed?: boolean;
+  staleness?: { tier: string; grade: string; age_days: number | null; freshness_warning: string | null };
+}
 
 const CATEGORY_GROUPS: Record<string, { label: string; icon: React.ElementType; color: string }> = {
   food:       { label: "Food & Drink",    icon: Utensils,  color: "text-orange-400" },
@@ -52,45 +71,122 @@ function getConfidenceBadge(score: number) {
   return               { label: "LOW",    cls: "bg-red-500/15 text-red-400"      };
 }
 
-const ZIP_OPTIONS = ["All", "32082", "32081"];
-const GROUP_OPTIONS = ["All", ...Object.keys(CATEGORY_GROUPS)];
+// ── Live MCP fetch ─────────────────────────────────────────────────────────────
+
+async function fetchLive(query: string, zip: string, group: string, limit = 30): Promise<{ results: Business[]; total: number }> {
+  const args: Record<string, string | number> = { limit };
+  if (query.trim()) args.query = query.trim();
+  if (zip !== "All") args.zip = zip;
+  // group filter applied client-side after fetch
+
+  const body = {
+    jsonrpc: "2.0",
+    id: 1,
+    method: "tools/call",
+    params: { name: "local_intel_search", arguments: args },
+  };
+
+  const res = await fetch(`${RAILWAY}/api/local-intel/mcp`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const json = await res.json();
+  const raw = json.result ?? json;
+  let data: { results?: Business[]; total?: number; returned?: number };
+  try {
+    if (raw?.content?.[0]?.text) data = JSON.parse(raw.content[0].text);
+    else data = raw;
+  } catch { data = { results: [], total: 0 }; }
+
+  return { results: data.results ?? [], total: data.total ?? data.results?.length ?? 0 };
+}
+
+// ── Stats fetch ───────────────────────────────────────────────────────────────
+
+async function fetchStats(): Promise<{ total: number; zip81: number; zip82: number; groupCounts: Record<string,number> }> {
+  try {
+    const res = await fetch(`${RAILWAY}/api/local-intel/mcp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "local_intel_stats", arguments: {} } }),
+    });
+    const json = await res.json();
+    const raw = json.result ?? json;
+    let data: Record<string, unknown>;
+    try { data = raw?.content?.[0]?.text ? JSON.parse(raw.content[0].text) : raw; }
+    catch { data = {}; }
+    // stats endpoint returns total, by_zip, by_group
+    const total = (data.total as number) ?? 0;
+    const byZip = (data.by_zip as Record<string,number>) ?? {};
+    const byGroup = (data.by_group as Record<string,number>) ?? {};
+    return {
+      total,
+      zip81: byZip["32081"] ?? 0,
+      zip82: byZip["32082"] ?? 0,
+      groupCounts: byGroup,
+    };
+  } catch {
+    return { total: 0, zip81: 0, zip82: 0, groupCounts: {} };
+  }
+}
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function LocalIntelPage() {
-  const [search, setSearch]     = useState("");
-  const [zip, setZip]           = useState("All");
-  const [group, setGroup]       = useState("All");
-  const [sortBy, setSortBy]     = useState<"confidence"|"name"|"category">("confidence");
-  const [selected, setSelected] = useState<(typeof LOCAL_INTEL_DATA)[0] | null>(null);
+  const [search, setSearch]       = useState("");
+  const [zip, setZip]             = useState("All");
+  const [group, setGroup]         = useState("All");
+  const [sortBy, setSortBy]       = useState<"confidence"|"name"|"category">("confidence");
+  const [selected, setSelected]   = useState<Business | null>(null);
+  const [results, setResults]     = useState<Business[]>([]);
+  const [total, setTotal]         = useState(0);
+  const [loading, setLoading]     = useState(false);
+  const [stats, setStats]         = useState({ total: 0, zip81: 0, zip82: 0, groupCounts: {} as Record<string,number> });
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const filtered = useMemo(() => {
-    return LOCAL_INTEL_DATA
-      .filter(b => {
-        if (zip !== "All" && b.zip !== zip) return false;
-        if (group !== "All" && getGroup(b.category) !== group) return false;
-        if (search && !b.name.toLowerCase().includes(search.toLowerCase()) &&
-            !b.category.toLowerCase().includes(search.toLowerCase()) &&
-            !b.address.toLowerCase().includes(search.toLowerCase())) return false;
-        return true;
-      })
-      .sort((a, b) => {
+  // Load stats on mount
+  useEffect(() => {
+    fetchStats().then(s => setStats(s));
+    // Initial load: show all
+    doSearch("", "All", "All");
+  }, []);
+
+  const doSearch = useCallback(async (q: string, z: string, g: string) => {
+    setLoading(true);
+    try {
+      const { results: raw, total: t } = await fetchLive(q, z, g, 50);
+      // Apply group filter client-side
+      const filtered = g !== "All" ? raw.filter(b => getGroup(b.category) === g) : raw;
+      // Sort
+      const sorted = [...filtered].sort((a, b) => {
         if (sortBy === "confidence") return b.confidence - a.confidence;
         if (sortBy === "name") return a.name.localeCompare(b.name);
         return a.category.localeCompare(b.category);
       });
-  }, [search, zip, group, sortBy]);
+      setResults(sorted);
+      setTotal(t);
+    } catch {
+      setResults([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [sortBy]);
 
-  // Zone summary stats
-  const stats82 = LOCAL_INTEL_DATA.filter(b => b.zip === "32082");
-  const stats81 = LOCAL_INTEL_DATA.filter(b => b.zip === "32081");
-  const groupCounts = Object.fromEntries(
-    Object.keys(CATEGORY_GROUPS).map(g => [g, LOCAL_INTEL_DATA.filter(b => getGroup(b.category) === g).length])
-  );
+  // Debounced search on input change
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      doSearch(search, zip, group);
+    }, 350);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [search, zip, group, doSearch]);
 
   function downloadCSV() {
-    const headers = ["name","category","zip","lat","lon","address","phone","website","hours","confidence","sources"];
-    const rows = filtered.map(b =>
+    const headers = ["name","category","zip","lat","lon","address","phone","website","hours","confidence"];
+    const rows = results.map(b =>
       headers.map(h => {
-        const v = (b as Record<string,unknown>)[h];
+        const v = (b as unknown as Record<string,unknown>)[h];
         if (Array.isArray(v)) return v.join("|");
         return String(v ?? "").replace(/,/g,"");
       }).join(",")
@@ -99,31 +195,24 @@ export default function LocalIntelPage() {
     const blob = new Blob([csv], { type: "text/csv" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `local-intel-32081-32082-${Date.now()}.csv`;
+    a.download = `local-intel-${Date.now()}.csv`;
     a.click();
   }
 
   function downloadGeoJSON() {
     const geojson = {
       type: "FeatureCollection",
-      metadata: {
-        generated: new Date().toISOString(),
-        source: "MCFL Local Intelligence Network",
-        zips: ["32081","32082"],
-        totalFeatures: filtered.filter(b => b.lat && b.lon).length,
-      },
-      features: filtered
-        .filter(b => b.lat && b.lon)
-        .map(b => ({
-          type: "Feature",
-          geometry: { type: "Point", coordinates: [b.lon, b.lat] },
-          properties: { ...b },
-        })),
+      metadata: { generated: new Date().toISOString(), source: "MCFL LocalIntel", total: results.filter(b => b.lat && b.lon).length },
+      features: results.filter(b => b.lat && b.lon).map(b => ({
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [b.lon, b.lat] },
+        properties: { ...b },
+      })),
     };
     const blob = new Blob([JSON.stringify(geojson, null, 2)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `local-intel-32081-32082.geojson`;
+    a.download = `local-intel-${Date.now()}.geojson`;
     a.click();
   }
 
@@ -137,7 +226,7 @@ export default function LocalIntelPage() {
             Local Intelligence — 32082 / 32081
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {LOCAL_INTEL_DATA.length} businesses · OSM + public records · Ponte Vedra Beach + Nocatee
+            {stats.total > 0 ? `${stats.total.toLocaleString()} businesses` : "Loading…"} · Live Railway dataset · Ponte Vedra Beach + Nocatee
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -163,7 +252,10 @@ export default function LocalIntelPage() {
           <div>
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Zones</p>
             <div className="space-y-2">
-              {[{zip:"32082",label:"Ponte Vedra Beach",data:stats82},{zip:"32081",label:"Nocatee",data:stats81}].map(z => (
+              {[
+                { zip: "32082", label: "Ponte Vedra Beach", count: stats.zip82 },
+                { zip: "32081", label: "Nocatee",           count: stats.zip81 },
+              ].map(z => (
                 <button key={z.zip}
                   onClick={() => setZip(zip === z.zip ? "All" : z.zip)}
                   className={`w-full text-left p-3 rounded-xl border transition-all ${
@@ -171,7 +263,7 @@ export default function LocalIntelPage() {
                   }`}>
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold">{z.zip}</span>
-                    <span className="text-lg font-bold">{z.data.length}</span>
+                    <span className="text-lg font-bold">{z.count > 0 ? z.count : "—"}</span>
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">{z.label}</p>
                 </button>
@@ -188,11 +280,11 @@ export default function LocalIntelPage() {
                   group === "All" ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground"
                 }`}>
                 <span>All categories</span>
-                <span className="font-bold">{LOCAL_INTEL_DATA.length}</span>
+                <span className="font-bold">{stats.total || "—"}</span>
               </button>
               {Object.entries(CATEGORY_GROUPS).map(([key, cfg]) => {
                 const Icon = cfg.icon;
-                const count = groupCounts[key] || 0;
+                const count = stats.groupCounts[key] || 0;
                 return (
                   <button key={key} onClick={() => setGroup(group === key ? "All" : key)}
                     className={`w-full text-left px-2 py-1.5 rounded-lg text-xs transition-all flex items-center justify-between gap-2 ${
@@ -202,23 +294,24 @@ export default function LocalIntelPage() {
                       <Icon className={`w-3 h-3 ${cfg.color}`} />
                       {cfg.label}
                     </span>
-                    <span className="font-bold">{count}</span>
+                    <span className="font-bold">{count > 0 ? count : "—"}</span>
                   </button>
                 );
               })}
             </div>
           </div>
 
-          {/* Data freshness */}
+          {/* Data sources */}
           <div className="rounded-xl border border-border bg-secondary/20 p-3">
             <p className="text-xs font-semibold text-muted-foreground mb-2">Data Sources</p>
             <div className="space-y-1.5 text-xs">
               <div className="flex justify-between"><span className="text-muted-foreground">OpenStreetMap</span><span className="text-green-400">✓ Live</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">FL Sunbiz</span><span className="text-yellow-400">⏳ Pending</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">SJC Property Appraiser</span><span className="text-yellow-400">⏳ Pending</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Utility Records</span><span className="text-muted-foreground">PRR needed</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">YellowPages</span><span className="text-green-400">✓ Live</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">SJC Chamber</span><span className="text-green-400">✓ Live</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">BBB Directory</span><span className="text-green-400">✓ Live</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">FL Sunbiz</span><span className="text-yellow-400">⏳ Active</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">SJC BTR</span><span className="text-green-400">✓ Live</span></div>
             </div>
-            <p className="text-xs text-muted-foreground mt-2">Last sync: today</p>
           </div>
         </div>
 
@@ -230,11 +323,14 @@ export default function LocalIntelPage() {
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
               <input
                 type="text"
-                placeholder="Search businesses..."
+                placeholder="Search 1,300+ businesses live…"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 className="w-full pl-8 pr-3 py-1.5 text-xs bg-secondary rounded-lg border border-border focus:outline-none focus:border-primary/40"
               />
+              {loading && (
+                <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground animate-spin" />
+              )}
             </div>
             <select value={sortBy} onChange={e => setSortBy(e.target.value as typeof sortBy)}
               className="text-xs bg-secondary border border-border rounded-lg px-2 py-1.5 text-muted-foreground focus:outline-none">
@@ -242,12 +338,20 @@ export default function LocalIntelPage() {
               <option value="name">Sort: Name A-Z</option>
               <option value="category">Sort: Category</option>
             </select>
-            <span className="text-xs text-muted-foreground whitespace-nowrap">{filtered.length} shown</span>
+            <span className="text-xs text-muted-foreground whitespace-nowrap">
+              {loading ? "…" : `${results.length} shown`}
+              {total > results.length ? ` of ${total.toLocaleString()}` : ""}
+            </span>
           </div>
 
           {/* Business rows */}
           <div className="flex-1 overflow-y-auto">
-            {filtered.map((b, i) => {
+            {!loading && results.length === 0 && (
+              <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">
+                No businesses matched "{search}" in the live dataset.
+              </div>
+            )}
+            {results.map((b, i) => {
               const badge = getConfidenceBadge(b.confidence);
               const grp = CATEGORY_GROUPS[getGroup(b.category)];
               const Icon = grp?.icon || MapPin;
@@ -270,9 +374,14 @@ export default function LocalIntelPage() {
                         {b.address && <p className="text-xs text-muted-foreground/70 truncate">{b.address}</p>}
                       </div>
                     </div>
-                    <span className={`text-xs font-bold px-1.5 py-0.5 rounded shrink-0 ${badge.cls}`}>
-                      {badge.label}
-                    </span>
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${badge.cls}`}>
+                        {badge.label}
+                      </span>
+                      {b.staleness?.tier && b.staleness.tier !== "FRESH" && (
+                        <span className="text-xs text-muted-foreground/50">{b.staleness.tier}</span>
+                      )}
+                    </div>
                   </div>
                 </button>
               );
@@ -331,7 +440,12 @@ export default function LocalIntelPage() {
                 </div>
                 <span className="text-xs font-bold">{selected.confidence}/100</span>
               </div>
-              <p className="text-xs text-muted-foreground">Sources: {selected.sources.join(", ")}</p>
+              {selected.sources && (
+                <p className="text-xs text-muted-foreground">Sources: {selected.sources.join(", ")}</p>
+              )}
+              {selected.staleness?.freshness_warning && (
+                <p className="text-xs text-yellow-500">{selected.staleness.freshness_warning}</p>
+              )}
             </div>
 
             {selected.lat && selected.lon && (
