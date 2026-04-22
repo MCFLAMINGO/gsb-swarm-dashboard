@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
-import { FlaskConical, Play, Zap, CheckCircle2, XCircle, Loader2, Circle, RefreshCw } from "lucide-react";
+import { FlaskConical, Play, Zap, CheckCircle2, XCircle, Loader2, Circle, RefreshCw, ChevronDown, ChevronRight } from "lucide-react";
 
 const WORKER_URL = "/api/run-app-test";
 
@@ -33,38 +33,69 @@ const APPS = [
 ];
 
 const WORKERS = [
-  { id: "W1", label: "Auth", desc: "Wallet inject / E2E role switcher" },
-  { id: "W2", label: "Nav", desc: "Walks all screens, checks render" },
+  { id: "W1", label: "Auth",    desc: "Wallet inject / E2E role switcher" },
+  { id: "W2", label: "Nav",     desc: "Walks all screens, checks render" },
   { id: "W3", label: "Buttons", desc: "Taps visible buttons, records outcome" },
-  { id: "W4", label: "Forms", desc: "Empty submit + fill validation" },
+  { id: "W4", label: "Forms",   desc: "Empty submit + fill validation" },
   { id: "W5", label: "Signals", desc: "MQTT / Supabase network roundtrip" },
 ];
 
+// ── Types ──────────────────────────────────────────────────────────────────────
+
 type WorkerStatus = "idle" | "running" | "pass" | "fail";
-type RunStatus = "idle" | "running" | "done";
+type RunStatus    = "idle" | "running" | "done";
+
+// A single row from W2/W3/W4/W5 — whatever the worker returns
+interface ResultRow {
+  button?: string;   // W3
+  text?:   string;   // W3
+  testId?: string;   // W3
+  route?:  string;   // W2
+  name?:   string;   // W2
+  label?:  string;   // W3 config buttons
+  ok:      boolean;
+  note?:   string;
+  error?:  string;
+  navigated?:    boolean;
+  urlAfter?:     string | null;
+  modalOpened?:  boolean;
+  errorShown?:   boolean;
+  skipped?:      boolean;
+  configured?:   boolean;
+  // W4
+  field?: string;
+  expectedError?: string;
+  gotError?: boolean;
+  // W5
+  signal?: string;
+  latencyMs?: number;
+}
 
 interface TestResult {
   workerId: string;
-  status: WorkerStatus;
+  status:   WorkerStatus;
   message?: string;
+  rows?:    ResultRow[];
 }
 
 interface AppRun {
-  appId: string;
-  suite: "quick" | "full";
-  runStatus: RunStatus;
-  logs: string[];
-  results: TestResult[];
-  passed: number;
-  failed: number;
-  startedAt?: number;
+  appId:      string;
+  suite:      "quick" | "full";
+  runStatus:  RunStatus;
+  logs:       string[];
+  results:    TestResult[];
+  passed:     number;
+  failed:     number;
+  startedAt?:  number;
   finishedAt?: number;
 }
 
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
 function workerStatusIcon(s: WorkerStatus) {
-  if (s === "running") return <Loader2 className="w-3 h-3 animate-spin text-yellow-400" />;
+  if (s === "running") return <Loader2     className="w-3 h-3 animate-spin text-yellow-400" />;
   if (s === "pass")    return <CheckCircle2 className="w-3 h-3 text-green-400" />;
-  if (s === "fail")    return <XCircle className="w-3 h-3 text-red-400" />;
+  if (s === "fail")    return <XCircle      className="w-3 h-3 text-red-400" />;
   return <Circle className="w-3 h-3 text-muted-foreground/40" />;
 }
 
@@ -84,19 +115,73 @@ function elapsed(ms?: number) {
 
 function parseSSELine(line: string): { type: string; data: unknown } | null {
   if (!line.startsWith("data: ")) return null;
-  try {
-    return JSON.parse(line.slice(6));
-  } catch {
-    return null;
-  }
+  try { return JSON.parse(line.slice(6)); } catch { return null; }
 }
 
+// Row label: pick the best human-readable identifier from a row
+function rowLabel(r: ResultRow): string {
+  return r.button || r.label || r.name || r.route || r.field || r.signal || "—";
+}
+
+// ── Breakdown table shown when a chip is expanded ──────────────────────────────
+function WorkerBreakdown({ rows }: { rows: ResultRow[] }) {
+  const failed = rows.filter(r => !r.ok && !r.skipped);
+  const passed = rows.filter(r => r.ok);
+  const skipped = rows.filter(r => r.skipped);
+
+  return (
+    <div className="mt-2 rounded-lg border border-border overflow-hidden text-[10px] font-mono">
+      {/* Failed rows first — most important */}
+      {failed.length > 0 && (
+        <div>
+          <div className="px-2 py-1 bg-red-400/10 text-red-400 font-bold border-b border-border">
+            ❌ {failed.length} failed
+          </div>
+          {failed.map((r, i) => (
+            <div key={i} className="px-2 py-1.5 border-b border-border/50 bg-red-400/5 space-y-0.5">
+              <div className="text-red-300 font-semibold">{rowLabel(r)}</div>
+              {r.testId  && <div className="text-muted-foreground">testId: <span className="text-foreground">{r.testId}</span></div>}
+              {r.error   && <div className="text-red-400/80">error: {r.error}</div>}
+              {r.note    && <div className="text-muted-foreground">note: {r.note}</div>}
+              {r.errorShown && <div className="text-red-400/80">error toast visible on page</div>}
+              {r.navigated  && r.urlAfter && <div className="text-muted-foreground">landed: {r.urlAfter}</div>}
+              {r.expectedError !== undefined && (
+                <div className={r.gotError ? "text-green-400" : "text-red-400"}>
+                  expected validation error: {r.gotError ? "✅ shown" : "❌ NOT shown"}
+                </div>
+              )}
+              {r.latencyMs !== undefined && <div className="text-muted-foreground">{r.latencyMs}ms</div>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Passed rows — collapsed summary */}
+      {passed.length > 0 && (
+        <div className="px-2 py-1 text-muted-foreground/50">
+          ✅ {passed.length} passed: {passed.map(r => rowLabel(r)).join(", ")}
+        </div>
+      )}
+      {skipped.length > 0 && (
+        <div className="px-2 py-1 text-muted-foreground/40">
+          ⏭ {skipped.length} skipped
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main page ──────────────────────────────────────────────────────────────────
+
 export default function TestingPage() {
-  const [runs, setRuns] = useState<Record<string, AppRun>>({});
+  const [runs,     setRuns]     = useState<Record<string, AppRun>>({});
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({}); // "appId-workerId"
   const abortRefs = useRef<Record<string, AbortController>>({});
 
+  const toggleExpanded = (key: string) =>
+    setExpanded(prev => ({ ...prev, [key]: !prev[key] }));
+
   const startRun = useCallback(async (appId: string, suite: "quick" | "full") => {
-    // Cancel any existing run for this app
     abortRefs.current[appId]?.abort();
     const ctrl = new AbortController();
     abortRefs.current[appId] = ctrl;
@@ -117,17 +202,15 @@ export default function TestingPage() {
 
     try {
       const res = await fetch(WORKER_URL, {
-        method: "POST",
+        method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ appId, suite }),
-        signal: ctrl.signal,
+        body:    JSON.stringify({ appId, suite }),
+        signal:  ctrl.signal,
       });
 
-      if (!res.ok || !res.body) {
-        throw new Error(`HTTP ${res.status}`);
-      }
+      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
 
-      const reader = res.body.getReader();
+      const reader  = res.body.getReader();
       const decoder = new TextDecoder();
       let buf = "";
 
@@ -143,11 +226,14 @@ export default function TestingPage() {
           if (!evt) continue;
 
           if (evt.type === "log") {
+            // server sends data: as string
+            const msg = (evt.data as string) || (evt as Record<string, unknown>).msg as string || "";
             setRuns(prev => {
               const run = prev[appId];
               if (!run) return prev;
-              return { ...prev, [appId]: { ...run, logs: [...run.logs, evt.data as string] } };
+              return { ...prev, [appId]: { ...run, logs: [...run.logs, msg] } };
             });
+
           } else if (evt.type === "worker_start") {
             const d = evt.data as { workerId: string };
             setRuns(prev => {
@@ -163,20 +249,32 @@ export default function TestingPage() {
                 },
               };
             });
+
           } else if (evt.type === "worker_done") {
-            const d = evt.data as { workerId: string; passed: boolean; message?: string };
+            const d = evt.data as { workerId: string; passed: boolean; message?: string; rows?: ResultRow[] };
             setRuns(prev => {
               const run = prev[appId];
               if (!run) return prev;
               const results = run.results.map(r =>
                 r.workerId === d.workerId
-                  ? { ...r, status: d.passed ? ("pass" as WorkerStatus) : ("fail" as WorkerStatus), message: d.message }
+                  ? { ...r, status: d.passed ? ("pass" as WorkerStatus) : ("fail" as WorkerStatus), message: d.message, rows: d.rows }
                   : r
               );
-              const passed = results.filter(r => r.status === "pass").length;
-              const failed = results.filter(r => r.status === "fail").length;
-              return { ...prev, [appId]: { ...run, results, passed, failed } };
+              return {
+                ...prev,
+                [appId]: {
+                  ...run,
+                  results,
+                  passed: results.filter(r => r.status === "pass").length,
+                  failed: results.filter(r => r.status === "fail").length,
+                },
+              };
             });
+            // Auto-expand failed workers so you see the breakdown immediately
+            if (!d.passed && d.rows?.length) {
+              setExpanded(prev => ({ ...prev, [`${appId}-${d.workerId}`]: true }));
+            }
+
           } else if (evt.type === "done") {
             setRuns(prev => {
               const run = prev[appId];
@@ -195,7 +293,7 @@ export default function TestingPage() {
           ...prev,
           [appId]: {
             ...run,
-            runStatus: "done",
+            runStatus:  "done",
             finishedAt: Date.now(),
             logs: [...run.logs, `❌ Connection error: ${(err as Error).message}`],
           },
@@ -206,6 +304,7 @@ export default function TestingPage() {
 
   return (
     <div className="flex flex-col gap-6 p-6 max-w-6xl mx-auto">
+
       {/* Header */}
       <div className="flex items-center gap-3">
         <div className="p-2 rounded-lg bg-primary/10 border border-primary/20">
@@ -231,12 +330,13 @@ export default function TestingPage() {
       {/* App cards */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {APPS.map(app => {
-          const run = runs[app.id];
+          const run       = runs[app.id];
           const isRunning = run?.runStatus === "running";
 
           return (
             <div key={app.id}
               className="flex flex-col gap-4 rounded-xl border border-border bg-card p-5">
+
               {/* App header */}
               <div className="flex items-start justify-between gap-2">
                 <div>
@@ -261,24 +361,55 @@ export default function TestingPage() {
                 )}
               </div>
 
-              {/* Worker chips */}
-              <div className="flex gap-1.5 flex-wrap">
-                {WORKERS.map(w => {
-                  const res = run?.results.find(r => r.workerId === w.id);
-                  const status: WorkerStatus = res?.status ?? "idle";
+              {/* Worker chips + expandable breakdown */}
+              <div className="flex flex-col gap-1">
+                <div className="flex gap-1.5 flex-wrap">
+                  {WORKERS.map(w => {
+                    const res    = run?.results.find(r => r.workerId === w.id);
+                    const status: WorkerStatus = res?.status ?? "idle";
+                    const expKey = `${app.id}-${w.id}`;
+                    const hasRows = (res?.rows?.length ?? 0) > 0;
+                    const isOpen  = expanded[expKey];
+
+                    return (
+                      <button key={w.id}
+                        title={res?.message ?? w.desc}
+                        disabled={!hasRows}
+                        onClick={() => hasRows && toggleExpanded(expKey)}
+                        className={`flex items-center gap-1 px-2 py-0.5 rounded border text-[11px] font-mono transition-all
+                          ${workerChipColor(status)}
+                          ${hasRows ? "cursor-pointer hover:brightness-110" : "cursor-default"}`}>
+                        {workerStatusIcon(status)}
+                        {w.id}
+                        {hasRows && (
+                          isOpen
+                            ? <ChevronDown  className="w-2.5 h-2.5 ml-0.5 opacity-60" />
+                            : <ChevronRight className="w-2.5 h-2.5 ml-0.5 opacity-60" />
+                        )}
+                      </button>
+                    );
+                  })}
+                  {run?.finishedAt && run.startedAt && (
+                    <span className="text-[11px] text-muted-foreground self-center ml-auto">
+                      {elapsed(run.finishedAt - run.startedAt)}
+                    </span>
+                  )}
+                </div>
+
+                {/* Per-worker breakdown — renders inline below chips when expanded */}
+                {run?.results.map(res => {
+                  const expKey = `${app.id}-${res.workerId}`;
+                  if (!expanded[expKey] || !res.rows?.length) return null;
+                  const wLabel = WORKERS.find(w => w.id === res.workerId)?.label ?? res.workerId;
                   return (
-                    <div key={w.id} title={res?.message ?? w.desc}
-                      className={`flex items-center gap-1 px-2 py-0.5 rounded border text-[11px] font-mono transition-all ${workerChipColor(status)}`}>
-                      {workerStatusIcon(status)}
-                      {w.id}
+                    <div key={res.workerId} className="mt-1">
+                      <div className="text-[10px] font-mono text-muted-foreground mb-1 px-0.5">
+                        {res.workerId} · {wLabel} · {res.message}
+                      </div>
+                      <WorkerBreakdown rows={res.rows} />
                     </div>
                   );
                 })}
-                {run?.finishedAt && run.startedAt && (
-                  <span className="text-[11px] text-muted-foreground self-center ml-auto">
-                    {elapsed(run.finishedAt - run.startedAt)}
-                  </span>
-                )}
               </div>
 
               {/* Action buttons */}
@@ -290,7 +421,7 @@ export default function TestingPage() {
                 >
                   {isRunning && run.suite === "quick"
                     ? <Loader2 className="w-3 h-3 animate-spin" />
-                    : <Zap className="w-3 h-3" />}
+                    : <Zap     className="w-3 h-3" />}
                   Quick
                 </button>
                 <button
@@ -300,12 +431,12 @@ export default function TestingPage() {
                 >
                   {isRunning && run.suite === "full"
                     ? <Loader2 className="w-3 h-3 animate-spin" />
-                    : <Play className="w-3 h-3" />}
+                    : <Play    className="w-3 h-3" />}
                   Full Suite
                 </button>
                 {run && (
                   <button
-                    onClick={() => setRuns(prev => { const n = { ...prev }; delete n[app.id]; return n; })}
+                    onClick={() => { setRuns(prev => { const n = {...prev}; delete n[app.id]; return n; }); setExpanded({}); }}
                     disabled={isRunning}
                     title="Clear results"
                     className="px-2 py-2 rounded-lg border border-border bg-secondary hover:bg-secondary/80 text-muted-foreground transition-all disabled:opacity-40"
@@ -335,15 +466,17 @@ export default function TestingPage() {
                   </div>
                 </div>
               )}
+
             </div>
           );
         })}
       </div>
 
-      {/* Info footer */}
+      {/* Footer */}
       <div className="text-xs text-muted-foreground/50 border-t border-border pt-4">
         Workers run on Railway playwright-worker service · Auto spin-down after 10 min idle ·
-        Quick suite: W1+W2 only · Full suite: all 5 workers
+        Quick suite: W1+W2 only · Full suite: all 5 workers ·
+        Click any chip to expand row-level results
       </div>
     </div>
   );
