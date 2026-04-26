@@ -141,7 +141,7 @@ export default function Sidebar() {
             </span>
           )}
         </a>
-        <a href="https://thelocalintel.com" target="_blank" rel="noopener noreferrer"
+        <a href="https://localintel-landing-deploy.vercel.app" target="_blank" rel="noopener noreferrer"
           className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors group relative"
           title="The Local Intel — agentic business intelligence"
         >
