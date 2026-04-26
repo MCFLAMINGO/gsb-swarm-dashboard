@@ -5,7 +5,8 @@ import Header from "@/components/layout/Header";
 import {
   Activity, Zap, Users, DollarSign, Clock, Hash,
   ExternalLink, RefreshCw, Radio, Send, CheckCircle2,
-  AlertCircle, Wifi, WifiOff
+  AlertCircle, Wifi, WifiOff, Plus, Pencil, Trash2,
+  ChevronLeft, ChevronRight, Megaphone, Eye,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -38,10 +39,25 @@ interface WatcherStatus {
   recentThrows: ThrowEvent[];
 }
 
+interface Campaign {
+  id: string;
+  advertiser: string;
+  budget: number;
+  cpm: number;
+  copy: string;
+  imageUrl: string;
+  target: string;
+  startDate: string;
+  endDate: string;
+  status: string;
+  impressions: number;
+  createdAt: string;
+}
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-// Watcher URL — will be set once deployed to Railway
 const WATCHER_BASE = process.env.NEXT_PUBLIC_THROW_WATCHER_URL || "https://throw-watcher-production.up.railway.app";
+const PAGE_SIZE = 8;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -96,28 +112,22 @@ function ThrowRow({ t, idx }: { t: ThrowEvent; idx: number }) {
       "grid-cols-[auto_1fr_1fr_auto_auto_auto]",
       idx === 0 && "bg-primary/5"
     )}>
-      {/* Index */}
       <span className="text-[11px] text-muted-foreground tabular-nums w-5 pt-0.5">{idx + 1}</span>
-      {/* From */}
       <div className="min-w-0">
         <div className="font-medium truncate">{t.fromHandle}</div>
         <div className="text-[10px] text-muted-foreground font-mono">{shortAddr(t.from)}</div>
       </div>
-      {/* To */}
       <div className="min-w-0">
         <div className="font-medium truncate">{t.toHandle}</div>
         <div className="text-[10px] text-muted-foreground font-mono">{shortAddr(t.to)}</div>
       </div>
-      {/* Amount */}
       <div className="text-right">
         <span className="font-bold text-green-400">${Number(t.amount).toFixed(2)}</span>
         <div className="text-[10px] text-muted-foreground">{t.token}</div>
       </div>
-      {/* Block */}
       <div className="text-right text-[11px] text-muted-foreground tabular-nums hidden md:block">
         #{t.blockNumber?.toLocaleString()}
       </div>
-      {/* Tx link */}
       <a
         href={txUrl(t.txHash)}
         target="_blank"
@@ -180,7 +190,264 @@ function ArchDiagram() {
   );
 }
 
+// ─── Sponsors tab ─────────────────────────────────────────────────────────────
+
+const EMPTY_FORM = {
+  advertiser: "", budget: "", cpm: "", copy: "",
+  imageUrl: "", target: "all", startDate: "", endDate: "", status: "active",
+};
+
+function SponsorsTab() {
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [saving, setSaving]       = useState(false);
+  const [error, setError]         = useState<string | null>(null);
+  const [form, setForm]           = useState<typeof EMPTY_FORM>(EMPTY_FORM);
+  const [editId, setEditId]       = useState<string | null>(null);
+  const [showForm, setShowForm]   = useState(false);
+  const [pushStatus, setPushStatus] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await fetch(`${WATCHER_BASE}/throw-watcher/campaigns`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      setCampaigns(await r.json());
+      setError(null);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  function openNew() {
+    setForm(EMPTY_FORM);
+    setEditId(null);
+    setShowForm(true);
+  }
+
+  function openEdit(c: Campaign) {
+    setForm({
+      advertiser: c.advertiser, budget: String(c.budget), cpm: String(c.cpm),
+      copy: c.copy, imageUrl: c.imageUrl, target: c.target,
+      startDate: c.startDate, endDate: c.endDate, status: c.status,
+    });
+    setEditId(c.id);
+    setShowForm(true);
+  }
+
+  async function save() {
+    setSaving(true);
+    try {
+      const url  = editId
+        ? `${WATCHER_BASE}/throw-watcher/campaigns/${editId}`
+        : `${WATCHER_BASE}/throw-watcher/campaigns`;
+      const method = editId ? "PUT" : "POST";
+      const r = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      setShowForm(false);
+      setEditId(null);
+      await load();
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function del(id: string) {
+    if (!confirm("Delete this sponsor?")) return;
+    await fetch(`${WATCHER_BASE}/throw-watcher/campaigns/${id}`, { method: "DELETE" });
+    await load();
+  }
+
+  async function pushLive(c: Campaign) {
+    setPushStatus(`Pushing ${c.advertiser}…`);
+    try {
+      // Build the MQTT-style sponsor payload and push via watcher broadcast
+      const sponsor = {
+        id:       c.id,
+        name:     c.advertiser,
+        logoUrl:  c.imageUrl,
+        tagline:  c.copy,
+        url:      "",
+        isVenue:  false,
+        venueId:  null,
+      };
+      // Push MQTT retained message via a dedicated endpoint (falls back to broadcast)
+      const r = await fetch(`${WATCHER_BASE}/throw-watcher/sponsor-push`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sponsor, sponsors: [sponsor] }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      setPushStatus(`✓ ${c.advertiser} pushed live`);
+    } catch (e: unknown) {
+      setPushStatus(`✗ ${e instanceof Error ? e.message : String(e)}`);
+    }
+    setTimeout(() => setPushStatus(null), 4000);
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Header row */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Megaphone size={14} className="text-primary" />
+          <span className="text-sm font-semibold">Sponsors & Campaigns</span>
+          <Badge variant="secondary" className="text-[10px] h-4 px-1.5">{campaigns.length}</Badge>
+        </div>
+        <div className="flex items-center gap-2">
+          {pushStatus && (
+            <span className="text-[11px] text-muted-foreground">{pushStatus}</span>
+          )}
+          <Button size="sm" variant="ghost" onClick={load} className="h-7 w-7 p-0">
+            <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
+          </Button>
+          <Button size="sm" onClick={openNew} className="h-7 gap-1 text-xs">
+            <Plus size={12} /> Add Sponsor
+          </Button>
+        </div>
+      </div>
+
+      {error && (
+        <div className="flex items-center gap-2 p-3 rounded-lg border border-red-500/30 bg-red-500/10 text-red-400 text-xs">
+          <AlertCircle size={13} /> {error}
+        </div>
+      )}
+
+      {/* Add / Edit form */}
+      {showForm && (
+        <div className="bg-card border border-border rounded-xl p-5 space-y-4">
+          <div className="text-sm font-semibold">{editId ? "Edit Sponsor" : "New Sponsor"}</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {[
+              { key: "advertiser", label: "Advertiser Name", placeholder: "Aqua Grill" },
+              { key: "imageUrl",   label: "Logo URL",         placeholder: "https://…/logo.png" },
+              { key: "copy",       label: "Tagline / Copy",   placeholder: "Fresh coastal cuisine…" },
+              { key: "budget",     label: "Budget ($)",       placeholder: "500" },
+              { key: "cpm",        label: "CPM ($)",          placeholder: "2.50" },
+              { key: "startDate",  label: "Start Date",       placeholder: "2026-04-01" },
+              { key: "endDate",    label: "End Date",         placeholder: "2026-04-30" },
+            ].map(({ key, label, placeholder }) => (
+              <div key={key} className="flex flex-col gap-1">
+                <label className="text-[11px] text-muted-foreground">{label}</label>
+                <input
+                  value={form[key as keyof typeof EMPTY_FORM]}
+                  onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
+                  placeholder={placeholder}
+                  className="bg-secondary/50 border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary/50"
+                />
+              </div>
+            ))}
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] text-muted-foreground">Status</label>
+              <select
+                value={form.status}
+                onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
+                className="bg-secondary/50 border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary/50"
+              >
+                <option value="active">Active</option>
+                <option value="paused">Paused</option>
+                <option value="ended">Ended</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex gap-2 justify-end">
+            <Button variant="ghost" size="sm" onClick={() => setShowForm(false)}>Cancel</Button>
+            <Button size="sm" onClick={save} disabled={saving}>
+              {saving ? "Saving…" : editId ? "Update" : "Create"}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Campaign cards */}
+      {loading && campaigns.length === 0 && (
+        <div className="py-10 text-center text-muted-foreground text-sm">
+          <RefreshCw size={18} className="animate-spin mx-auto mb-2 opacity-40" />
+          Loading campaigns…
+        </div>
+      )}
+      {!loading && campaigns.length === 0 && !showForm && (
+        <div className="py-10 text-center text-muted-foreground text-sm">
+          <Megaphone size={20} className="mx-auto mb-2 opacity-30" />
+          No sponsors yet — add Aqua Grill, McFlamingo, and others
+        </div>
+      )}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {campaigns.map(c => (
+          <div key={c.id} className="bg-card border border-border rounded-xl p-4 space-y-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                {c.imageUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={c.imageUrl} alt="" className="w-8 h-8 rounded object-cover shrink-0" onError={e => (e.currentTarget.style.display = "none")} />
+                )}
+                <div className="min-w-0">
+                  <div className="font-semibold text-sm truncate">{c.advertiser}</div>
+                  <div className="text-[10px] text-muted-foreground truncate">{c.copy}</div>
+                </div>
+              </div>
+              <Badge
+                className={cn(
+                  "text-[10px] h-4 px-1.5 shrink-0",
+                  c.status === "active"
+                    ? "bg-green-500/20 text-green-400 border-green-500/30"
+                    : "bg-secondary text-muted-foreground"
+                )}
+              >
+                {c.status}
+              </Badge>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-[11px]">
+              <div className="bg-secondary/40 rounded-lg p-2 text-center">
+                <div className="text-muted-foreground">Budget</div>
+                <div className="font-semibold">${c.budget}</div>
+              </div>
+              <div className="bg-secondary/40 rounded-lg p-2 text-center">
+                <div className="text-muted-foreground">CPM</div>
+                <div className="font-semibold">${c.cpm}</div>
+              </div>
+              <div className="bg-secondary/40 rounded-lg p-2 text-center">
+                <div className="text-muted-foreground flex items-center justify-center gap-1"><Eye size={10} /> Impr.</div>
+                <div className="font-semibold">{c.impressions}</div>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 text-xs gap-1 flex-1"
+                onClick={() => pushLive(c)}
+                disabled={c.status !== "active"}
+              >
+                <Send size={11} /> Push Live
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => openEdit(c)}>
+                <Pencil size={12} />
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-400 hover:text-red-300" onClick={() => del(c.id)}>
+                <Trash2 size={12} />
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
+
+type Tab = "feed" | "sponsors" | "proof";
 
 export default function ThrowWatcherPage() {
   const [status, setStatus]       = useState<WatcherStatus | null>(null);
@@ -190,6 +457,8 @@ export default function ThrowWatcherPage() {
   const [lastFetch, setLastFetch] = useState<Date | null>(null);
   const [online, setOnline]       = useState(true);
   const [throwOnly, setThrowOnly] = useState(false);
+  const [tab, setTab]             = useState<Tab>("feed");
+  const [page, setPage]           = useState(0);
 
   const fetchData = useCallback(async () => {
     try {
@@ -219,7 +488,6 @@ export default function ThrowWatcherPage() {
     return () => clearInterval(id);
   }, [fetchData]);
 
-  // Registered wallet addresses (from status)
   const registeredAddrs = new Set(
     (status as WatcherStatus & { registeredAddresses?: string[] })?.registeredAddresses?.map((a: string) => a.toLowerCase()) ?? []
   );
@@ -231,11 +499,24 @@ export default function ThrowWatcherPage() {
       )
     : throws;
 
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(filteredThrows.length / PAGE_SIZE));
+  const pagedThrows = filteredThrows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+  // Reset page when filter changes
+  useEffect(() => setPage(0), [throwOnly]);
+
   const statusColor = {
     active: "text-green-400",
     idle:   "text-yellow-400",
     error:  "text-red-400",
   }[status?.watcherStatus ?? "idle"] ?? "text-muted-foreground";
+
+  const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
+    { id: "feed",     label: "Live Feed",   icon: Zap },
+    { id: "sponsors", label: "Sponsors",    icon: Megaphone },
+    { id: "proof",    label: "Proof of Work", icon: CheckCircle2 },
+  ];
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -290,10 +571,6 @@ export default function ThrowWatcherPage() {
             <div>
               <div className="font-medium">Cannot reach THROW Watcher</div>
               <div className="text-xs text-red-400/70 mt-0.5">{error}</div>
-              <div className="text-xs text-red-400/70 mt-0.5">
-                Deploy watcher to Railway first — see{" "}
-                <a href="https://github.com/MCFLAMINGO/throw-watcher" target="_blank" rel="noopener noreferrer" className="underline">throw-watcher repo</a>
-              </div>
             </div>
           </div>
         )}
@@ -331,122 +608,155 @@ export default function ThrowWatcherPage() {
           />
         </div>
 
-        {/* Architecture diagram */}
+        {/* Architecture diagram — always visible */}
         <ArchDiagram />
 
-        {/* Throw history table */}
-        <div className="bg-card border border-border rounded-xl overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-            <div className="flex items-center gap-2">
-              <Zap size={14} className="text-primary" />
-              <span className="text-sm font-semibold">Live Throw Feed</span>
-              {filteredThrows.length > 0 && (
-                <Badge variant="secondary" className="text-[10px] h-4 px-1.5">
-                  {filteredThrows.length}
-                </Badge>
+        {/* Tabs */}
+        <div className="flex items-center gap-1 border-b border-border">
+          {tabs.map(t => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={cn(
+                "flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
+                tab === t.id
+                  ? "border-primary text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
               )}
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setThrowOnly(v => !v)}
-                className={cn(
-                  "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors",
-                  throwOnly
-                    ? "bg-primary/20 border-primary/40 text-primary"
-                    : "bg-secondary/40 border-border text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <span className={cn("w-1.5 h-1.5 rounded-full", throwOnly ? "bg-primary" : "bg-muted-foreground")} />
-                {throwOnly ? "THROW only" : "All Tempo"}
-              </button>
-              <span className="text-[11px] text-muted-foreground">USDC.e + pathUSD</span>
-            </div>
-          </div>
-
-          {/* Table header */}
-          <div className="grid grid-cols-[auto_1fr_1fr_auto_auto_auto] gap-3 px-4 py-2 bg-secondary/20 border-b border-border text-[10px] uppercase tracking-widest text-muted-foreground">
-            <span>#</span>
-            <span>From</span>
-            <span>To</span>
-            <span className="text-right">Amount</span>
-            <span className="text-right hidden md:block">Block</span>
-            <span>Tx</span>
-          </div>
-
-          {/* Rows */}
-          {loading && !throws.length && (
-            <div className="px-4 py-10 text-center text-muted-foreground text-sm">
-              <RefreshCw size={20} className="animate-spin mx-auto mb-2 opacity-40" />
-              Connecting to watcher…
-            </div>
-          )}
-          {!loading && filteredThrows.length === 0 && (
-            <div className="px-4 py-10 text-center text-muted-foreground text-sm">
-              <Activity size={20} className="mx-auto mb-2 opacity-30" />
-              {throwOnly
-                ? "No THROW app transactions yet — register a wallet to see yours here"
-                : "No throws detected yet — waiting for first transaction"}
-            </div>
-          )}
-          {filteredThrows.map((t, i) => (
-            <ThrowRow key={t.txHash + i} t={t} idx={i} />
+            >
+              <t.icon size={13} />
+              {t.label}
+              {t.id === "sponsors" && (
+                <Badge variant="secondary" className="text-[9px] h-4 px-1 ml-0.5">MQTT</Badge>
+              )}
+            </button>
           ))}
         </div>
 
-        {/* Proof of Work section — for Tempo grant */}
-        <div className="bg-card border border-border rounded-xl p-5 space-y-3">
-          <div className="flex items-center gap-2 mb-2">
-            <Send size={14} className="text-primary" />
-            <span className="text-sm font-semibold">Proof of Work — Tempo Integration</span>
-            <Badge className="text-[10px] bg-primary/20 text-primary border-primary/30 h-4 px-1.5">For Tempo</Badge>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[12px]">
-            {[
-              {
-                label: "Chain",
-                value: "Tempo Mainnet (Chain ID 4217)",
-                icon: <CheckCircle2 size={12} className="text-green-400" />
-              },
-              {
-                label: "Contracts Watched",
-                value: "USDC.e · pathUSD (native stablecoins)",
-                icon: <CheckCircle2 size={12} className="text-green-400" />
-              },
-              {
-                label: "RPC Provider",
-                value: "Chainstack (Tempo dedicated node)",
-                icon: <CheckCircle2 size={12} className="text-green-400" />
-              },
-              {
-                label: "Notification Method",
-                value: "Web Push API — works when app is closed",
-                icon: <CheckCircle2 size={12} className="text-green-400" />
-              },
-              {
-                label: "App",
-                value: "throw5onit.com — PWA, no App Store needed",
-                icon: <CheckCircle2 size={12} className="text-green-400" />
-              },
-              {
-                label: "Infrastructure",
-                value: "Railway (watcher) + Vercel (dashboard + PWA)",
-                icon: <CheckCircle2 size={12} className="text-green-400" />
-              },
-            ].map(({ label, value, icon }) => (
-              <div key={label} className="flex items-start gap-2 p-3 bg-secondary/30 rounded-lg border border-border/50">
-                <div className="mt-0.5 shrink-0">{icon}</div>
-                <div>
-                  <div className="text-muted-foreground">{label}</div>
-                  <div className="font-medium text-foreground">{value}</div>
+        {/* ── Tab: Live Feed ── */}
+        {tab === "feed" && (
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+              <div className="flex items-center gap-2">
+                <Zap size={14} className="text-primary" />
+                <span className="text-sm font-semibold">Live Throw Feed</span>
+                {filteredThrows.length > 0 && (
+                  <Badge variant="secondary" className="text-[10px] h-4 px-1.5">
+                    {filteredThrows.length}
+                  </Badge>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setThrowOnly(v => !v)}
+                  className={cn(
+                    "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors",
+                    throwOnly
+                      ? "bg-primary/20 border-primary/40 text-primary"
+                      : "bg-secondary/40 border-border text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <span className={cn("w-1.5 h-1.5 rounded-full", throwOnly ? "bg-primary" : "bg-muted-foreground")} />
+                  {throwOnly ? "THROW only" : "All Tempo"}
+                </button>
+                <span className="text-[11px] text-muted-foreground">USDC.e + pathUSD</span>
+              </div>
+            </div>
+
+            {/* Table header */}
+            <div className="grid grid-cols-[auto_1fr_1fr_auto_auto_auto] gap-3 px-4 py-2 bg-secondary/20 border-b border-border text-[10px] uppercase tracking-widest text-muted-foreground">
+              <span>#</span><span>From</span><span>To</span>
+              <span className="text-right">Amount</span>
+              <span className="text-right hidden md:block">Block</span>
+              <span>Tx</span>
+            </div>
+
+            {/* Rows */}
+            {loading && !throws.length && (
+              <div className="px-4 py-10 text-center text-muted-foreground text-sm">
+                <RefreshCw size={20} className="animate-spin mx-auto mb-2 opacity-40" />
+                Connecting to watcher…
+              </div>
+            )}
+            {!loading && filteredThrows.length === 0 && (
+              <div className="px-4 py-10 text-center text-muted-foreground text-sm">
+                <Activity size={20} className="mx-auto mb-2 opacity-30" />
+                {throwOnly
+                  ? "No THROW app transactions yet — register a wallet to see yours here"
+                  : "No throws detected yet — waiting for first transaction"}
+              </div>
+            )}
+            {pagedThrows.map((t, i) => (
+              <ThrowRow key={t.txHash + i} t={t} idx={page * PAGE_SIZE + i} />
+            ))}
+
+            {/* Pagination */}
+            {filteredThrows.length > PAGE_SIZE && (
+              <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+                <span className="text-[11px] text-muted-foreground">
+                  {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filteredThrows.length)} of {filteredThrows.length}
+                </span>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost" size="sm" className="h-7 w-7 p-0"
+                    onClick={() => setPage(p => Math.max(0, p - 1))}
+                    disabled={page === 0}
+                  >
+                    <ChevronLeft size={13} />
+                  </Button>
+                  <span className="text-[11px] text-muted-foreground px-1">{page + 1} / {totalPages}</span>
+                  <Button
+                    variant="ghost" size="sm" className="h-7 w-7 p-0"
+                    onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                    disabled={page >= totalPages - 1}
+                  >
+                    <ChevronRight size={13} />
+                  </Button>
                 </div>
               </div>
-            ))}
+            )}
           </div>
-          <div className="text-[11px] text-muted-foreground pt-1 border-t border-border">
-            THROW is a social payments app built natively on Tempo. Every payment is a real on-chain transfer
-            of USDC.e or pathUSD — no custodial intermediary. This watcher is part of the GSB Swarm agent network.
+        )}
+
+        {/* ── Tab: Sponsors ── */}
+        {tab === "sponsors" && (
+          <div className="bg-card border border-border rounded-xl p-5">
+            <SponsorsTab />
           </div>
-        </div>
+        )}
+
+        {/* ── Tab: Proof of Work ── */}
+        {tab === "proof" && (
+          <div className="bg-card border border-border rounded-xl p-5 space-y-3">
+            <div className="flex items-center gap-2 mb-2">
+              <Send size={14} className="text-primary" />
+              <span className="text-sm font-semibold">Proof of Work — Tempo Integration</span>
+              <Badge className="text-[10px] bg-primary/20 text-primary border-primary/30 h-4 px-1.5">For Tempo</Badge>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[12px]">
+              {[
+                { label: "Chain",                value: "Tempo Mainnet (Chain ID 4217)" },
+                { label: "Contracts Watched",    value: "USDC.e · pathUSD (native stablecoins)" },
+                { label: "RPC Provider",         value: "Chainstack (Tempo dedicated node)" },
+                { label: "Notification Method",  value: "Web Push API — works when app is closed" },
+                { label: "App",                  value: "throw5onit.com — PWA, no App Store needed" },
+                { label: "Infrastructure",       value: "Railway (watcher) + Vercel (dashboard + PWA)" },
+              ].map(({ label, value }) => (
+                <div key={label} className="flex items-start gap-2 p-3 bg-secondary/30 rounded-lg border border-border/50">
+                  <CheckCircle2 size={12} className="text-green-400 mt-0.5 shrink-0" />
+                  <div>
+                    <div className="text-muted-foreground">{label}</div>
+                    <div className="font-medium text-foreground">{value}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="text-[11px] text-muted-foreground pt-1 border-t border-border">
+              THROW is a social payments app built natively on Tempo. Every payment is a real on-chain transfer
+              of USDC.e or pathUSD — no custodial intermediary. This watcher is part of the GSB Swarm agent network.
+            </div>
+          </div>
+        )}
 
       </div>
     </div>

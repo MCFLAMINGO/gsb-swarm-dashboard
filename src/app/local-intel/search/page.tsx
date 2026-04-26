@@ -41,6 +41,66 @@ interface OracleData {
   trend?: { cycles: number; capture_rate: string; saturation_streak: number };
 }
 
+// ── NL multi-ZIP result type ─────────────────────────────────────────────────
+
+interface NlZipResult {
+  zip: string;
+  name: string;
+  population: number;
+  median_household_income: number;
+  wfh_pct: number | null;
+  growth_trajectory: { state: string; label: string; confidence: string } | null;
+  saturation_status: string | null;
+  gap_count: number;
+  oracle_narrative: string | null;
+  top_gap: { tier: string; description: string; gap: number } | null;
+  has_oracle: boolean;
+  score: number;
+}
+
+interface NlQueryResponse {
+  ok: boolean;
+  question: string;
+  intent: string;
+  filters_applied: Record<string, unknown>;
+  total_matched: number;
+  results: NlZipResult[];
+}
+
+// Detect if query is a "compare ZIPs / find ZIPs" style question vs a single-business search
+const NL_MULTI_ZIP_TRIGGERS = [
+  /(zips?|zip codes?|areas?|neighborhoods?|markets?)/i,
+  /high.income/i,
+  /low.wfh/i,
+  /wfh saturation/i,
+  /near\s+(jacksonville|tampa|orlando|miami|gainesville|sarasota|pensacola|fort|daytona|st\.\s*aug)/i,
+  /median.*income/i,
+  /where (should|would|can)/i,
+  /best\s+(zip|area|market|location)/i,
+  /compare/i,
+  /ranked?/i,
+  /opportunity\s+(zip|market|area)/i,
+  /expansion/i,
+  /undersupplied/i,
+  /growth.*(corridor|market|area)/i,
+];
+
+function isNlMultiZipQuery(q: string): boolean {
+  return NL_MULTI_ZIP_TRIGGERS.some(r => r.test(q));
+}
+
+async function callNlQuery(question: string): Promise<NlQueryResponse | null> {
+  try {
+    const res = await fetch(`${RAILWAY}/api/local-intel/nl-query`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question }),
+    });
+    const json = await res.json();
+    return json.ok ? json : null;
+  } catch { return null; }
+}
+
 // ── Intent detection ──────────────────────────────────────────────────────────
 
 const ORACLE_TRIGGERS = [
@@ -198,12 +258,12 @@ function FreshnessBadge({ tier }: { tier?: string }) {
 // ── Suggestions ───────────────────────────────────────────────────────────────
 
 const SUGGESTIONS = [
+  "High-income ZIPs near Jacksonville with low WFH saturation",
+  "Best ZIP codes for a restaurant near Tampa",
+  "Undersupplied markets near Jacksonville",
   "restaurants in Nocatee",
-  "dentists in Ponte Vedra Beach",
-  "coffee shops 32081",
-  "gyms in 32082",
-  "Publix",
   "Is there room for another restaurant in 32082?",
+  "dentists in Ponte Vedra Beach",
 ];
 
 // ── Oracle Answer Card ────────────────────────────────────────────────────────
@@ -353,6 +413,124 @@ function OracleCard({ oracle, query }: { oracle: OracleData; query: string }) {
   );
 }
 
+// ── NL Multi-ZIP Results Card ────────────────────────────────────────────────
+
+function NlResultsCard({ data }: { data: NlQueryResponse }) {
+  return (
+    <div style={{ marginBottom: 24 }}>
+      {/* Intent header */}
+      <div style={{
+        background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)",
+        borderRadius: 12, padding: "16px 20px", marginBottom: 16,
+        border: "1px solid #1a73e8",
+      }}>
+        <div style={{ fontSize: 11, color: "#1a73e8", fontWeight: 700, letterSpacing: "0.08em", marginBottom: 6 }}>
+          LOCALINTEL · AI QUERY · {data.total_matched} ZIPs MATCHED
+        </div>
+        <div style={{ fontSize: 15, color: "#e8eaed", fontWeight: 500, lineHeight: 1.4 }}>
+          {data.intent}
+        </div>
+        <div style={{ fontSize: 11, color: "#80868b", marginTop: 8, display: "flex", gap: 12, flexWrap: "wrap" }}>
+          {Object.entries(data.filters_applied)
+            .filter(([k, v]) => k !== "intent" && k !== "limit" && v != null)
+            .map(([k, v]) => (
+              <span key={k} style={{ background: "#1a73e820", color: "#1a73e8", padding: "2px 8px", borderRadius: 99, fontSize: 10, fontWeight: 600 }}>
+                {k.replace(/_/g, " ")}: {String(v)}
+              </span>
+            ))}
+        </div>
+      </div>
+
+      {/* ZIP result cards */}
+      {data.results.map((z, i) => (
+        <div key={z.zip} style={{
+          border: "1px solid #e8eaed",
+          borderRadius: 10, padding: "16px 20px", marginBottom: 10,
+          background: i === 0 ? "#f8fbff" : "#fff",
+          borderLeft: i === 0 ? "3px solid #1a73e8" : "1px solid #e8eaed",
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+            <div>
+              <span style={{ fontSize: 16, fontWeight: 600, color: "#202124" }}>{z.name}</span>
+              <span style={{ fontSize: 13, color: "#80868b", marginLeft: 8 }}>{z.zip}</span>
+              {i === 0 && (
+                <span style={{ marginLeft: 8, fontSize: 10, background: "#1a73e8", color: "#fff", padding: "1px 7px", borderRadius: 99, fontWeight: 700 }}>
+                  TOP MATCH
+                </span>
+              )}
+            </div>
+            {z.saturation_status && (
+              <span style={{
+                fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 99,
+                background: z.saturation_status === "undersupplied" ? "#dcfce7" : "#fee2e2",
+                color: z.saturation_status === "undersupplied" ? "#166534" : "#991b1b",
+              }}>
+                {z.saturation_status === "undersupplied" ? "GAP EXISTS" : "SATURATED"}
+              </span>
+            )}
+          </div>
+
+          {/* Stats row */}
+          <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginBottom: z.oracle_narrative ? 10 : 0 }}>
+            <div style={{ fontSize: 12, color: "#5f6368" }}>
+              <span style={{ fontWeight: 600, color: "#202124" }}>
+                ${z.median_household_income > 0 ? Math.round(z.median_household_income / 1000) + "k" : "—"}
+              </span> median HHI
+            </div>
+            <div style={{ fontSize: 12, color: "#5f6368" }}>
+              <span style={{ fontWeight: 600, color: "#202124" }}>
+                {z.population > 0 ? z.population.toLocaleString() : "—"}
+              </span> population
+            </div>
+            {z.wfh_pct != null && (
+              <div style={{ fontSize: 12, color: "#5f6368" }}>
+                <span style={{ fontWeight: 600, color: "#202124" }}>{z.wfh_pct.toFixed(1)}%</span> WFH
+              </div>
+            )}
+            {z.growth_trajectory && (
+              <div style={{ fontSize: 12, color: "#5f6368" }}>
+                <span style={{ fontWeight: 600, color: "#202124" }}>{z.growth_trajectory.label}</span>
+              </div>
+            )}
+            {z.gap_count > 0 && (
+              <div style={{ fontSize: 12, color: "#137333" }}>
+                <span style={{ fontWeight: 600 }}>+{z.gap_count}</span> market gaps
+              </div>
+            )}
+          </div>
+
+          {/* Oracle narrative snippet */}
+          {z.oracle_narrative && (
+            <div style={{ fontSize: 13, color: "#4d5156", lineHeight: 1.5, marginTop: 6,
+              display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+              {z.oracle_narrative}
+            </div>
+          )}
+
+          {/* Top gap */}
+          {z.top_gap && (
+            <div style={{ marginTop: 8, fontSize: 12, color: "#1a73e8" }}>
+              Top gap: <strong>{z.top_gap.description}</strong>
+            </div>
+          )}
+
+          {!z.has_oracle && (
+            <div style={{ fontSize: 11, color: "#9aa0a6", marginTop: 6 }}>
+              Oracle data computing — check back in next cycle
+            </div>
+          )}
+        </div>
+      ))}
+
+      {data.results.length === 0 && (
+        <div style={{ fontSize: 14, color: "#5f6368", padding: "16px 0" }}>
+          No ZIPs matched those filters. Try broadening your criteria.
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function LocalIntelSearchPage() {
@@ -360,6 +538,7 @@ export default function LocalIntelSearchPage() {
   const [loading, setLoading]   = useState(false);
   const [results, setResults]   = useState<Business[] | null>(null);
   const [oracle, setOracle]     = useState<OracleData | null>(null);
+  const [nlData, setNlData]     = useState<NlQueryResponse | null>(null);
   const [total, setTotal]       = useState(0);
   const [error, setError]       = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -371,9 +550,22 @@ export default function LocalIntelSearchPage() {
     setLoading(true);
     setResults(null);
     setOracle(null);
+    setNlData(null);
     setError(null);
 
     try {
+      // ── NL multi-ZIP path — "find high-income ZIPs near Jacksonville" style
+      if (isNlMultiZipQuery(q)) {
+        const nlResult = await callNlQuery(q);
+        if (nlResult) {
+          setNlData(nlResult);
+          setResults([]);
+          setTotal(nlResult.total_matched);
+          return;
+        }
+        // Fall through to regular search if NL fails
+      }
+
       const { triggered, zip } = detectOracleIntent(q);
       const { tool, params } = parseQuery(q);
 
@@ -441,7 +633,7 @@ export default function LocalIntelSearchPage() {
               ref={inputRef}
               value={query}
               onChange={e => setQuery(e.target.value)}
-              placeholder="Ask anything — 'room for a restaurant in 32082?' or 'dentist near Ponte Vedra'"
+              placeholder="Ask anything — 'high-income ZIPs near Jacksonville' or 'room for a restaurant in 32082?'"
               style={{ flex: 1, border: "none", outline: "none", fontSize: 15, color: "#202124", background: "transparent" }}
             />
             {query && (
@@ -485,6 +677,9 @@ export default function LocalIntelSearchPage() {
 
       {results !== null && !loading && (
         <div style={{ maxWidth: 720, margin: "0 auto", padding: "0 24px 48px" }}>
+
+          {/* NL multi-ZIP results — shown for comparative/market queries */}
+          {nlData && <NlResultsCard data={nlData} />}
 
           {/* Oracle card — shown when intent detected */}
           {oracle && <OracleCard oracle={oracle} query={query} />}
