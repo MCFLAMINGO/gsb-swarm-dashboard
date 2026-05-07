@@ -24,6 +24,7 @@ const NAV = [
   { href: "/local-intel/oracle",  label: "↳ Oracle Signals", icon: Eye,        tip: "Live signal layer — opportunities, gaps, growth anomalies across all ZIPs" },
   { href: "/local-intel/search",  label: "↳ Search",          icon: Search,     tip: "Search businesses by query and ZIP across the LocalIntel dataset" },
   { href: "/local-intel/fees",    label: "↳ Fee Control",    icon: Coins,      tip: "RFQ match fees, order fee %, routing toggle, fee event log" },
+  { href: "https://www.thelocalintel.com/admin", label: "↳ Biz Admin", icon: MapPin, tip: "Business Admin Portal — manage profiles, claim businesses, view RFQ/fee history", external: true },
   { href: "/connections", label: "API Connections",icon: Plug,            tip: "Telegram, X, x402, wallet keys" },
   { href: "/settings",    label: "Settings",       icon: Settings,        tip: "Dashboard & agent preferences" },
 ];
@@ -76,27 +77,27 @@ export default function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 py-3 px-2 space-y-0.5 overflow-y-auto">
-        {NAV.map(({ href, label, icon: Icon, tip }) => {
-          const active = pathname === href || (href !== "/" && pathname.startsWith(href));
-          return (
-            <Link key={href} href={href} title={tip}>
-              <span className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-all cursor-pointer group relative",
-                active
-                  ? "bg-primary/10 text-primary border border-primary/25"
-                  : "text-muted-foreground hover:bg-secondary hover:text-foreground border border-transparent"
-              )}>
-                <Icon size={17} className="shrink-0" />
-                {!collapsed && <span>{label}</span>}
-                {/* Tooltip when collapsed */}
-                {collapsed && (
-                  <span className="absolute left-full ml-2.5 px-2 py-1 text-xs bg-secondary border border-border rounded whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-50 shadow-lg">
-                    {label}
-                  </span>
-                )}
-              </span>
-            </Link>
+        {NAV.map(({ href, label, icon: Icon, tip, external }: { href: string; label: string; icon: any; tip: string; external?: boolean }) => {
+          const active = !external && (pathname === href || (href !== "/" && pathname.startsWith(href)));
+          const inner = (
+            <span className={cn(
+              "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-all cursor-pointer group relative",
+              active
+                ? "bg-primary/10 text-primary border border-primary/25"
+                : "text-muted-foreground hover:bg-secondary hover:text-foreground border border-transparent"
+            )}>
+              <Icon size={17} className="shrink-0" />
+              {!collapsed && <span>{label}</span>}
+              {collapsed && (
+                <span className="absolute left-full ml-2.5 px-2 py-1 text-xs bg-secondary border border-border rounded whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-50 shadow-lg">
+                  {label}
+                </span>
+              )}
+            </span>
           );
+          return external
+            ? <a key={href} href={href} target="_blank" rel="noopener noreferrer" title={tip}>{inner}</a>
+            : <Link key={href} href={href} title={tip}>{inner}</Link>;
         })}
       </nav>
 
