@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
-  LayoutDashboard, Bot, DollarSign, Plug, Settings, ChevronLeft, ChevronRight, Gauge, Activity, Swords, Zap, FlaskConical, ShoppingBag, Globe, Radio, TrendingUp, Eye, Search, MapPin, Coins
+  LayoutDashboard, Bot, DollarSign, Plug, Settings, ChevronLeft, ChevronRight, Gauge, Activity, Swords, Zap, FlaskConical, ShoppingBag, Globe, Radio, TrendingUp, Eye, Search, MapPin, Coins, Brain
 } from "lucide-react";
 import { useState } from "react";
 
@@ -23,7 +23,8 @@ const NAV = [
   { href: "/local-intel/revenue", label: "↳ Revenue",        icon: TrendingUp, tip: "Revenue stats, top tools, budget gate, agentic visibility" },
   { href: "/local-intel/oracle",  label: "↳ Oracle Signals", icon: Eye,        tip: "Live signal layer — opportunities, gaps, growth anomalies across all ZIPs" },
   { href: "/local-intel/search",  label: "↳ Search",          icon: Search,     tip: "Search businesses by query and ZIP across the LocalIntel dataset" },
-  { href: "/local-intel/fees",    label: "↳ Fee Control",    icon: Coins,      tip: "RFQ match fees, order fee %, routing toggle, fee event log" },
+  { href: "/local-intel/fees",      label: "↳ Fee Control",    icon: Coins,      tip: "RFQ match fees, order fee %, routing toggle, fee event log" },
+  { href: "/local-intel/zip-intel", label: "↳ ZIP Intel",      icon: Brain,      tip: "Hive intelligence — census, income, permits, LLM query per ZIP" },
   { href: "https://www.thelocalintel.com/admin", label: "↳ Biz Admin", icon: MapPin, tip: "Business Admin Portal — manage profiles, claim businesses, view RFQ/fee history", external: true },
   { href: "/connections", label: "API Connections",icon: Plug,            tip: "Telegram, X, x402, wallet keys" },
   { href: "/settings",    label: "Settings",       icon: Settings,        tip: "Dashboard & agent preferences" },
