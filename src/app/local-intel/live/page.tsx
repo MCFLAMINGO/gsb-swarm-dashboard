@@ -68,8 +68,8 @@ interface ZipQueue {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 const SOURCES = [
-  "osm_overpass", "yelp_public", "foursquare",
-  "nominatim", "own_website", "sjc_arcgis", "fl_sunbiz"
+  "osm_overpass", "yellowpages", "fl_sunbiz",
+  "businessMergeWorker", "irsSoiWorker", "censusLayerWorker", "acsWorker"
 ];
 
 function timeAgo(isoStr: string | undefined): string {
