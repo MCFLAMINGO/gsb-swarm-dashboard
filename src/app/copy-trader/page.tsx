@@ -371,6 +371,12 @@ export default function CopyTraderPage() {
 
   return (
     <div className="min-h-screen bg-black text-white font-mono">
+      {/* SERVICE OFFLINE BANNER */}
+      <div className="sticky top-0 z-50 flex items-center gap-3 px-6 py-3 bg-yellow-900/80 border-b border-yellow-600/60 backdrop-blur text-yellow-200 text-sm font-mono">
+        <span className="text-yellow-400 font-bold">⚠ SERVICE OFFLINE</span>
+        <span className="text-yellow-300/80">Copy Trader depends on <code className="text-yellow-100 bg-yellow-900 px-1 rounded">gsb-yield-swarm-production.up.railway.app</code> which is currently stopped. All API calls will fail.</span>
+        <span className="ml-auto text-yellow-500 text-xs">Coming Soon</span>
+      </div>
       {/* Top bar */}
       <div className="border-b border-gray-800 px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">

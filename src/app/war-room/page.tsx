@@ -512,6 +512,12 @@ export default function WarRoom() {
 
   return (
     <div className="flex flex-col h-screen bg-zinc-950 text-white overflow-hidden">
+      {/* SERVICE OFFLINE BANNER */}
+      <div className="shrink-0 flex items-center gap-3 px-6 py-3 bg-yellow-900/80 border-b border-yellow-600/60 text-yellow-200 text-sm font-mono">
+        <span className="text-yellow-400 font-bold">⚠ SERVICE OFFLINE</span>
+        <span className="text-yellow-300/80">War Room depends on <code className="text-yellow-100 bg-yellow-900 px-1 rounded">gsb-yield-swarm-production.up.railway.app</code> which is currently stopped. All API calls will fail.</span>
+        <span className="ml-auto text-yellow-500 text-xs">Coming Soon</span>
+      </div>
       {/* ── Header ── */}
       <div className="shrink-0 px-6 py-3 border-b border-zinc-800 flex items-center justify-between">
         <div>
