@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
-  LayoutDashboard, Bot, DollarSign, Plug, Settings, ChevronLeft, ChevronRight, Gauge, Activity, Swords, Zap, FlaskConical, ShoppingBag, Globe, Radio, TrendingUp, Eye, Search, MapPin, Coins, Brain, Network
+  LayoutDashboard, Bot, DollarSign, Plug, Settings, ChevronLeft, ChevronRight, Gauge, Activity, Swords, Zap, FlaskConical, ShoppingBag, Globe, Radio, TrendingUp, Eye, Search, MapPin, Coins, Brain, Network, Phone, Ban
 } from "lucide-react";
 import { useState } from "react";
 
@@ -26,6 +26,8 @@ const NAV = [
   { href: "/local-intel/fees",      label: "↳ Fee Control",    icon: Coins,      tip: "RFQ match fees, order fee %, routing toggle, fee event log" },
   { href: "/local-intel/zip-intel", label: "↳ ZIP Intel",      icon: Brain,      tip: "Hive intelligence — census, income, permits, LLM query per ZIP" },
   { href: "/local-intel/nodes",     label: "↳ Node Map",       icon: Network,    tip: "LocalIntel intelligence nodes — capabilities, signals, live demo" },
+  { href: "/local-intel/transcripts", label: "↳ Transcripts",  icon: Phone,      tip: "Call transcripts — LocalIntel voice line inbound recordings & transcriptions" },
+  { href: "/local-intel/dead-ends",   label: "↳ Dead Ends",    icon: Ban,        tip: "Intent dead ends — queries that failed to convert by fail reason" },
   { href: "https://www.thelocalintel.com/admin", label: "↳ Biz Admin", icon: MapPin, tip: "Business Admin Portal — manage profiles, claim businesses, view RFQ/fee history", external: true },
   { href: "/connections", label: "API Connections",icon: Plug,            tip: "Telegram, X, x402, wallet keys" },
   { href: "/settings",    label: "Settings",       icon: Settings,        tip: "Dashboard & agent preferences" },
