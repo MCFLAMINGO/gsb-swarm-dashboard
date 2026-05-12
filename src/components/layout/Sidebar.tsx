@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
-  LayoutDashboard, Bot, DollarSign, Plug, Settings, ChevronLeft, ChevronRight, Gauge, Activity, Swords, Zap, FlaskConical, ShoppingBag, Globe, Radio, TrendingUp, Eye, Search, MapPin, Coins, Brain, Network, Phone, Ban
+  LayoutDashboard, Bot, DollarSign, Plug, Settings, ChevronLeft, ChevronRight, Gauge, Activity, Swords, Zap, FlaskConical, ShoppingBag, Globe, Radio, TrendingUp, Eye, Search, MapPin, Coins, Brain, Network, Phone, Ban, MessageSquare
 } from "lucide-react";
 import { useState } from "react";
 
@@ -28,6 +28,7 @@ const NAV = [
   { href: "/local-intel/nodes",     label: "↳ Node Map",       icon: Network,    tip: "LocalIntel intelligence nodes — capabilities, signals, live demo" },
   { href: "/local-intel/transcripts", label: "↳ Transcripts",  icon: Phone,      tip: "Call transcripts — LocalIntel voice line inbound recordings & transcriptions" },
   { href: "/local-intel/dead-ends",   label: "↳ Dead Ends",    icon: Ban,        tip: "Intent dead ends — queries that failed to convert by fail reason" },
+  { href: "/local-intel/sms-log",     label: "↳ SMS Log",      icon: MessageSquare, tip: "Inbound SMS query log — what was asked, how it routed, what was sent back" },
   { href: "https://www.thelocalintel.com/admin", label: "↳ Biz Admin", icon: MapPin, tip: "Business Admin Portal — manage profiles, claim businesses, view RFQ/fee history", external: true },
   { href: "/connections", label: "API Connections",icon: Plug,            tip: "Telegram, X, x402, wallet keys" },
   { href: "/settings",    label: "Settings",       icon: Settings,        tip: "Dashboard & agent preferences" },
