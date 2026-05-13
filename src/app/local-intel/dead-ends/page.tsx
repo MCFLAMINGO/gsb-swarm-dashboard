@@ -1,75 +1,61 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { Ban, RefreshCw, XCircle } from "lucide-react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { AlertTriangle, RefreshCw, Clock } from "lucide-react";
 
 const RAILWAY = "https://gsb-swarm-production.up.railway.app";
-const ADMIN_TOKEN = "localintel-migrate-2026";
-
-const FAIL_REASONS = [
-  "all",
-  "no_intent",
-  "no_results",
-  "no_wallet",
-  "rfq_fail",
-  "reservation_fail",
-  "unknown",
-] as const;
-type FailReason = typeof FAIL_REASONS[number];
 
 interface DeadEnd {
-  id: string;
-  query?: string | null;
-  zip?: string | null;
-  channel?: string | null;
-  fail_reason?: string | null;
-  intent_path?: string | null;
-  intent?: string | null;
-  created_at?: string | null;
-  [key: string]: unknown;
+  id: number;
+  raw_query: string;
+  zip: string | null;
+  channel: string;
+  detected_intent: string | null;
+  reason: string | null;
+  created_at: string;
 }
 
-interface DeadEndsResponse {
-  ok?: boolean;
-  dead_ends?: DeadEnd[];
-  results?: DeadEnd[];
-  data?: DeadEnd[];
-  count?: number;
-  total?: number;
+function timeAgo(isoStr: string | undefined | null): string {
+  if (!isoStr) return "—";
+  const diff = Date.now() - new Date(isoStr).getTime();
+  if (diff < 0) return "just now";
+  const s = Math.floor(diff / 1000);
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
 }
 
-function ChannelBadge({ channel }: { channel: string | null | undefined }) {
+async function safeFetch<T>(url: string, fallback: T): Promise<T> {
+  try {
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) return fallback;
+    return await res.json() as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function ChannelBadge({ channel }: { channel: string }) {
   const c = (channel || "").toLowerCase();
-  const map: Record<string, string> = {
-    web:    "bg-blue-500/15 text-blue-400 border-blue-500/20",
-    twilio: "bg-purple-500/15 text-purple-400 border-purple-500/20",
-    voice:  "bg-emerald-500/15 text-emerald-400 border-emerald-500/20",
-    sms:    "bg-indigo-500/15 text-indigo-400 border-indigo-500/20",
-    api:    "bg-zinc-500/15 text-zinc-400 border-zinc-500/20",
-  };
-  const cls = map[c] ?? "bg-zinc-500/15 text-zinc-400 border-zinc-500/20";
+  let bg = "hsl(0 0% 14%)";
+  let color = "hsl(0 0% 55%)";
+  if (c === "sms") {
+    bg = "#3b82f618";
+    color = "#3b82f6";
+  } else if (c === "voice") {
+    bg = "#a855f718";
+    color = "#a855f7";
+  }
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] font-medium ${cls}`}>
+    <span style={{
+      padding: "2px 8px", borderRadius: 99, fontSize: 10,
+      background: bg, color, fontWeight: 600,
+      display: "inline-block", textTransform: "lowercase"
+    }}>
       {channel || "—"}
-    </span>
-  );
-}
-
-function ReasonBadge({ reason }: { reason: string | null | undefined }) {
-  const r = (reason || "").toLowerCase();
-  // Severity coloring
-  const map: Record<string, string> = {
-    no_intent:        "bg-amber-500/15 text-amber-400 border-amber-500/20",
-    no_results:       "bg-yellow-500/15 text-yellow-400 border-yellow-500/20",
-    no_wallet:        "bg-orange-500/15 text-orange-400 border-orange-500/20",
-    rfq_fail:         "bg-red-500/15 text-red-400 border-red-500/20",
-    reservation_fail: "bg-red-500/15 text-red-400 border-red-500/20",
-    unknown:          "bg-zinc-500/15 text-zinc-400 border-zinc-500/20",
-  };
-  const cls = map[r] ?? "bg-zinc-500/15 text-zinc-400 border-zinc-500/20";
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] font-medium ${cls}`}>
-      {reason || "—"}
     </span>
   );
 }
@@ -77,118 +63,145 @@ function ReasonBadge({ reason }: { reason: string | null | undefined }) {
 export default function DeadEndsPage() {
   const [rows, setRows] = useState<DeadEnd[]>([]);
   const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
-  const [filter, setFilter] = useState<FailReason>("all");
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [secondsAgo, setSecondsAgo] = useState(0);
+  const [error, setError] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const counterRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setErr(null);
-    try {
-      const qs = new URLSearchParams({ limit: "100" });
-      if (filter !== "all") qs.set("reason", filter);
-      const res = await fetch(`${RAILWAY}/api/local-intel/dead-ends?${qs.toString()}`, {
-        headers: { "x-admin-token": ADMIN_TOKEN },
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json: DeadEndsResponse = await res.json();
-      const list = json.dead_ends ?? json.results ?? json.data ?? [];
-      setRows(Array.isArray(list) ? list : []);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "unknown error");
+  const fetchData = useCallback(async () => {
+    const data = await safeFetch<DeadEnd[] | null>(
+      `${RAILWAY}/api/local-intel/dead-ends`,
+      null
+    );
+    if (data === null) {
+      setError(true);
       setRows([]);
-    } finally {
-      setLoading(false);
+    } else {
+      setError(false);
+      setRows(Array.isArray(data) ? data : []);
     }
-  }, [filter]);
+    setLoading(false);
+    setLastUpdated(new Date());
+    setSecondsAgo(0);
+  }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    fetchData();
+    timerRef.current = setInterval(fetchData, 60_000);
+    counterRef.current = setInterval(() => setSecondsAgo(s => s + 1), 1000);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (counterRef.current) clearInterval(counterRef.current);
+    };
+  }, [fetchData]);
 
   return (
-    <div className="p-6 space-y-6 max-w-6xl mx-auto">
+    <div style={{ flex: 1, overflowY: "auto", padding: "24px", background: "hsl(0 0% 4%)" }}>
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Ban size={22} className="text-primary" />
-          <div>
-            <h1 className="text-xl font-bold">Intent Dead Ends</h1>
-            <p className="text-xs text-muted-foreground">Queries that failed to convert — gaps in intent, results, or downstream actions.</p>
-          </div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
+        <div>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: "#f0ebe3", display: "flex", alignItems: "center", gap: 10 }}>
+            <AlertTriangle size={20} style={{ color: "#00e5a0" }} />
+            Intent Dead Ends
+          </h1>
+          <p style={{ fontSize: 12, color: "hsl(0 0% 45%)", marginTop: 4 }}>
+            Queries that failed to convert — gaps in intent · polling every 60s
+          </p>
         </div>
-        <div className="flex items-center gap-2">
-          <select
-            value={filter}
-            onChange={e => setFilter(e.target.value as FailReason)}
-            className="text-xs border border-border bg-background rounded px-2 py-1.5 text-muted-foreground"
-          >
-            {FAIL_REASONS.map(r => (
-              <option key={r} value={r}>{r === "all" ? "All reasons" : r}</option>
-            ))}
-          </select>
-          <span className="px-2 py-1 rounded-full bg-secondary text-xs text-muted-foreground border border-border">
-            {rows.length} entr{rows.length !== 1 ? "ies" : "y"}
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{
+            fontSize: 11, color: "hsl(0 0% 40%)",
+            display: "flex", alignItems: "center", gap: 5
+          }}>
+            <Clock size={11} />
+            {lastUpdated ? `Updated ${secondsAgo}s ago` : "Loading…"}
           </span>
           <button
-            onClick={load}
-            disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:bg-secondary transition-colors"
+            onClick={fetchData}
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              padding: "6px 12px", borderRadius: 8, fontSize: 12,
+              background: "hsl(0 0% 10%)", border: "1px solid hsl(0 0% 18%)",
+              color: "hsl(0 0% 70%)", cursor: "pointer"
+            }}
           >
-            <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
+            <RefreshCw size={12} />
             Refresh
           </button>
         </div>
       </div>
 
-      {err && (
-        <div className="p-3 rounded-md bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-2">
-          <XCircle size={15} /> {err}
+      {error && (
+        <div style={{
+          marginBottom: 16, padding: "10px 14px", borderRadius: 8,
+          background: "hsl(4 85% 44% / 0.10)", border: "1px solid hsl(4 85% 44% / 0.3)",
+          color: "hsl(4 85% 65%)", fontSize: 12
+        }}>
+          Backend unavailable — showing empty state
         </div>
       )}
 
       {/* Table */}
-      <div className="bg-card rounded-lg border border-border overflow-hidden">
+      <div style={{
+        background: "hsl(0 0% 7%)", border: "1px solid hsl(0 0% 14%)",
+        borderRadius: 12, padding: 20
+      }}>
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "2fr 0.6fr 0.6fr 1fr 1.4fr 0.7fr",
+          gap: 8, padding: "8px 12px",
+          borderBottom: "1px solid hsl(0 0% 14%)", marginBottom: 4
+        }}>
+          {["Query", "ZIP", "Channel", "Intent", "Reason", "When"].map(c => (
+            <span key={c} style={{ fontSize: 10, color: "hsl(0 0% 40%)", textTransform: "uppercase", letterSpacing: "0.07em" }}>
+              {c}
+            </span>
+          ))}
+        </div>
+
         {loading ? (
-          <div className="p-8 text-center text-muted-foreground text-sm">
-            <RefreshCw size={18} className="animate-spin mx-auto mb-2" />
+          <div style={{ padding: 24, textAlign: "center", fontSize: 12, color: "hsl(0 0% 40%)" }}>
             Loading…
           </div>
         ) : rows.length === 0 ? (
-          <div className="p-8 text-center text-muted-foreground text-sm">
+          <div style={{ padding: 24, textAlign: "center", fontSize: 12, color: "hsl(0 0% 40%)" }}>
             No dead ends logged yet
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-border">
-                  {["Time", "Query", "ZIP", "Channel", "Fail Reason", "Intent Path"].map(h => (
-                    <th key={h} className="px-4 py-2.5 text-left text-muted-foreground font-medium">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row, i) => {
-                  const id = row.id || String(i);
-                  const intentPath = row.intent_path || row.intent || "";
-                  return (
-                    <tr key={id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
-                      <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
-                        {row.created_at ? new Date(row.created_at).toLocaleString() : "—"}
-                      </td>
-                      <td className="px-4 py-2.5 max-w-[260px] truncate text-foreground" title={row.query ?? ""}>
-                        {row.query || "—"}
-                      </td>
-                      <td className="px-4 py-2.5 font-mono text-foreground whitespace-nowrap">{row.zip || "—"}</td>
-                      <td className="px-4 py-2.5"><ChannelBadge channel={row.channel} /></td>
-                      <td className="px-4 py-2.5"><ReasonBadge reason={row.fail_reason} /></td>
-                      <td className="px-4 py-2.5 font-mono text-muted-foreground max-w-[220px] truncate" title={intentPath}>
-                        {intentPath || "—"}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          rows.map((row, i) => {
+            const query = row.raw_query || "";
+            const truncatedQuery = query.length > 60 ? query.slice(0, 60) + "…" : query;
+            return (
+              <div key={row.id ?? i} style={{
+                display: "grid",
+                gridTemplateColumns: "2fr 0.6fr 0.6fr 1fr 1.4fr 0.7fr",
+                gap: 8, padding: "8px 12px",
+                borderBottom: "1px solid hsl(0 0% 10%)",
+                alignItems: "center"
+              }}>
+                <span
+                  style={{ fontSize: 12, color: "#f0ebe3", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                  title={query || undefined}
+                >
+                  {truncatedQuery || "—"}
+                </span>
+                <span style={{ fontSize: 12, fontFamily: "monospace", color: "#00e5a0" }}>
+                  {row.zip || "—"}
+                </span>
+                <span><ChannelBadge channel={row.channel} /></span>
+                <span style={{ fontSize: 11, color: "hsl(0 0% 65%)", fontFamily: "monospace" }}>
+                  {row.detected_intent || "—"}
+                </span>
+                <span style={{ fontSize: 11, color: "hsl(0 0% 60%)" }}>
+                  {row.reason || "—"}
+                </span>
+                <span style={{ fontSize: 10, color: "hsl(0 0% 40%)" }}>
+                  {timeAgo(row.created_at)}
+                </span>
+              </div>
+            );
+          })
         )}
       </div>
     </div>

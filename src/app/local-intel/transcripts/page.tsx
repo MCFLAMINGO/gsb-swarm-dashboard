@@ -1,61 +1,51 @@
 "use client";
 
-import { useState, useEffect, useCallback, Fragment } from "react";
-import { Phone, RefreshCw, XCircle, CheckCircle2, Clock, AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { Phone, RefreshCw, Clock } from "lucide-react";
 
 const RAILWAY = "https://gsb-swarm-production.up.railway.app";
-const ADMIN_TOKEN = "localintel-migrate-2026";
 
 interface CallTranscript {
-  id: string;
-  call_sid?: string | null;
-  from_number?: string | null;
-  to_number?: string | null;
-  caller?: string | null;
-  duration_seconds?: number | null;
-  duration?: number | null;
-  status?: string | null;
-  transcript?: string | null;
-  transcription?: string | null;
-  created_at?: string | null;
-  started_at?: string | null;
-  [key: string]: unknown;
+  call_sid: string;
+  caller_id: string | null;
+  recording_url: string | null;
+  transcription_text: string | null;
+  duration_sec: number | null;
+  zip: string | null;
+  channel: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
 }
 
-interface TranscriptsResponse {
-  ok?: boolean;
-  transcripts?: CallTranscript[];
-  calls?: CallTranscript[];
-  results?: CallTranscript[];
-  data?: CallTranscript[];
-  count?: number;
-  total?: number;
+async function safeFetch<T>(url: string, fallback: T): Promise<T> {
+  try {
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) return fallback;
+    return await res.json() as T;
+  } catch {
+    return fallback;
+  }
 }
 
-function formatDuration(secs: number | null | undefined): string {
-  if (secs == null || isNaN(secs)) return "—";
-  const s = Math.floor(secs);
-  const m = Math.floor(s / 60);
-  const r = s % 60;
-  return m > 0 ? `${m}m ${r}s` : `${r}s`;
-}
-
-function StatusBadge({ status }: { status: string | null | undefined }) {
+function StatusPill({ status }: { status: string }) {
   const s = (status || "").toLowerCase();
-  const map: Record<string, { cls: string; icon: React.ReactNode; label: string }> = {
-    transcribed: { cls: "bg-green-500/15 text-green-400 border-green-500/20", icon: <CheckCircle2 size={11} />, label: "transcribed" },
-    completed:   { cls: "bg-green-500/15 text-green-400 border-green-500/20", icon: <CheckCircle2 size={11} />, label: "completed"   },
-    pending:     { cls: "bg-yellow-500/15 text-yellow-400 border-yellow-500/20", icon: <Clock size={11} />,      label: "pending"     },
-    in_progress: { cls: "bg-yellow-500/15 text-yellow-400 border-yellow-500/20", icon: <Clock size={11} />,      label: "in progress" },
-    processing:  { cls: "bg-yellow-500/15 text-yellow-400 border-yellow-500/20", icon: <Clock size={11} />,      label: "processing"  },
-    failed:      { cls: "bg-red-500/15 text-red-400 border-red-500/20",          icon: <XCircle size={11} />,    label: "failed"      },
-    error:       { cls: "bg-red-500/15 text-red-400 border-red-500/20",          icon: <XCircle size={11} />,    label: "error"       },
-    no_audio:    { cls: "bg-amber-500/15 text-amber-400 border-amber-500/20",    icon: <AlertTriangle size={11} />, label: "no audio" },
-  };
-  const cfg = map[s] ?? { cls: "bg-zinc-500/15 text-zinc-400 border-zinc-500/20", icon: null, label: status || "—" };
+  let bg = "hsl(0 0% 14%)";
+  let color = "hsl(0 0% 55%)";
+  if (s === "pending") {
+    bg = "#eab30818";
+    color = "#eab308";
+  } else if (s === "transcribed") {
+    bg = "#22c55e18";
+    color = "#22c55e";
+  }
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-medium ${cfg.cls}`}>
-      {cfg.icon}{cfg.label}
+    <span style={{
+      padding: "2px 8px", borderRadius: 99, fontSize: 10,
+      background: bg, color, fontWeight: 600,
+      display: "inline-block", textTransform: "lowercase"
+    }}>
+      {status || "—"}
     </span>
   );
 }
@@ -63,130 +53,149 @@ function StatusBadge({ status }: { status: string | null | undefined }) {
 export default function CallTranscriptsPage() {
   const [rows, setRows] = useState<CallTranscript[]>([]);
   const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [secondsAgo, setSecondsAgo] = useState(0);
+  const [error, setError] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const counterRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setErr(null);
-    try {
-      const res = await fetch(`${RAILWAY}/api/local-intel/call-transcripts?limit=50`, {
-        headers: { "x-admin-token": ADMIN_TOKEN },
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json: TranscriptsResponse = await res.json();
-      const list = json.transcripts ?? json.calls ?? json.results ?? json.data ?? [];
-      setRows(Array.isArray(list) ? list : []);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "unknown error");
+  const fetchData = useCallback(async () => {
+    const data = await safeFetch<CallTranscript[] | null>(
+      `${RAILWAY}/api/local-intel/call-transcripts`,
+      null
+    );
+    if (data === null) {
+      setError(true);
       setRows([]);
-    } finally {
-      setLoading(false);
+    } else {
+      setError(false);
+      setRows(Array.isArray(data) ? data : []);
     }
+    setLoading(false);
+    setLastUpdated(new Date());
+    setSecondsAgo(0);
   }, []);
 
-  useEffect(() => { load(); }, [load]);
-
-  const toggle = (id: string) => setExpanded(p => ({ ...p, [id]: !p[id] }));
+  useEffect(() => {
+    fetchData();
+    timerRef.current = setInterval(fetchData, 30_000);
+    counterRef.current = setInterval(() => setSecondsAgo(s => s + 1), 1000);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (counterRef.current) clearInterval(counterRef.current);
+    };
+  }, [fetchData]);
 
   return (
-    <div className="p-6 space-y-6 max-w-6xl mx-auto">
+    <div style={{ flex: 1, overflowY: "auto", padding: "24px", background: "hsl(0 0% 4%)" }}>
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Phone size={22} className="text-primary" />
-          <div>
-            <h1 className="text-xl font-bold">Call Transcripts</h1>
-            <p className="text-xs text-muted-foreground">LocalIntel voice line — inbound call recordings & transcriptions.</p>
-          </div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
+        <div>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: "#f0ebe3", display: "flex", alignItems: "center", gap: 10 }}>
+            <Phone size={20} style={{ color: "#00e5a0" }} />
+            Call Transcripts
+          </h1>
+          <p style={{ fontSize: 12, color: "hsl(0 0% 45%)", marginTop: 4 }}>
+            LocalIntel voice line — inbound call recordings & transcriptions · polling every 30s
+          </p>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="px-2 py-1 rounded-full bg-secondary text-xs text-muted-foreground border border-border">
-            {rows.length} call{rows.length !== 1 ? "s" : ""}
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{
+            fontSize: 11, color: "hsl(0 0% 40%)",
+            display: "flex", alignItems: "center", gap: 5
+          }}>
+            <Clock size={11} />
+            {lastUpdated ? `Updated ${secondsAgo}s ago` : "Loading…"}
           </span>
           <button
-            onClick={load}
-            disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:bg-secondary transition-colors"
+            onClick={fetchData}
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              padding: "6px 12px", borderRadius: 8, fontSize: 12,
+              background: "hsl(0 0% 10%)", border: "1px solid hsl(0 0% 18%)",
+              color: "hsl(0 0% 70%)", cursor: "pointer"
+            }}
           >
-            <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
+            <RefreshCw size={12} />
             Refresh
           </button>
         </div>
       </div>
 
-      {err && (
-        <div className="p-3 rounded-md bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-2">
-          <XCircle size={15} /> {err}
+      {error && (
+        <div style={{
+          marginBottom: 16, padding: "10px 14px", borderRadius: 8,
+          background: "hsl(4 85% 44% / 0.10)", border: "1px solid hsl(4 85% 44% / 0.3)",
+          color: "hsl(4 85% 65%)", fontSize: 12
+        }}>
+          Backend unavailable — showing empty state
         </div>
       )}
 
       {/* Table */}
-      <div className="bg-card rounded-lg border border-border overflow-hidden">
+      <div style={{
+        background: "hsl(0 0% 7%)", border: "1px solid hsl(0 0% 14%)",
+        borderRadius: 12, padding: 20
+      }}>
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "1.2fr 0.6fr 0.6fr 0.8fr 1.4fr 2fr",
+          gap: 8, padding: "8px 12px",
+          borderBottom: "1px solid hsl(0 0% 14%)", marginBottom: 4
+        }}>
+          {["Caller", "ZIP", "Duration", "Status", "Recording", "Transcript"].map(c => (
+            <span key={c} style={{ fontSize: 10, color: "hsl(0 0% 40%)", textTransform: "uppercase", letterSpacing: "0.07em" }}>
+              {c}
+            </span>
+          ))}
+        </div>
+
         {loading ? (
-          <div className="p-8 text-center text-muted-foreground text-sm">
-            <RefreshCw size={18} className="animate-spin mx-auto mb-2" />
+          <div style={{ padding: 24, textAlign: "center", fontSize: 12, color: "hsl(0 0% 40%)" }}>
             Loading…
           </div>
         ) : rows.length === 0 ? (
-          <div className="p-8 text-center text-muted-foreground text-sm">
-            No calls yet — call (904) 506-7476 to test
+          <div style={{ padding: 24, textAlign: "center", fontSize: 12, color: "hsl(0 0% 40%)" }}>
+            No calls yet
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="w-8 px-2 py-2.5"></th>
-                  {["Time", "Caller", "Duration", "Status", "Transcript"].map(h => (
-                    <th key={h} className="px-4 py-2.5 text-left text-muted-foreground font-medium">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row, i) => {
-                  const id = row.id || row.call_sid || String(i);
-                  const isOpen = !!expanded[id];
-                  const transcript = row.transcript || row.transcription || "";
-                  const truncated = transcript.length > 120 ? transcript.slice(0, 120) + "…" : transcript;
-                  const caller = row.caller || row.from_number || "—";
-                  const duration = row.duration_seconds ?? row.duration ?? null;
-                  const when = row.created_at || row.started_at;
-                  return (
-                    <Fragment key={id}>
-                      <tr
-                        onClick={() => toggle(id)}
-                        className="border-b border-border/50 hover:bg-secondary/30 transition-colors cursor-pointer"
-                      >
-                        <td className="px-2 py-2.5 text-muted-foreground">
-                          {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                        </td>
-                        <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
-                          {when ? new Date(when).toLocaleString() : "—"}
-                        </td>
-                        <td className="px-4 py-2.5 font-mono text-foreground whitespace-nowrap">{caller}</td>
-                        <td className="px-4 py-2.5 font-mono text-foreground whitespace-nowrap">
-                          {formatDuration(duration as number | null)}
-                        </td>
-                        <td className="px-4 py-2.5"><StatusBadge status={row.status} /></td>
-                        <td className="px-4 py-2.5 text-muted-foreground max-w-[420px]">
-                          {transcript ? (isOpen ? null : truncated) : <span className="opacity-50">—</span>}
-                        </td>
-                      </tr>
-                      {isOpen && transcript && (
-                        <tr className="border-b border-border/50 bg-secondary/10">
-                          <td></td>
-                          <td colSpan={5} className="px-4 py-3 text-foreground whitespace-pre-wrap text-[13px] leading-relaxed">
-                            {transcript}
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          rows.map((row, i) => {
+            const transcript = row.transcription_text || "";
+            const truncated = transcript.length > 80 ? transcript.slice(0, 80) + "…" : transcript;
+            return (
+              <div key={row.call_sid || i} style={{
+                display: "grid",
+                gridTemplateColumns: "1.2fr 0.6fr 0.6fr 0.8fr 1.4fr 2fr",
+                gap: 8, padding: "8px 12px",
+                borderBottom: "1px solid hsl(0 0% 10%)",
+                alignItems: "center"
+              }}>
+                <span style={{ fontSize: 12, fontFamily: "monospace", color: "#f0ebe3" }}>
+                  {row.caller_id || "—"}
+                </span>
+                <span style={{ fontSize: 12, fontFamily: "monospace", color: "#00e5a0" }}>
+                  {row.zip || "—"}
+                </span>
+                <span style={{ fontSize: 12, fontFamily: "monospace", color: "#f0ebe3" }}>
+                  {row.duration_sec ? `${row.duration_sec}s` : "—"}
+                </span>
+                <span><StatusPill status={row.status} /></span>
+                <span>
+                  {row.recording_url ? (
+                    <audio controls style={{ height: 28, maxWidth: 200 }} src={row.recording_url} />
+                  ) : (
+                    <span style={{ fontSize: 12, color: "hsl(0 0% 40%)" }}>—</span>
+                  )}
+                </span>
+                <span
+                  style={{ fontSize: 11, color: "hsl(0 0% 65%)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                  title={transcript || undefined}
+                >
+                  {truncated || "—"}
+                </span>
+              </div>
+            );
+          })
         )}
       </div>
     </div>

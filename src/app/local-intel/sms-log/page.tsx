@@ -1,186 +1,192 @@
 "use client";
 
-import { useState, useEffect, useCallback, Fragment } from "react";
-import { MessageSquare, RefreshCw, XCircle, ChevronDown, ChevronRight } from "lucide-react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { MessageSquare, RefreshCw, Clock } from "lucide-react";
 
 const RAILWAY = "https://gsb-swarm-production.up.railway.app";
-const ADMIN_TOKEN = "localintel-migrate-2026";
 
 interface SmsLogEntry {
-  id: string;
-  caller?: string | null;
-  from_number?: string | null;
-  query?: string | null;
-  body?: string | null;
-  zip?: string | null;
-  intent?: string | null;
-  intent_path?: string | null;
-  resolved_via?: string | null;
-  response?: string | null;
-  response_preview?: string | null;
-  created_at?: string | null;
-  [key: string]: unknown;
+  id: number;
+  from_number: string;
+  body: string;
+  zip: string | null;
+  detected_intent: string | null;
+  response_sent: string | null;
+  created_at: string;
 }
 
-interface SmsLogResponse {
-  ok?: boolean;
-  sms_log?: SmsLogEntry[];
-  results?: SmsLogEntry[];
-  data?: SmsLogEntry[];
-  entries?: SmsLogEntry[];
-  count?: number;
-  total?: number;
+function timeAgo(isoStr: string | undefined | null): string {
+  if (!isoStr) return "—";
+  const diff = Date.now() - new Date(isoStr).getTime();
+  if (diff < 0) return "just now";
+  const s = Math.floor(diff / 1000);
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
 }
 
-function ResolvedViaBadge({ via }: { via: string | null | undefined }) {
-  const v = (via || "").toLowerCase();
-  const map: Record<string, string> = {
-    search:      "bg-blue-500/15 text-blue-400 border-blue-500/20",
-    rfq:         "bg-purple-500/15 text-purple-400 border-purple-500/20",
-    ordering:    "bg-green-500/15 text-green-400 border-green-500/20",
-    reservation: "bg-orange-500/15 text-orange-400 border-orange-500/20",
-    alias:       "bg-teal-500/15 text-teal-400 border-teal-500/20",
-    unmatched:   "bg-red-500/15 text-red-400 border-red-500/20",
-  };
-  const cls = map[v] ?? "bg-zinc-500/15 text-zinc-400 border-zinc-500/20";
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] font-medium ${cls}`}>
-      {via || "—"}
-    </span>
-  );
+async function safeFetch<T>(url: string, fallback: T): Promise<T> {
+  try {
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) return fallback;
+    return await res.json() as T;
+  } catch {
+    return fallback;
+  }
 }
 
 export default function SmsLogPage() {
   const [rows, setRows] = useState<SmsLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [secondsAgo, setSecondsAgo] = useState(0);
+  const [error, setError] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const counterRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setErr(null);
-    try {
-      const res = await fetch(`${RAILWAY}/api/local-intel/sms-log?limit=100`, {
-        headers: { "x-admin-token": ADMIN_TOKEN },
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json: SmsLogResponse = await res.json();
-      const list = json.sms_log ?? json.entries ?? json.results ?? json.data ?? [];
-      setRows(Array.isArray(list) ? list : []);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "unknown error");
+  const fetchData = useCallback(async () => {
+    const data = await safeFetch<SmsLogEntry[] | null>(
+      `${RAILWAY}/api/local-intel/sms-log`,
+      null
+    );
+    if (data === null) {
+      setError(true);
       setRows([]);
-    } finally {
-      setLoading(false);
+    } else {
+      setError(false);
+      setRows(Array.isArray(data) ? data : []);
     }
+    setLoading(false);
+    setLastUpdated(new Date());
+    setSecondsAgo(0);
   }, []);
 
-  useEffect(() => { load(); }, [load]);
-
-  const toggle = (id: string) => setExpanded(p => ({ ...p, [id]: !p[id] }));
+  useEffect(() => {
+    fetchData();
+    timerRef.current = setInterval(fetchData, 30_000);
+    counterRef.current = setInterval(() => setSecondsAgo(s => s + 1), 1000);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (counterRef.current) clearInterval(counterRef.current);
+    };
+  }, [fetchData]);
 
   return (
-    <div className="p-6 space-y-6 max-w-6xl mx-auto">
+    <div style={{ flex: 1, overflowY: "auto", padding: "24px", background: "hsl(0 0% 4%)" }}>
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <MessageSquare size={22} className="text-primary" />
-          <div>
-            <h1 className="text-xl font-bold">SMS Query Log</h1>
-            <p className="text-xs text-muted-foreground">Inbound SMS queries — what was asked, how it routed, what was sent back.</p>
-          </div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
+        <div>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: "#f0ebe3", display: "flex", alignItems: "center", gap: 10 }}>
+            <MessageSquare size={20} style={{ color: "#00e5a0" }} />
+            SMS Query Log
+          </h1>
+          <p style={{ fontSize: 12, color: "hsl(0 0% 45%)", marginTop: 4 }}>
+            Inbound SMS queries — what was asked, how it routed, what was sent back · polling every 30s
+          </p>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="px-2 py-1 rounded-full bg-secondary text-xs text-muted-foreground border border-border">
-            {rows.length} quer{rows.length !== 1 ? "ies" : "y"}
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{
+            fontSize: 11, color: "hsl(0 0% 40%)",
+            display: "flex", alignItems: "center", gap: 5
+          }}>
+            <Clock size={11} />
+            {lastUpdated ? `Updated ${secondsAgo}s ago` : "Loading…"}
           </span>
           <button
-            onClick={load}
-            disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:bg-secondary transition-colors"
+            onClick={fetchData}
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              padding: "6px 12px", borderRadius: 8, fontSize: 12,
+              background: "hsl(0 0% 10%)", border: "1px solid hsl(0 0% 18%)",
+              color: "hsl(0 0% 70%)", cursor: "pointer"
+            }}
           >
-            <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
+            <RefreshCw size={12} />
             Refresh
           </button>
         </div>
       </div>
 
-      {err && (
-        <div className="p-3 rounded-md bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-2">
-          <XCircle size={15} /> {err}
+      {error && (
+        <div style={{
+          marginBottom: 16, padding: "10px 14px", borderRadius: 8,
+          background: "hsl(4 85% 44% / 0.10)", border: "1px solid hsl(4 85% 44% / 0.3)",
+          color: "hsl(4 85% 65%)", fontSize: 12
+        }}>
+          Backend unavailable — showing empty state
         </div>
       )}
 
       {/* Table */}
-      <div className="bg-card rounded-lg border border-border overflow-hidden">
+      <div style={{
+        background: "hsl(0 0% 7%)", border: "1px solid hsl(0 0% 14%)",
+        borderRadius: 12, padding: 20
+      }}>
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "1.2fr 0.6fr 1.8fr 1fr 2fr 0.7fr",
+          gap: 8, padding: "8px 12px",
+          borderBottom: "1px solid hsl(0 0% 14%)", marginBottom: 4
+        }}>
+          {["From", "ZIP", "Query", "Intent", "Response", "When"].map(c => (
+            <span key={c} style={{ fontSize: 10, color: "hsl(0 0% 40%)", textTransform: "uppercase", letterSpacing: "0.07em" }}>
+              {c}
+            </span>
+          ))}
+        </div>
+
         {loading ? (
-          <div className="p-8 text-center text-muted-foreground text-sm">
-            <RefreshCw size={18} className="animate-spin mx-auto mb-2" />
+          <div style={{ padding: 24, textAlign: "center", fontSize: 12, color: "hsl(0 0% 40%)" }}>
             Loading…
           </div>
         ) : rows.length === 0 ? (
-          <div className="p-8 text-center text-muted-foreground text-sm">
-            No SMS queries logged yet — send a text to (904) 506-7476
+          <div style={{ padding: 24, textAlign: "center", fontSize: 12, color: "hsl(0 0% 40%)" }}>
+            No SMS queries logged yet
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="w-8 px-2 py-2.5"></th>
-                  {["Time", "Caller", "Query", "ZIP", "Intent", "Resolved Via", "Response Preview"].map(h => (
-                    <th key={h} className="px-4 py-2.5 text-left text-muted-foreground font-medium">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row, i) => {
-                  const id = row.id || String(i);
-                  const isOpen = !!expanded[id];
-                  const caller = row.caller || row.from_number || "—";
-                  const query = row.query || row.body || "";
-                  const intent = row.intent || row.intent_path || "";
-                  const response = row.response || row.response_preview || "";
-                  const truncated = response.length > 80 ? response.slice(0, 80) + "…" : response;
-                  return (
-                    <Fragment key={id}>
-                      <tr
-                        onClick={() => toggle(id)}
-                        className="border-b border-border/50 hover:bg-secondary/30 transition-colors cursor-pointer"
-                      >
-                        <td className="px-2 py-2.5 text-muted-foreground">
-                          {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                        </td>
-                        <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
-                          {row.created_at ? new Date(row.created_at).toLocaleString() : "—"}
-                        </td>
-                        <td className="px-4 py-2.5 font-mono text-foreground whitespace-nowrap">{caller}</td>
-                        <td className="px-4 py-2.5 max-w-[220px] truncate text-foreground" title={query}>
-                          {query || "—"}
-                        </td>
-                        <td className="px-4 py-2.5 font-mono text-foreground whitespace-nowrap">{row.zip || "—"}</td>
-                        <td className="px-4 py-2.5 font-mono text-muted-foreground max-w-[160px] truncate" title={intent}>
-                          {intent || "—"}
-                        </td>
-                        <td className="px-4 py-2.5"><ResolvedViaBadge via={row.resolved_via} /></td>
-                        <td className="px-4 py-2.5 text-muted-foreground max-w-[300px]">
-                          {response ? (isOpen ? null : truncated) : <span className="opacity-50">—</span>}
-                        </td>
-                      </tr>
-                      {isOpen && response && (
-                        <tr className="border-b border-border/50 bg-secondary/10">
-                          <td></td>
-                          <td colSpan={7} className="px-4 py-3 text-foreground whitespace-pre-wrap text-[13px] leading-relaxed">
-                            {response}
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          rows.map((row, i) => {
+            const query = row.body || "";
+            const truncatedQuery = query.length > 60 ? query.slice(0, 60) + "…" : query;
+            const response = row.response_sent || "";
+            const truncatedResp = response.length > 80 ? response.slice(0, 80) + "…" : response;
+            return (
+              <div key={row.id ?? i} style={{
+                display: "grid",
+                gridTemplateColumns: "1.2fr 0.6fr 1.8fr 1fr 2fr 0.7fr",
+                gap: 8, padding: "8px 12px",
+                borderBottom: "1px solid hsl(0 0% 10%)",
+                alignItems: "center"
+              }}>
+                <span style={{ fontSize: 12, fontFamily: "monospace", color: "#f0ebe3" }}>
+                  {row.from_number || "—"}
+                </span>
+                <span style={{ fontSize: 12, fontFamily: "monospace", color: "#00e5a0" }}>
+                  {row.zip || "—"}
+                </span>
+                <span
+                  style={{ fontSize: 12, color: "#f0ebe3", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                  title={query || undefined}
+                >
+                  {truncatedQuery || "—"}
+                </span>
+                <span style={{ fontSize: 11, color: "hsl(0 0% 65%)", fontFamily: "monospace" }}>
+                  {row.detected_intent || "—"}
+                </span>
+                <span
+                  style={{ fontSize: 11, color: "hsl(0 0% 60%)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                  title={response || undefined}
+                >
+                  {truncatedResp || "—"}
+                </span>
+                <span style={{ fontSize: 10, color: "hsl(0 0% 40%)" }}>
+                  {timeAgo(row.created_at)}
+                </span>
+              </div>
+            );
+          })
         )}
       </div>
     </div>
