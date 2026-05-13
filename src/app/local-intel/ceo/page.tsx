@@ -44,7 +44,8 @@ interface Sectors {
 }
 interface Jobs {
   jobs_located_here?: string; workers_living_here?: string; net_flow?: string;
-  retail_jobs?: string; food_jobs?: string; top_inflow_zip?: string; top_outflow_zip?: string;
+  retail_jobs?: string; food_jobs?: string; healthcare_jobs?: string;
+  high_earn_pct?: string; low_earn_pct?: string;
 }
 interface BusinessActivity {
   total_businesses?: number; top_categories?: CategoryRow[];
@@ -311,10 +312,11 @@ function JobsPanel({ d }: { d: Jobs }) {
       <KV label="Workers Living Here"   value={d.workers_living_here} />
       <KV label="Net Flow"              value={d.net_flow ? `${net >= 0 ? "+" : ""}${d.net_flow}` : null}
            color={importer ? C.green : C.amber} />
-      <KV label="Retail Jobs"           value={d.retail_jobs} />
+      <KV label="Retail Jobs"          value={d.retail_jobs} />
       <KV label="Food Jobs"             value={d.food_jobs} />
-      <KV label="Top Inflow ZIP"        value={d.top_inflow_zip} mono />
-      <KV label="Top Outflow ZIP"       value={d.top_outflow_zip} mono />
+      <KV label="Healthcare Jobs"       value={d.healthcare_jobs} />
+      <KV label="High Earners (>$3333)" value={d.high_earn_pct} />
+      <KV label="Low Earners (<$1250)"  value={d.low_earn_pct} />
     </Panel>
   );
 }
