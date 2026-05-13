@@ -28,15 +28,17 @@ interface NodeDef {
   color: string;
   colorHex: string;
   vintage: string;
-  cron?: string;           // human-readable schedule
+  cron?: string;               // human-readable schedule
   questions: string[];
   signals: string[];
   demoEndpoint: string;
   demoMethod?: "GET" | "POST";
   demoHeaders?: Record<string, string>;
-  triggerEndpoint?: string;  // POST endpoint to trigger this worker
-  triggerLabel?: string;     // button label override
-  status?: NodeStatus;       // force override
+  triggerEndpoint?: string;    // POST endpoint to trigger this worker
+  triggerLabel?: string;       // button label override
+  statusEndpoint?: string;     // GET endpoint returning { live: bool, ...stats } — overrides zip_signals check
+  statusHeaders?: Record<string, string>;
+  status?: NodeStatus;         // force override
 }
 
 // ── Node Definitions ───────────────────────────────────────────────────────────
@@ -397,6 +399,8 @@ const NODES: NodeDef[] = [
     demoHeaders: { "x-admin-token": ADMIN_TOKEN },
     triggerEndpoint: `${RAILWAY}/api/local-intel/admin/reseed-stjohns`,
     triggerLabel: "Reseed CAMA Now",
+    statusEndpoint: `${RAILWAY}/api/local-intel/admin/cama-status`,
+    statusHeaders: { "x-admin-token": ADMIN_TOKEN },
   },
 
   // ── Tier 5: intelligence layer ───────────────────────────────────────────────
@@ -752,6 +756,93 @@ function DemoPanel({
   );
 }
 
+// ── CAMA Status Panel ─────────────────────────────────────────────────────────
+
+interface CamaData {
+  live: boolean;
+  total_parcels: number;
+  with_beds: number;
+  with_baths: number;
+  with_sqft: number;
+  with_year: number;
+  avg_beds: number | null;
+  avg_baths: number | null;
+  avg_sqft: number | null;
+  recent_jobs: { worker_name: string; last_run: string }[];
+}
+
+function CamaStatusPanel({ data, colorHex }: { data: CamaData; colorHex: string }) {
+  const pct = data.total_parcels > 0
+    ? Math.round((data.with_beds / data.total_parcels) * 100)
+    : 0;
+
+  // Determine last job status
+  const jobs = data.recent_jobs || [];
+  const lastComplete = jobs.find(j => j.worker_name.includes('_complete_'));
+  const lastError    = jobs.find(j => j.worker_name.includes('_error_'));
+  const lastStarted  = jobs.find(j => j.worker_name.includes('_started_'));
+
+  let jobStatus = null;
+  if (lastComplete && (!lastStarted || new Date(lastComplete.last_run) > new Date(lastStarted.last_run))) {
+    jobStatus = { label: 'Last reseed completed', time: lastComplete.last_run, color: '#4ade80' };
+  } else if (lastError) {
+    jobStatus = { label: 'Last reseed errored', time: lastError.last_run, color: '#f87171' };
+  } else if (lastStarted) {
+    jobStatus = { label: 'Reseed in progress since', time: lastStarted.last_run, color: '#fbbf24' };
+  }
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      {/* Coverage bar */}
+      <div style={{ marginBottom: 8 }}>
+        <div style={{
+          display: 'flex', justifyContent: 'space-between',
+          fontSize: 10, color: 'hsl(0 0% 45%)', marginBottom: 4,
+        }}>
+          <span>Bed/bath coverage ({data.with_beds.toLocaleString()} / {data.total_parcels.toLocaleString()} parcels)</span>
+          <span style={{ color: pct > 50 ? '#22c55e' : '#eab308', fontWeight: 600 }}>{pct}%</span>
+        </div>
+        <div style={{ height: 4, borderRadius: 99, background: 'hsl(0 0% 12%)', overflow: 'hidden' }}>
+          <div style={{
+            height: '100%', width: `${pct}%`, borderRadius: 99,
+            background: pct > 50 ? '#22c55e' : '#eab308',
+            transition: 'width 600ms ease',
+          }} />
+        </div>
+      </div>
+
+      {/* Stats row */}
+      {data.live && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+          {[
+            { label: 'Avg beds',  val: data.avg_beds  != null ? data.avg_beds  : '—' },
+            { label: 'Avg baths', val: data.avg_baths != null ? data.avg_baths : '—' },
+            { label: 'Avg sqft',  val: data.avg_sqft  != null ? Number(data.avg_sqft).toLocaleString() : '—' },
+            { label: 'w/ year',   val: data.with_year > 0 ? data.with_year.toLocaleString() : '—' },
+          ].map(s => (
+            <div key={s.label} style={{
+              fontSize: 10, padding: '3px 8px', borderRadius: 5,
+              background: `${colorHex}10`, border: `1px solid ${colorHex}25`,
+              color: 'hsl(0 0% 65%)',
+            }}>
+              <span style={{ color: 'hsl(0 0% 45%)' }}>{s.label}: </span>
+              <span style={{ color: colorHex, fontWeight: 600 }}>{String(s.val)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Last job status */}
+      {jobStatus && (
+        <div style={{ fontSize: 10, color: jobStatus.color, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <Clock size={9} />
+          {jobStatus.label}: {new Date(jobStatus.time).toLocaleString()}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Node Card ─────────────────────────────────────────────────────────────────
 
 function NodeCard({
@@ -763,15 +854,58 @@ function NodeCard({
 }) {
   const [expanded, setExpanded] = useState(false);
   const [showDemo, setShowDemo] = useState(false);
+  const [camaData, setCamaData] = useState<CamaData | null>(null);
+  const [camaLoading, setCamaLoading] = useState(false);
 
+  // Fetch statusEndpoint for nodes that have one (e.g. SJCPA CAMA)
+  useEffect(() => {
+    if (!node.statusEndpoint) return;
+    let cancelled = false;
+    let pollTimer: ReturnType<typeof setTimeout>;
+
+    const fetchStatus = async () => {
+      if (cancelled) return;
+      setCamaLoading(true);
+      try {
+        const res = await fetch(node.statusEndpoint!, {
+          headers: { ...(node.statusHeaders ?? {}) },
+          cache: 'no-store',
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (!cancelled) setCamaData(data);
+          // Poll every 30s if a reseed is in-progress (started but not complete)
+          const jobs = data.recent_jobs || [];
+          const started  = jobs.find((j: { worker_name: string }) => j.worker_name.includes('_started_'));
+          const complete = jobs.find((j: { worker_name: string }) => j.worker_name.includes('_complete_'));
+          const inProgress = started && (!complete || new Date(started.last_run) > new Date(complete.last_run));
+          if (inProgress && !cancelled) {
+            pollTimer = setTimeout(fetchStatus, 30000);
+          }
+        }
+      } catch (_) { /* non-fatal */ }
+      finally { if (!cancelled) setCamaLoading(false); }
+    };
+
+    fetchStatus();
+    return () => { cancelled = true; clearTimeout(pollTimer); };
+  }, [node.statusEndpoint, node.statusHeaders]);
+
+  // Compute status — use statusEndpoint data if available
   const status: NodeStatus = (() => {
     if (node.status === "building") return "building";
+    if (node.statusEndpoint) {
+      if (camaLoading && !camaData) return "pending";
+      return camaData?.live ? "live" : "pending";
+    }
     if (node.signals.length === 0) return "pending";
     const hasAny = node.signals.some((s) => liveSignals.has(s));
     return hasAny ? "live" : "pending";
   })();
 
-  const liveCount = node.signals.filter((s) => liveSignals.has(s)).length;
+  const liveCount = node.statusEndpoint
+    ? 0  // not used for statusEndpoint nodes
+    : node.signals.filter((s) => liveSignals.has(s)).length;
   const Icon = node.icon;
 
   return (
@@ -864,8 +998,19 @@ function NodeCard({
           </div>
         )}
 
-        {/* Live signal count */}
-        {node.signals.length > 0 && status !== "building" && (
+        {/* CAMA status panel for nodes with statusEndpoint */}
+        {node.statusEndpoint && camaData && (
+          <CamaStatusPanel data={camaData} colorHex={node.colorHex} />
+        )}
+        {node.statusEndpoint && camaLoading && !camaData && (
+          <div style={{ fontSize: 10, color: 'hsl(0 0% 40%)', display: 'flex', alignItems: 'center', gap: 4, marginBottom: 8 }}>
+            <Loader2 size={9} style={{ animation: 'spin 1s linear infinite' }} />
+            Loading coverage data…
+          </div>
+        )}
+
+        {/* Live signal count — only for zip_signals nodes */}
+        {!node.statusEndpoint && node.signals.length > 0 && status !== "building" && (
           <div style={{
             fontSize: 11, color: "hsl(0 0% 40%)", marginBottom: 10,
             display: "flex", alignItems: "center", gap: 4,
