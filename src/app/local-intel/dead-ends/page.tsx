@@ -189,7 +189,7 @@ export default function DeadEndsPage() {
                 <span style={{ fontSize: 12, fontFamily: "monospace", color: "#00e5a0" }}>
                   {row.zip || "—"}
                 </span>
-                <span><ChannelBadge channel={row.channel} /></span>
+                <span><ChannelBadge channel={row.channel || ""} /></span>
                 <span style={{ fontSize: 11, color: "hsl(0 0% 65%)", fontFamily: "monospace" }}>
                   {row.detected_intent || "—"}
                 </span>

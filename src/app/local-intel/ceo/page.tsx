@@ -145,8 +145,15 @@ export default function CeoIntelPage() {
     if (e.key === "Enter") handleAsk();
   };
 
-  const maxDensity = data?.business_density?.length
-    ? Math.max(...data.business_density.map(d => d.count))
+  const businessDensity = data?.business_density ?? [];
+  const topIntents = data?.demand_signals?.top_sms_intents ?? [];
+  const unmetDemand = data?.demand_signals?.unmet_demand ?? [];
+  const propertySnapshot = data?.property_snapshot ?? {
+    avg_beds: 0, avg_baths: 0, avg_assessed: 0, parcel_count: 0
+  };
+  const totalBusinesses = data?.total_businesses ?? 0;
+  const maxDensity = businessDensity.length
+    ? Math.max(...businessDensity.map(d => d.count || 0))
     : 1;
 
   return (
@@ -290,7 +297,7 @@ export default function CeoIntelPage() {
               margin: 0,
               fontFamily: "Georgia, serif"
             }}>
-              &ldquo;{data.ceo_summary}&rdquo;
+              &ldquo;{data.ceo_summary || "No summary available"}&rdquo;
             </p>
             <div style={{
               fontSize: 11, color: "hsl(0 0% 40%)", marginTop: 14,
@@ -314,23 +321,24 @@ export default function CeoIntelPage() {
             {/* Business Density */}
             <Panel>
               <SectionHeader icon={Building2} title="Business Density" color="#00e5a0" />
-              {data.business_density.length === 0 ? (
+              {businessDensity.length === 0 ? (
                 <span style={{ fontSize: 12, color: "hsl(0 0% 40%)" }}>No business data</span>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {data.business_density.map((row) => {
-                    const pct = Math.max(2, Math.round((row.count / maxDensity) * 100));
+                  {businessDensity.map((row, i) => {
+                    const count = row.count || 0;
+                    const pct = Math.max(2, Math.round((count / maxDensity) * 100));
                     return (
-                      <div key={row.category}>
+                      <div key={row.category || String(i)}>
                         <div style={{
                           display: "flex", justifyContent: "space-between",
                           marginBottom: 4
                         }}>
                           <span style={{ fontSize: 12, color: "#f0ebe3", textTransform: "capitalize" }}>
-                            {row.category}
+                            {row.category || "—"}
                           </span>
                           <span style={{ fontSize: 12, fontWeight: 600, color: "#00e5a0", fontFamily: "monospace" }}>
-                            {row.count.toLocaleString()}
+                            {count.toLocaleString()}
                           </span>
                         </div>
                         <div style={{
@@ -357,7 +365,7 @@ export default function CeoIntelPage() {
                   Total Businesses
                 </span>
                 <span style={{ fontSize: 14, fontWeight: 700, color: "#f0ebe3" }}>
-                  {data.total_businesses.toLocaleString()}
+                  {totalBusinesses.toLocaleString()}
                 </span>
               </div>
             </Panel>
@@ -376,24 +384,24 @@ export default function CeoIntelPage() {
                   <MessageSquare size={11} />
                   What People Are Asking
                 </div>
-                {data.demand_signals.top_sms_intents.length === 0 ? (
+                {topIntents.length === 0 ? (
                   <span style={{ fontSize: 11, color: "hsl(0 0% 35%)" }}>No intent data</span>
                 ) : (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                    {data.demand_signals.top_sms_intents.map((row, i) => (
-                      <span key={i} style={{
+                    {topIntents.map((row, i) => (
+                      <span key={String(i)} style={{
                         padding: "5px 10px", borderRadius: 99, fontSize: 11,
                         background: "rgba(0,229,160,0.10)",
                         border: "1px solid rgba(0,229,160,0.30)",
                         color: "#00e5a0", fontWeight: 500,
                         display: "inline-flex", alignItems: "center", gap: 5
                       }}>
-                        {row.detected_intent}
+                        {row.detected_intent || "—"}
                         <span style={{
                           fontFamily: "monospace", fontSize: 10,
                           color: "#f0ebe3", opacity: 0.7
                         }}>
-                          {row.count}
+                          {row.count ?? 0}
                         </span>
                       </span>
                     ))}
@@ -411,24 +419,24 @@ export default function CeoIntelPage() {
                   <Ban size={11} />
                   Unmet Demand (Dead Ends)
                 </div>
-                {data.demand_signals.unmet_demand.length === 0 ? (
+                {unmetDemand.length === 0 ? (
                   <span style={{ fontSize: 11, color: "hsl(0 0% 35%)" }}>No dead-end data</span>
                 ) : (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                    {data.demand_signals.unmet_demand.map((row, i) => (
-                      <span key={i} style={{
+                    {unmetDemand.map((row, i) => (
+                      <span key={String(i)} style={{
                         padding: "5px 10px", borderRadius: 99, fontSize: 11,
                         background: "hsl(4 85% 44% / 0.12)",
                         border: "1px solid hsl(4 85% 44% / 0.35)",
                         color: "hsl(4 85% 65%)", fontWeight: 500,
                         display: "inline-flex", alignItems: "center", gap: 5
                       }}>
-                        {row.detected_intent}
+                        {row.detected_intent || "—"}
                         <span style={{
                           fontFamily: "monospace", fontSize: 10,
                           color: "#f0ebe3", opacity: 0.7
                         }}>
-                          {row.count}
+                          {row.count ?? 0}
                         </span>
                       </span>
                     ))}
@@ -450,10 +458,10 @@ export default function CeoIntelPage() {
                   Property Snapshot
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
-                  <StatTile label="Avg Beds" value={data.property_snapshot.avg_beds?.toFixed(1) ?? "—"} />
-                  <StatTile label="Avg Baths" value={data.property_snapshot.avg_baths?.toFixed(1) ?? "—"} />
-                  <StatTile label="Avg Value" value={fmtMoney(data.property_snapshot.avg_assessed)} />
-                  <StatTile label="Parcels" value={(data.property_snapshot.parcel_count ?? 0).toLocaleString()} />
+                  <StatTile label="Avg Beds" value={typeof propertySnapshot.avg_beds === "number" ? propertySnapshot.avg_beds.toFixed(1) : "—"} />
+                  <StatTile label="Avg Baths" value={typeof propertySnapshot.avg_baths === "number" ? propertySnapshot.avg_baths.toFixed(1) : "—"} />
+                  <StatTile label="Avg Value" value={fmtMoney(propertySnapshot.avg_assessed || 0)} />
+                  <StatTile label="Parcels" value={(propertySnapshot.parcel_count ?? 0).toLocaleString()} />
                 </div>
               </div>
             </Panel>

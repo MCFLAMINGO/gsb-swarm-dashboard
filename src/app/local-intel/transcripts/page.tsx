@@ -167,8 +167,11 @@ export default function CallTranscriptsPage() {
           rows.map((row, i) => {
             const transcript = row.transcription_text || "";
             const truncated = transcript.length > 80 ? transcript.slice(0, 80) + "…" : transcript;
+            const recUrl = typeof row.recording_url === "string" && row.recording_url.length > 0
+              ? row.recording_url
+              : "";
             return (
-              <div key={row.call_sid || i} style={{
+              <div key={row.call_sid || String(i)} style={{
                 display: "grid",
                 gridTemplateColumns: "1.2fr 0.6fr 0.6fr 0.8fr 1.4fr 2fr",
                 gap: 8, padding: "8px 12px",
@@ -184,13 +187,12 @@ export default function CallTranscriptsPage() {
                 <span style={{ fontSize: 12, fontFamily: "monospace", color: "#f0ebe3" }}>
                   {row.duration_sec ? `${row.duration_sec}s` : "—"}
                 </span>
-                <span><StatusPill status={row.status} /></span>
+                <span><StatusPill status={row.status || ""} /></span>
                 <span>
-                  {row.recording_url ? (
-                    <audio controls style={{ height: 28, maxWidth: 200 }} src={row.recording_url} />
-                  ) : (
-                    <span style={{ fontSize: 12, color: "hsl(0 0% 40%)" }}>—</span>
-                  )}
+                  {recUrl
+                    ? <audio controls style={{ height: 28, maxWidth: 200 }} src={recUrl} />
+                    : <span style={{ fontSize: 12, color: "hsl(0 0% 40%)" }}>—</span>
+                  }
                 </span>
                 <span
                   style={{ fontSize: 11, color: "hsl(0 0% 65%)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
