@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
-  LayoutDashboard, Bot, DollarSign, Plug, Settings, ChevronLeft, ChevronRight, Gauge, Activity, Swords, Zap, FlaskConical, ShoppingBag, Globe, Radio, TrendingUp, Eye, Search, MapPin, Coins, Brain, Network, Phone, Ban, MessageSquare
+  LayoutDashboard, Bot, DollarSign, Plug, Settings, ChevronLeft, ChevronRight, Gauge, Activity, Swords, Zap, FlaskConical, ShoppingBag, Globe, Radio, TrendingUp, Eye, Search, MapPin, Coins, Brain, Network, Phone, Ban, MessageSquare, Cpu
 } from "lucide-react";
 import { useState } from "react";
 
@@ -26,6 +26,7 @@ const NAV = [
   { href: "/local-intel/fees",      label: "↳ Fee Control",    icon: Coins,      tip: "RFQ match fees, order fee %, routing toggle, fee event log" },
   { href: "/local-intel/zip-intel", label: "↳ ZIP Intel",      icon: Brain,      tip: "Hive intelligence — census, income, permits, LLM query per ZIP" },
   { href: "/local-intel/nodes",     label: "↳ Node Map",       icon: Network,    tip: "LocalIntel intelligence nodes — capabilities, signals, live demo" },
+  { href: "/local-intel/ceo",         label: "↳ CEO",          icon: Cpu,        tip: "CEO Intelligence — ZIP-level business assessment from government data (zero hallucination)" },
   { href: "/local-intel/transcripts", label: "↳ Transcripts",  icon: Phone,      tip: "Call transcripts — LocalIntel voice line inbound recordings & transcriptions" },
   { href: "/local-intel/dead-ends",   label: "↳ Dead Ends",    icon: Ban,        tip: "Intent dead ends — queries that failed to convert by fail reason" },
   { href: "/local-intel/sms-log",     label: "↳ SMS Log",      icon: MessageSquare, tip: "Inbound SMS query log — what was asked, how it routed, what was sent back" },
