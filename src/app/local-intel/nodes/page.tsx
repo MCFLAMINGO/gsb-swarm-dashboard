@@ -880,7 +880,7 @@ function NodeCard({
           const complete = jobs.find((j: { worker_name: string }) => j.worker_name.includes('_complete_'));
           const inProgress = started && (!complete || new Date(started.last_run) > new Date(complete.last_run));
           if (inProgress && !cancelled) {
-            pollTimer = setTimeout(fetchStatus, 30000);
+            pollTimer = setTimeout(fetchStatus, 60000);
           }
         }
       } catch (_) { /* non-fatal */ }
