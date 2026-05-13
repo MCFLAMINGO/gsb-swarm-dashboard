@@ -60,7 +60,7 @@ export default function CallTranscriptsPage() {
   const counterRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchData = useCallback(async () => {
-    const data = await safeFetch<CallTranscript[] | null>(
+    const data = await safeFetch<unknown>(
       `${RAILWAY}/api/local-intel/call-transcripts`,
       null
     );
@@ -69,7 +69,12 @@ export default function CallTranscriptsPage() {
       setRows([]);
     } else {
       setError(false);
-      setRows(Array.isArray(data) ? data : []);
+      const rows = Array.isArray(data)
+        ? (data as CallTranscript[])
+        : (((data as { transcripts?: CallTranscript[]; calls?: CallTranscript[] }).transcripts
+            ?? (data as { transcripts?: CallTranscript[]; calls?: CallTranscript[] }).calls
+            ?? []) as CallTranscript[]);
+      setRows(rows);
     }
     setLoading(false);
     setLastUpdated(new Date());
