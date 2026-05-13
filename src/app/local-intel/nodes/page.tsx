@@ -5,14 +5,16 @@ import {
   Users, DollarSign, ArrowLeftRight, Building2, Map,
   HardHat, Wifi, Briefcase, Brain, Sparkles,
   ChevronDown, ChevronUp, RefreshCw, CheckCircle2,
-  Clock, AlertCircle, Loader2, Code2, X
+  Clock, AlertCircle, Loader2, Code2, X, Play,
+  Database, BarChart2, TrendingUp, Activity, Layers,
+  Zap,
 } from "lucide-react";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const RAILWAY = "https://gsb-swarm-production.up.railway.app";
 const ADMIN_TOKEN = "localintel-migrate-2026";
-const ZIP = "32082";
+const DEFAULT_ZIP = "32082";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -23,20 +25,24 @@ interface NodeDef {
   title: string;
   org: string;
   icon: React.ElementType;
-  color: string;       // tailwind color name, e.g. "blue"
-  colorHex: string;    // hex for inline accent usage
+  color: string;
+  colorHex: string;
   vintage: string;
+  cron?: string;           // human-readable schedule
   questions: string[];
   signals: string[];
   demoEndpoint: string;
   demoMethod?: "GET" | "POST";
   demoHeaders?: Record<string, string>;
-  status?: NodeStatus; // computed from live data
+  triggerEndpoint?: string;  // POST endpoint to trigger this worker
+  triggerLabel?: string;     // button label override
+  status?: NodeStatus;       // force override
 }
 
 // ── Node Definitions ───────────────────────────────────────────────────────────
 
 const NODES: NodeDef[] = [
+  // ── Tier 1: core census / demographic ──────────────────────────────────────
   {
     id: "acs",
     title: "ACS Demographics",
@@ -45,6 +51,7 @@ const NODES: NodeDef[] = [
     color: "blue",
     colorHex: "#3b82f6",
     vintage: "Census ACS 5-year estimates, updated annually",
+    cron: "Annual · auto",
     questions: [
       "What is the median income in this ZIP?",
       "What % of households own their home?",
@@ -56,8 +63,10 @@ const NODES: NodeDef[] = [
       "acs_population", "acs_median_hhi", "acs_owner_occ_pct",
       "acs_college_pct", "acs_poverty_pct", "acs_vacancy_pct",
     ],
-    demoEndpoint: `${RAILWAY}/api/local-intel/zip-signals/${ZIP}`,
+    demoEndpoint: `${RAILWAY}/api/local-intel/zip-signals/${DEFAULT_ZIP}`,
     demoHeaders: { "x-admin-token": ADMIN_TOKEN },
+    triggerEndpoint: `${RAILWAY}/api/admin/trigger-acs`,
+    triggerLabel: "Trigger ACS Worker",
   },
   {
     id: "irs_income",
@@ -67,13 +76,14 @@ const NODES: NodeDef[] = [
     color: "green",
     colorHex: "#22c55e",
     vintage: "IRS SOI county-level, annual",
+    cron: "Annual · auto",
     questions: [
       "What is the true median AGI in this ZIP?",
       "What share of income is from wages vs investment?",
       "How many tax returns filed?",
     ],
     signals: ["irs_agi_median", "irs_returns", "irs_wage_share"],
-    demoEndpoint: `${RAILWAY}/api/local-intel/zip-signals/${ZIP}`,
+    demoEndpoint: `${RAILWAY}/api/local-intel/zip-signals/${DEFAULT_ZIP}`,
     demoHeaders: { "x-admin-token": ADMIN_TOKEN },
   },
   {
@@ -84,6 +94,7 @@ const NODES: NodeDef[] = [
     color: "teal",
     colorHex: "#14b8a6",
     vintage: "IRS SOI county-to-county migration 2021–2022",
+    cron: "Annual · auto",
     questions: [
       "Is this ZIP gaining or losing residents?",
       "Where are people moving from / to?",
@@ -94,7 +105,7 @@ const NODES: NodeDef[] = [
       "irs_mig_net_returns", "irs_mig_net_agi",
       "irs_mig_top_origin", "irs_mig_top_dest",
     ],
-    demoEndpoint: `${RAILWAY}/api/local-intel/zip-signals/${ZIP}`,
+    demoEndpoint: `${RAILWAY}/api/local-intel/zip-signals/${DEFAULT_ZIP}`,
     demoHeaders: { "x-admin-token": ADMIN_TOKEN },
   },
   {
@@ -105,6 +116,7 @@ const NODES: NodeDef[] = [
     color: "purple",
     colorHex: "#a855f7",
     vintage: "Census ZIP Business Patterns + County Business Patterns",
+    cron: "Annual · auto",
     questions: [
       "How many businesses are in this ZIP?",
       "What sectors dominate?",
@@ -115,9 +127,11 @@ const NODES: NodeDef[] = [
       "zbp_total_establishments", "cbp_total_establishments",
       "cbp_dominant_sector",
     ],
-    demoEndpoint: `${RAILWAY}/api/local-intel/zip-signals/${ZIP}`,
+    demoEndpoint: `${RAILWAY}/api/local-intel/zip-signals/${DEFAULT_ZIP}`,
     demoHeaders: { "x-admin-token": ADMIN_TOKEN },
   },
+
+  // ── Tier 2: real-time / operational ─────────────────────────────────────────
   {
     id: "osm",
     title: "OpenStreetMap (OSM)",
@@ -126,6 +140,7 @@ const NODES: NodeDef[] = [
     color: "orange",
     colorHex: "#f97316",
     vintage: "OpenStreetMap via Overpass, refreshed weekly",
+    cron: "Weekly · Sunday 02:00 UTC",
     questions: [
       "How many businesses have a phone number listed?",
       "What % have hours posted?",
@@ -136,8 +151,10 @@ const NODES: NodeDef[] = [
       "osm_biz_count", "osm_food_count", "osm_retail_count",
       "osm_with_phone_pct", "osm_with_hours_pct",
     ],
-    demoEndpoint: `${RAILWAY}/api/local-intel/zip-signals/${ZIP}`,
+    demoEndpoint: `${RAILWAY}/api/local-intel/zip-signals/${DEFAULT_ZIP}`,
     demoHeaders: { "x-admin-token": ADMIN_TOKEN },
+    triggerEndpoint: `${RAILWAY}/api/admin/trigger-osm`,
+    triggerLabel: "Trigger OSM Worker",
   },
   {
     id: "bps",
@@ -147,6 +164,7 @@ const NODES: NodeDef[] = [
     color: "yellow",
     colorHex: "#eab308",
     vintage: "Census Building Permits Survey, 67 FL counties",
+    cron: "Monthly · auto",
     questions: [
       "How much new construction is happening?",
       "Is residential or commercial building dominant?",
@@ -157,8 +175,10 @@ const NODES: NodeDef[] = [
       "bps_total_units_annual", "bps_res_1unit_annual",
       "bps_res_multifam_annual", "bps_commercial_mo",
     ],
-    demoEndpoint: `${RAILWAY}/api/local-intel/zip-signals/${ZIP}`,
+    demoEndpoint: `${RAILWAY}/api/local-intel/zip-signals/${DEFAULT_ZIP}`,
     demoHeaders: { "x-admin-token": ADMIN_TOKEN },
+    triggerEndpoint: `${RAILWAY}/api/admin/trigger-permit`,
+    triggerLabel: "Trigger Permit Worker",
   },
   {
     id: "fcc",
@@ -168,6 +188,7 @@ const NODES: NodeDef[] = [
     color: "indigo",
     colorHex: "#6366f1",
     vintage: "FCC BDC API, semiannual vintage (June + December)",
+    cron: "Weekly · Monday 03:00 UTC",
     questions: [
       "What % of locations have 25/3 Mbps broadband?",
       "Is fiber available?",
@@ -179,8 +200,10 @@ const NODES: NodeDef[] = [
       "fcc_pct_25_3", "fcc_pct_100_20", "fcc_provider_count",
       "fcc_fiber_available", "fcc_bead_unserved_pct",
     ],
-    demoEndpoint: `${RAILWAY}/api/local-intel/zip-signals/${ZIP}`,
+    demoEndpoint: `${RAILWAY}/api/local-intel/zip-signals/${DEFAULT_ZIP}`,
     demoHeaders: { "x-admin-token": ADMIN_TOKEN },
+    triggerEndpoint: `${RAILWAY}/api/admin/trigger-fcc`,
+    triggerLabel: "Trigger FCC Worker",
   },
   {
     id: "sunbiz",
@@ -190,6 +213,7 @@ const NODES: NodeDef[] = [
     color: "pink",
     colorHex: "#ec4899",
     vintage: "Florida Division of Corporations, refreshed monthly",
+    cron: "Monthly · 1st at 04:00 UTC",
     questions: [
       "How many active businesses are registered in this ZIP?",
       "How many new businesses formed in the last 12 months?",
@@ -200,9 +224,182 @@ const NODES: NodeDef[] = [
       "sunbiz_active_entities", "sunbiz_new_12mo",
       "sunbiz_dissolved_12mo", "sunbiz_net_12mo",
     ],
-    demoEndpoint: `${RAILWAY}/api/local-intel/zip-signals/${ZIP}`,
+    demoEndpoint: `${RAILWAY}/api/local-intel/zip-signals/${DEFAULT_ZIP}`,
     demoHeaders: { "x-admin-token": ADMIN_TOKEN },
   },
+
+  // ── Tier 3: labor market ─────────────────────────────────────────────────────
+  {
+    id: "fred",
+    title: "FRED / BLS LAUS",
+    org: "FRED · BLS Local Area Unemployment",
+    icon: Activity,
+    color: "sky",
+    colorHex: "#0ea5e9",
+    vintage: "Monthly county unemployment + labor force, 67 FL counties",
+    cron: "Monthly · on-demand trigger",
+    questions: [
+      "What is the current unemployment rate?",
+      "How large is the labor force?",
+      "Is unemployment rising or falling?",
+      "How does St. Johns compare to FL avg?",
+    ],
+    signals: [
+      "fred_unemployment_rate", "fred_labor_force",
+      "fred_employment", "fred_vintage",
+    ],
+    demoEndpoint: `${RAILWAY}/api/local-intel/zip-signals/${DEFAULT_ZIP}`,
+    demoHeaders: { "x-admin-token": ADMIN_TOKEN },
+    triggerEndpoint: `${RAILWAY}/api/admin/trigger-fred`,
+    triggerLabel: "Trigger FRED Worker",
+  },
+  {
+    id: "bea",
+    title: "BEA Regional Income",
+    org: "Bureau of Economic Analysis",
+    icon: TrendingUp,
+    color: "emerald",
+    colorHex: "#10b981",
+    vintage: "Annual county per capita personal income + YoY growth, CAINC1",
+    cron: "Annual · on-demand trigger",
+    questions: [
+      "What is per capita personal income?",
+      "Is income growing faster than FL avg?",
+      "What is the 5-year income CAGR?",
+      "How does this county rank in FL?",
+    ],
+    signals: [
+      "bea_per_capita_income", "bea_income_yoy_pct",
+      "bea_income_vs_fl_avg", "bea_vintage",
+    ],
+    demoEndpoint: `${RAILWAY}/api/local-intel/zip-signals/${DEFAULT_ZIP}`,
+    demoHeaders: { "x-admin-token": ADMIN_TOKEN },
+    triggerEndpoint: `${RAILWAY}/api/admin/trigger-bea`,
+    triggerLabel: "Trigger BEA Worker",
+  },
+  {
+    id: "lodes",
+    title: "LEHD LODES — Jobs by ZIP",
+    org: "Census LEHD",
+    icon: Layers,
+    color: "violet",
+    colorHex: "#7c3aed",
+    vintage: "LODES8 WAC + RAC, census block → ZIP, FL bulk CSVs",
+    cron: "Annual · on-demand trigger",
+    questions: [
+      "How many jobs are in this ZIP?",
+      "How many residents commute out?",
+      "What is the net jobs flow?",
+      "What sectors employ the most people?",
+    ],
+    signals: [
+      "lodes_jobs_here", "lodes_workers_living_here",
+      "lodes_net_flow", "lodes_vintage",
+    ],
+    demoEndpoint: `${RAILWAY}/api/local-intel/zip-signals/${DEFAULT_ZIP}`,
+    demoHeaders: { "x-admin-token": ADMIN_TOKEN },
+    triggerEndpoint: `${RAILWAY}/api/admin/trigger-lodes`,
+    triggerLabel: "Trigger LODES Worker",
+  },
+  {
+    id: "qwi",
+    title: "Census QWI Workforce",
+    org: "Census Longitudinal Employer-Household Dynamics",
+    icon: Users,
+    color: "cyan",
+    colorHex: "#06b6d4",
+    vintage: "QWI employment, earnings, hires, separations — 67 FL counties",
+    cron: "Quarterly · on-demand trigger",
+    questions: [
+      "How many people are employed in this county?",
+      "What are average monthly earnings?",
+      "What is the turnover / separation rate?",
+      "Are hires outpacing separations?",
+    ],
+    signals: [
+      "qwi_employment", "qwi_avg_monthly_earn",
+      "qwi_turnover_rate", "qwi_vintage",
+    ],
+    demoEndpoint: `${RAILWAY}/api/local-intel/zip-signals/${DEFAULT_ZIP}`,
+    demoHeaders: { "x-admin-token": ADMIN_TOKEN },
+    triggerEndpoint: `${RAILWAY}/api/admin/trigger-qwi`,
+    triggerLabel: "Trigger QWI Worker",
+  },
+  {
+    id: "qcew",
+    title: "BLS QCEW Employment",
+    org: "BLS Quarterly Census of Employment and Wages",
+    icon: BarChart2,
+    color: "lime",
+    colorHex: "#84cc16",
+    vintage: "BLS QCEW Public Data API — private sector, quarterly, ~6mo lag",
+    cron: "Quarterly · on-demand trigger",
+    questions: [
+      "How many people are employed in this county?",
+      "What is the average weekly wage?",
+      "How many establishments?",
+      "Is employment growing YoY?",
+    ],
+    signals: [
+      "qcew_employment", "qcew_avg_weekly_wages",
+      "qcew_establishments", "qcew_emp_yoy_pct",
+    ],
+    demoEndpoint: `${RAILWAY}/api/local-intel/zip-signals/${DEFAULT_ZIP}`,
+    demoHeaders: { "x-admin-token": ADMIN_TOKEN },
+    triggerEndpoint: `${RAILWAY}/api/admin/trigger-qcew`,
+    triggerLabel: "Trigger QCEW Worker",
+  },
+  {
+    id: "ces",
+    title: "BLS CES Sector Employment",
+    org: "BLS Current Employment Statistics",
+    icon: TrendingUp,
+    color: "rose",
+    colorHex: "#f43f5e",
+    vintage: "BLS CES SMU — 21 FL MSAs — 8 supersectors — monthly, ~30d lag",
+    cron: "Monthly · auto",
+    questions: [
+      "What sectors are growing fastest?",
+      "What is AI displacement risk for this ZIP?",
+      "What is the investment opportunity score?",
+      "Which sector is the growth leader?",
+    ],
+    signals: [
+      "ces_total_nonfarm", "ces_total_yoy_pct",
+      "ai_displacement_risk", "investment_opportunity_score",
+    ],
+    demoEndpoint: `${RAILWAY}/api/local-intel/zip-signals/${DEFAULT_ZIP}`,
+    demoHeaders: { "x-admin-token": ADMIN_TOKEN },
+    triggerEndpoint: `${RAILWAY}/api/admin/trigger-ces`,
+    triggerLabel: "Trigger CES Worker",
+  },
+
+  // ── Tier 4: property ─────────────────────────────────────────────────────────
+  {
+    id: "sjcpa_cama",
+    title: "SJCPA CAMA — Property Detail",
+    org: "St. Johns County Property Appraiser",
+    icon: Database,
+    color: "amber",
+    colorHex: "#f59e0b",
+    vintage: "CAMAData.zip + CAMADataSup.zip from sftp.sjcpa.us — 171k parcels",
+    cron: "Quarterly · Jan/Apr/Jul/Oct 1 at 07:33 UTC",
+    questions: [
+      "How many bedrooms / bathrooms does a parcel have?",
+      "What is the heated square footage?",
+      "What year was the structure built?",
+      "What is the distribution of beds/baths in this ZIP?",
+    ],
+    signals: [
+      "sjc_beds", "sjc_baths", "sjc_sqft", "sjc_year_built",
+    ],
+    demoEndpoint: `${RAILWAY}/api/local-intel/ceo-assess?zip=${DEFAULT_ZIP}`,
+    demoHeaders: { "x-admin-token": ADMIN_TOKEN },
+    triggerEndpoint: `${RAILWAY}/api/local-intel/admin/reseed-stjohns`,
+    triggerLabel: "Reseed CAMA Now",
+  },
+
+  // ── Tier 5: intelligence layer ───────────────────────────────────────────────
   {
     id: "world_model",
     title: "World Model Score",
@@ -211,6 +408,7 @@ const NODES: NodeDef[] = [
     color: "red",
     colorHex: "#ef4444",
     vintage: "LocalIntel world model — computed from all above signals",
+    cron: "Daily · 01:00 UTC",
     questions: [
       "What is this ZIP's growth score vs peer ZIPs?",
       "What is the opportunity score?",
@@ -222,18 +420,19 @@ const NODES: NodeDef[] = [
       "sig_growth_score", "sig_opportunity_score",
       "sig_market_maturity", "sig_peer_cohort",
     ],
-    demoEndpoint: `${RAILWAY}/api/local-intel/zip-signals/${ZIP}`,
+    demoEndpoint: `${RAILWAY}/api/local-intel/zip-signals/${DEFAULT_ZIP}`,
     demoHeaders: { "x-admin-token": ADMIN_TOKEN },
-    status: "building", // always building — world model
+    status: "building",
   },
   {
     id: "mcp_oracle",
     title: "MCP Oracle",
     org: "LocalIntel API",
     icon: Sparkles,
-    color: "amber",
-    colorHex: "#f59e0b",
-    vintage: "LocalIntel composite analysis layer",
+    color: "fuchsia",
+    colorHex: "#d946ef",
+    vintage: "LocalIntel composite analysis layer — on-demand",
+    cron: "On-demand",
     questions: [
       "What are the top business gaps in this ZIP?",
       "What is the restaurant saturation level?",
@@ -241,7 +440,7 @@ const NODES: NodeDef[] = [
       "What would you recommend building here?",
     ],
     signals: [],
-    demoEndpoint: `${RAILWAY}/api/local-intel/oracle?zip=${ZIP}`,
+    demoEndpoint: `${RAILWAY}/api/local-intel/oracle?zip=${DEFAULT_ZIP}`,
     demoHeaders: { "x-admin-token": ADMIN_TOKEN },
   },
 ];
@@ -249,29 +448,43 @@ const NODES: NodeDef[] = [
 // ── Color Maps ─────────────────────────────────────────────────────────────────
 
 const COLOR_BG: Record<string, string> = {
-  blue:   "rgba(59,130,246,0.08)",
-  green:  "rgba(34,197,94,0.08)",
-  teal:   "rgba(20,184,166,0.08)",
-  purple: "rgba(168,85,247,0.08)",
-  orange: "rgba(249,115,22,0.08)",
-  yellow: "rgba(234,179,8,0.08)",
-  indigo: "rgba(99,102,241,0.08)",
-  pink:   "rgba(236,72,153,0.08)",
-  red:    "rgba(239,68,68,0.08)",
-  amber:  "rgba(245,158,11,0.08)",
+  blue:    "rgba(59,130,246,0.08)",
+  green:   "rgba(34,197,94,0.08)",
+  teal:    "rgba(20,184,166,0.08)",
+  purple:  "rgba(168,85,247,0.08)",
+  orange:  "rgba(249,115,22,0.08)",
+  yellow:  "rgba(234,179,8,0.08)",
+  indigo:  "rgba(99,102,241,0.08)",
+  pink:    "rgba(236,72,153,0.08)",
+  red:     "rgba(239,68,68,0.08)",
+  amber:   "rgba(245,158,11,0.08)",
+  sky:     "rgba(14,165,233,0.08)",
+  emerald: "rgba(16,185,129,0.08)",
+  violet:  "rgba(124,58,237,0.08)",
+  cyan:    "rgba(6,182,212,0.08)",
+  lime:    "rgba(132,204,22,0.08)",
+  rose:    "rgba(244,63,94,0.08)",
+  fuchsia: "rgba(217,70,239,0.08)",
 };
 
 const COLOR_BORDER: Record<string, string> = {
-  blue:   "rgba(59,130,246,0.25)",
-  green:  "rgba(34,197,94,0.25)",
-  teal:   "rgba(20,184,166,0.25)",
-  purple: "rgba(168,85,247,0.25)",
-  orange: "rgba(249,115,22,0.25)",
-  yellow: "rgba(234,179,8,0.25)",
-  indigo: "rgba(99,102,241,0.25)",
-  pink:   "rgba(236,72,153,0.25)",
-  red:    "rgba(239,68,68,0.25)",
-  amber:  "rgba(245,158,11,0.25)",
+  blue:    "rgba(59,130,246,0.25)",
+  green:   "rgba(34,197,94,0.25)",
+  teal:    "rgba(20,184,166,0.25)",
+  purple:  "rgba(168,85,247,0.25)",
+  orange:  "rgba(249,115,22,0.25)",
+  yellow:  "rgba(234,179,8,0.25)",
+  indigo:  "rgba(99,102,241,0.25)",
+  pink:    "rgba(236,72,153,0.25)",
+  red:     "rgba(239,68,68,0.25)",
+  amber:   "rgba(245,158,11,0.25)",
+  sky:     "rgba(14,165,233,0.25)",
+  emerald: "rgba(16,185,129,0.25)",
+  violet:  "rgba(124,58,237,0.25)",
+  cyan:    "rgba(6,182,212,0.25)",
+  lime:    "rgba(132,204,22,0.25)",
+  rose:    "rgba(244,63,94,0.25)",
+  fuchsia: "rgba(217,70,239,0.25)",
 };
 
 // ── Status Badge ───────────────────────────────────────────────────────────────
@@ -357,6 +570,89 @@ function QTag({ text }: { text: string }) {
   );
 }
 
+// ── Trigger Button ─────────────────────────────────────────────────────────────
+
+function TriggerButton({ node }: { node: NodeDef }) {
+  const [state, setState] = useState<"idle" | "loading" | "ok" | "error">("idle");
+  const [msg, setMsg] = useState("");
+
+  const fire = async () => {
+    if (!node.triggerEndpoint || state === "loading") return;
+    setState("loading");
+    setMsg("");
+    try {
+      const res = await fetch(node.triggerEndpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-token": ADMIN_TOKEN,
+          "x-operator-token": ADMIN_TOKEN,
+        },
+      });
+      const data = await res.json();
+      if (data.error) {
+        setState("error");
+        setMsg(data.error);
+      } else {
+        setState("ok");
+        setMsg(data.message || data.status || "Started");
+        setTimeout(() => setState("idle"), 8000);
+      }
+    } catch (e: unknown) {
+      setState("error");
+      setMsg(e instanceof Error ? e.message : "Failed");
+      setTimeout(() => setState("idle"), 6000);
+    }
+  };
+
+  const label = node.triggerLabel ?? "Trigger Worker";
+  const colors = {
+    idle:    { bg: "hsl(0 0% 9%)",           border: "hsl(0 0% 16%)",        color: "hsl(0 0% 60%)" },
+    loading: { bg: `${node.colorHex}18`,      border: `${node.colorHex}40`,   color: node.colorHex },
+    ok:      { bg: "rgba(34,197,94,0.12)",    border: "rgba(34,197,94,0.35)", color: "#4ade80" },
+    error:   { bg: "rgba(239,68,68,0.12)",    border: "rgba(239,68,68,0.35)", color: "#f87171" },
+  }[state];
+
+  return (
+    <div>
+      <button
+        onClick={fire}
+        disabled={state === "loading"}
+        style={{
+          display: "flex", alignItems: "center", gap: 5,
+          fontSize: 11, fontWeight: 600,
+          padding: "5px 11px", borderRadius: 6,
+          background: colors.bg,
+          border: `1px solid ${colors.border}`,
+          color: colors.color,
+          cursor: state === "loading" ? "not-allowed" : "pointer",
+          transition: "all 160ms",
+          opacity: state === "loading" ? 0.75 : 1,
+        }}
+      >
+        {state === "loading"
+          ? <Loader2 size={11} style={{ animation: "spin 1s linear infinite" }} />
+          : state === "ok"
+          ? <CheckCircle2 size={11} />
+          : state === "error"
+          ? <AlertCircle size={11} />
+          : <Play size={11} />}
+        {state === "loading" ? "Running…" : state === "ok" ? "Started ✓" : state === "error" ? "Error" : label}
+      </button>
+      {msg && (
+        <div style={{
+          marginTop: 4, fontSize: 10, fontFamily: "monospace",
+          color: state === "error" ? "#f87171" : "#4ade80",
+          padding: "3px 6px", borderRadius: 4,
+          background: state === "error" ? "rgba(239,68,68,0.08)" : "rgba(34,197,94,0.08)",
+        }}>
+          {msg}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Demo Panel ────────────────────────────────────────────────────────────────
 
 interface DemoState {
@@ -405,7 +701,6 @@ function DemoPanel({
       background: "hsl(0 0% 5%)",
       overflow: "hidden",
     }}>
-      {/* Demo header */}
       <div style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
         padding: "8px 12px",
@@ -430,7 +725,6 @@ function DemoPanel({
         </button>
       </div>
 
-      {/* Demo body */}
       <div style={{ padding: "10px 12px", maxHeight: 260, overflowY: "auto" }}>
         {state.loading && (
           <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", color: "hsl(0 0% 45%)" }}>
@@ -470,10 +764,9 @@ function NodeCard({
   const [expanded, setExpanded] = useState(false);
   const [showDemo, setShowDemo] = useState(false);
 
-  // Determine status
   const status: NodeStatus = (() => {
     if (node.status === "building") return "building";
-    if (node.signals.length === 0) return "pending"; // MCP Oracle has no tracked signals
+    if (node.signals.length === 0) return "pending";
     const hasAny = node.signals.some((s) => liveSignals.has(s));
     return hasAny ? "live" : "pending";
   })();
@@ -483,8 +776,8 @@ function NodeCard({
 
   return (
     <div style={{
-      background: COLOR_BG[node.color],
-      border: `1px solid ${COLOR_BORDER[node.color]}`,
+      background: COLOR_BG[node.color] ?? "rgba(255,255,255,0.04)",
+      border: `1px solid ${COLOR_BORDER[node.color] ?? "rgba(255,255,255,0.1)"}`,
       borderRadius: 12,
       overflow: "hidden",
       transition: "box-shadow 200ms",
@@ -514,15 +807,25 @@ function NodeCard({
           <StatusBadge status={status} />
         </div>
 
-        {/* Vintage */}
+        {/* Vintage + cron */}
         <div style={{
           fontSize: 10, color: "hsl(0 0% 40%)",
-          marginBottom: 12,
+          marginBottom: 8,
           display: "flex", alignItems: "center", gap: 4,
         }}>
           <Clock size={9} style={{ flexShrink: 0 }} />
           {node.vintage}
         </div>
+        {node.cron && (
+          <div style={{
+            fontSize: 10, color: "hsl(0 0% 35%)",
+            marginBottom: 12,
+            display: "flex", alignItems: "center", gap: 4,
+          }}>
+            <RefreshCw size={9} style={{ flexShrink: 0 }} />
+            {node.cron}
+          </div>
+        )}
 
         {/* Questions */}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 12 }}>
@@ -540,7 +843,7 @@ function NodeCard({
           </div>
         )}
 
-        {/* MCP Oracle — no fixed signals, shows endpoints */}
+        {/* MCP Oracle — no fixed signals */}
         {node.signals.length === 0 && (
           <div style={{ marginBottom: 12 }}>
             <div style={{ fontSize: 10, color: "hsl(0 0% 40%)", marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.07em" }}>
@@ -561,7 +864,7 @@ function NodeCard({
           </div>
         )}
 
-        {/* Live signal count (if any signals defined) */}
+        {/* Live signal count */}
         {node.signals.length > 0 && status !== "building" && (
           <div style={{
             fontSize: 11, color: "hsl(0 0% 40%)", marginBottom: 10,
@@ -572,12 +875,12 @@ function NodeCard({
             ) : (
               <AlertCircle size={11} style={{ color: "#eab308" }} />
             )}
-            {liveCount} / {node.signals.length} signals populated for ZIP {ZIP}
+            {liveCount} / {node.signals.length} signals populated for ZIP {DEFAULT_ZIP}
           </div>
         )}
 
         {/* Action row */}
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           <button
             onClick={() => { setShowDemo((v) => !v); setExpanded(false); }}
             style={{
@@ -593,6 +896,11 @@ function NodeCard({
             <Code2 size={11} />
             Demo
           </button>
+
+          {node.triggerEndpoint && (
+            <TriggerButton node={node} />
+          )}
+
           {node.questions.length > 4 && (
             <button
               onClick={() => setExpanded((v) => !v)}
@@ -640,11 +948,13 @@ function CompletenessStrip({
   nodesLive,
   signalsPopulated,
   totalSignals,
+  totalNodes,
   loading,
 }: {
   nodesLive: number;
   signalsPopulated: number;
   totalSignals: number;
+  totalNodes: number;
   loading: boolean;
 }) {
   const pct = totalSignals > 0 ? Math.round((signalsPopulated / totalSignals) * 100) : 0;
@@ -657,7 +967,6 @@ function CompletenessStrip({
       borderRadius: 10,
       marginBottom: 28,
     }}>
-      {/* Chip: nodes live */}
       <div style={{
         display: "flex", alignItems: "center", gap: 6,
         padding: "5px 12px", borderRadius: 8,
@@ -666,11 +975,10 @@ function CompletenessStrip({
         <CheckCircle2 size={13} style={{ color: "#22c55e" }} />
         <span style={{ fontSize: 12, fontWeight: 600, color: "#f0ebe3" }}>
           {loading ? "—" : nodesLive}
-          <span style={{ fontWeight: 400, color: "hsl(0 0% 45%)" }}> / 10 nodes live</span>
+          <span style={{ fontWeight: 400, color: "hsl(0 0% 45%)" }}> / {totalNodes} nodes live</span>
         </span>
       </div>
 
-      {/* Chip: signals */}
       <div style={{
         display: "flex", alignItems: "center", gap: 6,
         padding: "5px 12px", borderRadius: 8,
@@ -680,12 +988,11 @@ function CompletenessStrip({
         <span style={{ fontSize: 12, fontWeight: 600, color: "#f0ebe3" }}>
           {loading ? "—" : signalsPopulated}
           <span style={{ fontWeight: 400, color: "hsl(0 0% 45%)" }}>
-            {" "}/ {totalSignals} signals populated for ZIP {ZIP}
+            {" "}/ {totalSignals} signals populated for ZIP {DEFAULT_ZIP}
           </span>
         </span>
       </div>
 
-      {/* Completeness bar */}
       {!loading && (
         <div style={{ flex: 1, minWidth: 120 }}>
           <div style={{
@@ -708,6 +1015,88 @@ function CompletenessStrip({
   );
 }
 
+// ── Trigger All Button ─────────────────────────────────────────────────────────
+
+function TriggerAllButton() {
+  const [state, setState] = useState<"idle" | "loading" | "ok" | "error">("idle");
+  const [results, setResults] = useState<string[]>([]);
+
+  const triggerAll = async () => {
+    if (state === "loading") return;
+    setState("loading");
+    setResults([]);
+
+    const workers = NODES.filter((n) => n.triggerEndpoint);
+    const out: string[] = [];
+
+    await Promise.allSettled(
+      workers.map(async (node) => {
+        try {
+          const res = await fetch(node.triggerEndpoint!, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-admin-token": ADMIN_TOKEN,
+              "x-operator-token": ADMIN_TOKEN,
+            },
+          });
+          const data = await res.json();
+          out.push(`${node.title}: ${data.error ? "ERROR — " + data.error : data.message || data.status || "started"}`);
+        } catch (e: unknown) {
+          out.push(`${node.title}: failed — ${e instanceof Error ? e.message : "unknown"}`);
+        }
+      })
+    );
+
+    setResults(out);
+    setState("ok");
+    setTimeout(() => setState("idle"), 15000);
+  };
+
+  return (
+    <div>
+      <button
+        onClick={triggerAll}
+        disabled={state === "loading"}
+        style={{
+          display: "flex", alignItems: "center", gap: 6,
+          fontSize: 12, fontWeight: 600,
+          padding: "8px 16px", borderRadius: 8,
+          background: state === "loading" ? "rgba(239,68,68,0.12)" : state === "ok" ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.1)",
+          border: state === "ok" ? "1px solid rgba(34,197,94,0.4)" : "1px solid rgba(239,68,68,0.35)",
+          color: state === "loading" ? "#f87171" : state === "ok" ? "#4ade80" : "#ef4444",
+          cursor: state === "loading" ? "not-allowed" : "pointer",
+          transition: "all 160ms",
+        }}
+      >
+        {state === "loading"
+          ? <Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} />
+          : state === "ok"
+          ? <CheckCircle2 size={13} />
+          : <Zap size={13} />}
+        {state === "loading" ? "Triggering all workers…" : state === "ok" ? "All workers triggered" : "Trigger All Workers"}
+      </button>
+      {results.length > 0 && (
+        <div style={{
+          marginTop: 8, maxHeight: 160, overflowY: "auto",
+          borderRadius: 6, border: "1px solid hsl(0 0% 14%)",
+          background: "hsl(0 0% 5%)",
+          padding: "8px 10px",
+        }}>
+          {results.map((r, i) => (
+            <div key={i} style={{
+              fontSize: 10, fontFamily: "monospace", lineHeight: 1.7,
+              color: r.includes("ERROR") || r.includes("failed") ? "#f87171" : "#4ade80",
+            }}>
+              {r}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Page ──────────────────────────────────────────────────────────────────
 
 export default function LocalIntelNodesPage() {
@@ -719,7 +1108,7 @@ export default function LocalIntelNodesPage() {
   const fetchSignals = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     try {
-      const res = await fetch(`${RAILWAY}/api/local-intel/zip-signals/${ZIP}`, {
+      const res = await fetch(`${RAILWAY}/api/local-intel/zip-signals/${DEFAULT_ZIP}`, {
         headers: { "x-admin-token": ADMIN_TOKEN },
         cache: "no-store",
       });
@@ -728,22 +1117,17 @@ export default function LocalIntelNodesPage() {
         return;
       }
       const data = await res.json();
-
-      // data might be { error: "..." } if no signals yet
       if (data?.error) {
         setLiveSignals(new Set());
         return;
       }
 
-      // data is expected to be an object of signal_key -> value
-      // collect any key that has a non-null, non-undefined value
       const populated = new Set<string>();
       const flat = (obj: Record<string, unknown>, prefix = "") => {
         for (const [k, v] of Object.entries(obj)) {
           const key = prefix ? `${prefix}_${k}` : k;
           if (v !== null && v !== undefined && v !== "") {
             populated.add(key);
-            // also try bare key
             populated.add(k);
           }
           if (v && typeof v === "object" && !Array.isArray(v)) {
@@ -766,7 +1150,6 @@ export default function LocalIntelNodesPage() {
     fetchSignals();
   }, [fetchSignals]);
 
-  // Compute completeness stats
   const allSignals = NODES.flatMap((n) => n.signals);
   const totalSignals = allSignals.length;
   const signalsPopulated = allSignals.filter((s) => liveSignals.has(s)).length;
@@ -785,10 +1168,9 @@ export default function LocalIntelNodesPage() {
     }}>
       {/* ── Page Header ── */}
       <div style={{ marginBottom: 24 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-              {/* Small inline logo mark */}
               <div style={{
                 width: 32, height: 32, borderRadius: 8,
                 background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.3)",
@@ -805,31 +1187,34 @@ export default function LocalIntelNodesPage() {
             </div>
             <p style={{ fontSize: 13, color: "hsl(0 0% 45%)", maxWidth: 580, lineHeight: 1.5 }}>
               Every data asset — what it knows, what questions it answers, what signals it writes.
-              Status shown for ZIP <span style={{ fontFamily: "monospace", color: "hsl(0 0% 65%)", fontWeight: 600 }}>{ZIP}</span>.
+              Status shown for ZIP <span style={{ fontFamily: "monospace", color: "hsl(0 0% 65%)", fontWeight: 600 }}>{DEFAULT_ZIP}</span>.
             </p>
           </div>
 
-          {/* Refresh button */}
-          <button
-            onClick={() => fetchSignals(true)}
-            disabled={refreshing || loading}
-            style={{
-              display: "flex", alignItems: "center", gap: 6,
-              fontSize: 12, fontWeight: 500,
-              padding: "7px 14px", borderRadius: 8,
-              background: "hsl(0 0% 9%)", border: "1px solid hsl(0 0% 17%)",
-              color: "hsl(0 0% 60%)", cursor: "pointer",
-              opacity: refreshing || loading ? 0.5 : 1,
-              transition: "all 160ms",
-            }}
-          >
-            <RefreshCw size={12} style={{
-              animation: refreshing || loading ? "spin 1s linear infinite" : "none"
-            }} />
-            {lastFetch
-              ? `Refreshed ${Math.round((Date.now() - lastFetch.getTime()) / 1000)}s ago`
-              : "Refresh"}
-          </button>
+          {/* Right controls */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <TriggerAllButton />
+            <button
+              onClick={() => fetchSignals(true)}
+              disabled={refreshing || loading}
+              style={{
+                display: "flex", alignItems: "center", gap: 6,
+                fontSize: 12, fontWeight: 500,
+                padding: "7px 14px", borderRadius: 8,
+                background: "hsl(0 0% 9%)", border: "1px solid hsl(0 0% 17%)",
+                color: "hsl(0 0% 60%)", cursor: "pointer",
+                opacity: refreshing || loading ? 0.5 : 1,
+                transition: "all 160ms",
+              }}
+            >
+              <RefreshCw size={12} style={{
+                animation: refreshing || loading ? "spin 1s linear infinite" : "none"
+              }} />
+              {lastFetch
+                ? `Refreshed ${Math.round((Date.now() - lastFetch.getTime()) / 1000)}s ago`
+                : "Refresh"}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -838,6 +1223,7 @@ export default function LocalIntelNodesPage() {
         nodesLive={nodesLive}
         signalsPopulated={signalsPopulated}
         totalSignals={totalSignals}
+        totalNodes={NODES.length}
         loading={loading}
       />
 
@@ -867,8 +1253,7 @@ export default function LocalIntelNodesPage() {
           50%       { opacity: 0.4; }
         }
 
-        /* Responsive grid */
-        @media (max-width: 1024px) {
+        @media (max-width: 1200px) {
           .nodes-grid { grid-template-columns: repeat(2, 1fr) !important; }
         }
         @media (max-width: 640px) {
