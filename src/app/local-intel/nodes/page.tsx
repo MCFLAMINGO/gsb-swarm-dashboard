@@ -87,6 +87,8 @@ const NODES: NodeDef[] = [
     signals: ["irs_agi_median", "irs_returns", "irs_wage_share"],
     demoEndpoint: `${RAILWAY}/api/local-intel/zip-signals/${DEFAULT_ZIP}`,
     demoHeaders: { "x-admin-token": ADMIN_TOKEN },
+    triggerEndpoint: `${RAILWAY}/api/admin/trigger-irs-income`,
+    triggerLabel: "Trigger IRS Income Worker",
   },
   {
     id: "irs_migration",
@@ -109,6 +111,8 @@ const NODES: NodeDef[] = [
     ],
     demoEndpoint: `${RAILWAY}/api/local-intel/zip-signals/${DEFAULT_ZIP}`,
     demoHeaders: { "x-admin-token": ADMIN_TOKEN },
+    triggerEndpoint: `${RAILWAY}/api/admin/trigger-irs-migration`,
+    triggerLabel: "Trigger IRS Migration Worker",
   },
   {
     id: "zbp",
@@ -131,6 +135,8 @@ const NODES: NodeDef[] = [
     ],
     demoEndpoint: `${RAILWAY}/api/local-intel/zip-signals/${DEFAULT_ZIP}`,
     demoHeaders: { "x-admin-token": ADMIN_TOKEN },
+    triggerEndpoint: `${RAILWAY}/api/admin/trigger-zbp`,
+    triggerLabel: "Trigger ZBP Worker",
   },
 
   // ── Tier 2: real-time / operational ─────────────────────────────────────────
@@ -228,6 +234,8 @@ const NODES: NodeDef[] = [
     ],
     demoEndpoint: `${RAILWAY}/api/local-intel/zip-signals/${DEFAULT_ZIP}`,
     demoHeaders: { "x-admin-token": ADMIN_TOKEN },
+    triggerEndpoint: `${RAILWAY}/api/admin/trigger-sunbiz`,
+    triggerLabel: "Trigger Sunbiz Worker",
   },
 
   // ── Tier 3: labor market ─────────────────────────────────────────────────────
@@ -447,6 +455,8 @@ const NODES: NodeDef[] = [
     signals: [],
     demoEndpoint: `${RAILWAY}/api/local-intel/oracle?zip=${DEFAULT_ZIP}`,
     demoHeaders: { "x-admin-token": ADMIN_TOKEN },
+    triggerEndpoint: `${RAILWAY}/api/admin/trigger-mcp-oracle`,
+    triggerLabel: "Trigger MCP Oracle Worker",
   },
 ];
 
@@ -577,7 +587,7 @@ function QTag({ text }: { text: string }) {
 
 // ── Trigger Button ─────────────────────────────────────────────────────────────
 
-function TriggerButton({ node }: { node: NodeDef }) {
+function TriggerButton({ node, onSuccess }: { node: NodeDef; onSuccess?: () => void }) {
   const [state, setState] = useState<"idle" | "loading" | "ok" | "error">("idle");
   const [msg, setMsg] = useState("");
 
@@ -594,23 +604,35 @@ function TriggerButton({ node }: { node: NodeDef }) {
           "x-operator-token": ADMIN_TOKEN,
         },
       });
-      const data = await res.json();
-      if (data.error) {
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        console.error(`Trigger failed for ${node.id}: HTTP ${res.status}`, text);
+        setState("error");
+        setMsg(`HTTP ${res.status}`);
+        setTimeout(() => setState("idle"), 4000);
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      if (data && data.error) {
+        console.error(`Trigger error for ${node.id}:`, data.error);
         setState("error");
         setMsg(data.error);
+        setTimeout(() => setState("idle"), 4000);
       } else {
         setState("ok");
         setMsg(data.message || data.status || "Started");
-        setTimeout(() => setState("idle"), 8000);
+        onSuccess?.();
+        setTimeout(() => setState("idle"), 4000);
       }
     } catch (e: unknown) {
+      console.error(`Trigger network error for ${node.id}:`, e);
       setState("error");
       setMsg(e instanceof Error ? e.message : "Failed");
-      setTimeout(() => setState("idle"), 6000);
+      setTimeout(() => setState("idle"), 4000);
     }
   };
 
-  const label = node.triggerLabel ?? "Trigger Worker";
+  const label = node.triggerLabel ?? "Trigger";
   const colors = {
     idle:    { bg: "hsl(0 0% 9%)",           border: "hsl(0 0% 16%)",        color: "hsl(0 0% 60%)" },
     loading: { bg: `${node.colorHex}18`,      border: `${node.colorHex}40`,   color: node.colorHex },
@@ -642,7 +664,7 @@ function TriggerButton({ node }: { node: NodeDef }) {
           : state === "error"
           ? <AlertCircle size={11} />
           : <Play size={11} />}
-        {state === "loading" ? "Running…" : state === "ok" ? "Started ✓" : state === "error" ? "Error" : label}
+        {state === "loading" ? "Running..." : state === "ok" ? "Done" : state === "error" ? "Error" : label}
       </button>
       {msg && (
         <div style={{
@@ -857,6 +879,7 @@ function NodeCard({
   const [showDemo, setShowDemo] = useState(false);
   const [camaData, setCamaData] = useState<CamaData | null>(null);
   const [camaLoading, setCamaLoading] = useState(false);
+  const [triggeredLive, setTriggeredLive] = useState(false);
 
   // Fetch statusEndpoint for nodes that have one (e.g. SJCPA CAMA)
   useEffect(() => {
@@ -895,6 +918,7 @@ function NodeCard({
   // Compute status — use statusEndpoint data if available
   const status: NodeStatus = (() => {
     if (node.status === "building") return "building";
+    if (triggeredLive) return "live";
     if (node.statusEndpoint) {
       if (camaLoading && !camaData) return "pending";
       return camaData?.live ? "live" : "pending";
@@ -1044,7 +1068,7 @@ function NodeCard({
           </button>
 
           {node.triggerEndpoint && (
-            <TriggerButton node={node} />
+            <TriggerButton node={node} onSuccess={() => setTriggeredLive(true)} />
           )}
 
           {node.questions.length > 4 && (
