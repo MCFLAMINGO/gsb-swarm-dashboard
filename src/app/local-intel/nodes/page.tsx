@@ -455,8 +455,6 @@ const NODES: NodeDef[] = [
     signals: [],
     demoEndpoint: `${RAILWAY}/api/local-intel/oracle?zip=${DEFAULT_ZIP}`,
     demoHeaders: { "x-admin-token": ADMIN_TOKEN },
-    triggerEndpoint: `${RAILWAY}/api/admin/trigger-mcp-oracle`,
-    triggerLabel: "Trigger MCP Oracle Worker",
   },
 ];
 
