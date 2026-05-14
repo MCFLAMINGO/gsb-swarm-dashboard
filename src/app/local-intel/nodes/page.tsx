@@ -426,7 +426,8 @@ const NODES: NodeDef[] = [
     ],
     demoEndpoint: `${RAILWAY}/api/local-intel/zip-signals/${DEFAULT_ZIP}`,
     demoHeaders: { "x-admin-token": ADMIN_TOKEN },
-    status: "building",
+    triggerEndpoint: `${RAILWAY}/api/admin/trigger-world-model`,
+    status: "active",
   },
   {
     id: "mcp_oracle",
