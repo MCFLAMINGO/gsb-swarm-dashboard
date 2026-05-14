@@ -10,6 +10,7 @@ import {
 const RAILWAY   = "https://gsb-swarm-production.up.railway.app";
 const ADMIN_HDR = { "x-admin-token": "localintel-migrate-2026" };
 const TARGET_ZIPS = ["32082", "32081", "32250", "32266", "32233", "32259", "32034"];
+const COUNTIES = ["St. Johns", "Duval", "Clay", "Nassau", "Flagler", "Putnam"];
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -79,6 +80,21 @@ interface CeoQueryResult {
   supporting_data?: Record<string, string | number | boolean | null>;
   lease_signal?: LeaseSignal;
   confidence?: "high" | "medium" | "low" | string;
+}
+
+interface CountyZipResult {
+  zip: string;
+  city: string;
+  score: number;
+  reason: string;
+}
+interface CountyQueryResult {
+  county: string;
+  question: string;
+  answer: string;
+  top_zips: CountyZipResult[];
+  verdict: string;
+  confidence: string;
 }
 
 interface CeoAssessment {
@@ -563,10 +579,90 @@ function CeoAnalysisPanel({ r, loading, error }: { r: CeoQueryResult | null; loa
   );
 }
 
+function CountyAnalysisPanel({ r, loading, error, onZipClick }: {
+  r: CountyQueryResult | null; loading: boolean; error: boolean;
+  onZipClick: (zip: string) => void;
+}) {
+  const confColor =
+    r?.confidence === "high"   ? C.green :
+    r?.confidence === "medium" ? C.amber :
+    r?.confidence === "low"    ? C.red   : C.dim;
+
+  const zips = [...(r?.top_zips ?? [])].sort((a, b) => b.score - a.score);
+
+  return (
+    <Panel style={{ borderLeft:`3px solid ${C.green}` }}>
+      <SectionHeader icon={BrainCircuit} title="County Analysis" color={C.green}
+        right={r?.confidence ? (
+          <span style={{ padding:"3px 9px", borderRadius:99, fontSize:10, fontWeight:600,
+                          textTransform:"uppercase", letterSpacing:"0.06em",
+                          background:`${confColor}1a`, border:`1px solid ${confColor}4d`, color:confColor }}>
+            {r.confidence} confidence
+          </span>
+        ) : null} />
+
+      {loading && (
+        <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+          <Skeleton h={24} w="60%" />
+          <Skeleton h={14} />
+          <Skeleton h={14} w="85%" />
+        </div>
+      )}
+
+      {!loading && error && (
+        <span style={{ fontSize:12, color:C.dim }}>Unable to load county analysis for this question.</span>
+      )}
+
+      {!loading && !error && r && (
+        <>
+          {r.verdict && (
+            <div style={{ fontSize:20, fontWeight:700, color:C.text, lineHeight:1.3, marginBottom:12 }}>
+              {r.verdict}
+            </div>
+          )}
+          {r.answer && (
+            <p style={{ fontSize:13, lineHeight:1.6, color:C.mid, margin:"0 0 14px 0" }}>
+              {r.answer}
+            </p>
+          )}
+
+          {zips.length > 0 && (
+            <>
+              <div style={{ fontSize:10, color:C.dim, textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:6 }}>
+                Top ZIPs
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns:"auto 1fr auto 2fr", gap:"6px 12px", alignItems:"center" }}>
+                <div style={{ fontSize:10, color:C.dim, textTransform:"uppercase", letterSpacing:"0.06em" }}>ZIP</div>
+                <div style={{ fontSize:10, color:C.dim, textTransform:"uppercase", letterSpacing:"0.06em" }}>City</div>
+                <div style={{ fontSize:10, color:C.dim, textTransform:"uppercase", letterSpacing:"0.06em" }}>Score</div>
+                <div style={{ fontSize:10, color:C.dim, textTransform:"uppercase", letterSpacing:"0.06em" }}>Reason</div>
+                {zips.map(z => (
+                  <div key={z.zip} style={{ display:"contents" }}>
+                    <button onClick={() => onZipClick(z.zip)} style={{
+                      fontSize:12, fontFamily:"monospace", fontWeight:600, color:C.green,
+                      background:`${C.green}14`, border:`1px solid ${C.green}40`,
+                      borderRadius:6, padding:"3px 8px", cursor:"pointer", textAlign:"left"
+                    }}>{z.zip}</button>
+                    <span style={{ fontSize:12, color:C.text }}>{z.city}</span>
+                    <span style={{ fontSize:12, fontFamily:"monospace", fontWeight:600, color:C.green }}>{z.score}</span>
+                    <span style={{ fontSize:12, color:C.mid }}>{z.reason}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </>
+      )}
+    </Panel>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function CeoIntelPage() {
+  const [mode,    setMode]    = useState<"zip" | "county">("zip");
   const [zip,     setZip]     = useState("32082");
+  const [county,  setCounty]  = useState("St. Johns");
   const [query,   setQuery]   = useState("");
   const [data,    setData]    = useState<CeoAssessment | null>(null);
   const [loading, setLoading] = useState(false);
@@ -574,6 +670,9 @@ export default function CeoIntelPage() {
   const [queryResult,  setQueryResult]  = useState<CeoQueryResult | null>(null);
   const [queryLoading, setQueryLoading] = useState(false);
   const [queryError,   setQueryError]   = useState(false);
+  const [countyResult,  setCountyResult]  = useState<CountyQueryResult | null>(null);
+  const [countyLoading, setCountyLoading] = useState(false);
+  const [countyError,   setCountyError]   = useState(false);
 
   const fetchAssessment = useCallback(async (z: string, q: string) => {
     setLoading(true); setError(false);
@@ -607,11 +706,35 @@ export default function CeoIntelPage() {
     setQueryLoading(false);
   }, []);
 
-  useEffect(() => { fetchAssessment(zip, ""); }, [zip, fetchAssessment]);
+  const fetchCountyQuery = useCallback(async (c: string, q: string) => {
+    setCountyLoading(true); setCountyError(false);
+    try {
+      const res = await fetch(`${RAILWAY}/api/local-intel/ceo-county-query`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...ADMIN_HDR },
+        body: JSON.stringify({ county: c, question: q }),
+        cache: "no-store",
+      });
+      if (!res.ok) { setCountyError(true); setCountyResult(null); }
+      else { setCountyResult(await res.json() as CountyQueryResult); }
+    } catch { setCountyError(true); setCountyResult(null); }
+    setCountyLoading(false);
+  }, []);
+
+  useEffect(() => {
+    fetchAssessment(zip, "");
+    setQueryResult(null);
+    setQuery("");
+    setQueryError(false);
+  }, [zip, fetchAssessment]);
 
   const handleAsk = () => {
-    fetchAssessment(zip, query);
-    if (query.trim()) fetchCeoQuery(zip, query.trim());
+    if (mode === "zip") {
+      fetchAssessment(zip, query);
+      if (query.trim()) fetchCeoQuery(zip, query.trim());
+    } else {
+      if (query.trim()) fetchCountyQuery(county, query.trim());
+    }
   };
   const handleKey = (e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key === "Enter") handleAsk(); };
 
@@ -631,21 +754,54 @@ export default function CeoIntelPage() {
         </p>
       </div>
 
-      {/* ── ZIP pills ── */}
-      <div style={{ display:"flex", flexWrap:"wrap", gap:8, marginBottom:16 }}>
-        {TARGET_ZIPS.map(z => {
-          const sel = z === zip;
+      {/* ── Mode tabs ── */}
+      <div style={{ display:"flex", gap:8, marginBottom:12 }}>
+        {(["zip", "county"] as const).map(m => {
+          const sel = m === mode;
+          const label = m === "zip" ? "ZIP Analysis" : "County Analysis";
           return (
-            <button key={z} onClick={() => setZip(z)} style={{
-              padding:"8px 16px", borderRadius:99, fontSize:13,
-              fontFamily:"monospace", fontWeight:600, cursor:"pointer",
+            <button key={m} onClick={() => setMode(m)} style={{
+              padding:"8px 16px", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer",
               background: sel ? `${C.green}14` : C.card,
               border: `1px solid ${sel ? C.green : C.border}`,
               color:  sel ? C.green : C.dim, transition:"all 200ms"
-            }}>{z}</button>
+            }}>{label}</button>
           );
         })}
       </div>
+
+      {/* ── ZIP pills / County selector ── */}
+      {mode === "zip" ? (
+        <div style={{ display:"flex", flexWrap:"wrap", gap:8, marginBottom:16 }}>
+          {TARGET_ZIPS.map(z => {
+            const sel = z === zip;
+            return (
+              <button key={z} onClick={() => setZip(z)} style={{
+                padding:"8px 16px", borderRadius:99, fontSize:13,
+                fontFamily:"monospace", fontWeight:600, cursor:"pointer",
+                background: sel ? `${C.green}14` : C.card,
+                border: `1px solid ${sel ? C.green : C.border}`,
+                color:  sel ? C.green : C.dim, transition:"all 200ms"
+              }}>{z}</button>
+            );
+          })}
+        </div>
+      ) : (
+        <div style={{ display:"flex", flexWrap:"wrap", gap:8, marginBottom:16 }}>
+          {COUNTIES.map(c => {
+            const sel = c === county;
+            return (
+              <button key={c} onClick={() => setCounty(c)} style={{
+                padding:"8px 16px", borderRadius:99, fontSize:13,
+                fontWeight:600, cursor:"pointer",
+                background: sel ? `${C.green}14` : C.card,
+                border: `1px solid ${sel ? C.green : C.border}`,
+                color:  sel ? C.green : C.dim, transition:"all 200ms"
+              }}>{c}</button>
+            );
+          })}
+        </div>
+      )}
 
       {/* ── CEO> prompt bar ── */}
       <Panel style={{ marginBottom:20, padding:"8px 12px" }}>
@@ -657,20 +813,32 @@ export default function CeoIntelPage() {
                  placeholder="context for this brief — e.g. 'restaurant site selection', 'real estate entry', 'competitive landscape'..."
                  style={{ flex:1, background:"transparent", border:"none", outline:"none",
                            color:C.text, fontSize:14, padding:"8px 4px" }} />
-          <button onClick={handleAsk} disabled={loading || queryLoading} style={{
+          <button onClick={handleAsk} disabled={loading || queryLoading || countyLoading} style={{
             display:"flex", alignItems:"center", gap:6,
             padding:"8px 18px", borderRadius:8, fontSize:13, fontWeight:600,
-            background: (loading || queryLoading) ? "hsl(0 0% 10%)" : `${C.green}1a`,
-            border: `1px solid ${(loading || queryLoading) ? "hsl(0 0% 18%)" : C.green}`,
-            color: (loading || queryLoading) ? C.dim : C.green, cursor: (loading || queryLoading) ? "default" : "pointer", transition:"all 200ms"
+            background: (loading || queryLoading || countyLoading) ? "hsl(0 0% 10%)" : `${C.green}1a`,
+            border: `1px solid ${(loading || queryLoading || countyLoading) ? "hsl(0 0% 18%)" : C.green}`,
+            color: (loading || queryLoading || countyLoading) ? C.dim : C.green, cursor: (loading || queryLoading || countyLoading) ? "default" : "pointer", transition:"all 200ms"
           }}>
-            <Send size={13} />{(loading || queryLoading) ? "Assessing…" : "Assess"}
+            <Send size={13} />{(loading || queryLoading || countyLoading) ? "Assessing…" : "Assess"}
           </button>
         </div>
       </Panel>
 
+      {/* ── Query hint ── */}
+      {mode === "zip" && !queryResult && !queryLoading && !queryError && (
+        <div style={{ fontSize:12, color:C.dim, padding:"8px 0" }}>
+          Ask a question above to get AI-powered CEO analysis for this ZIP.
+        </div>
+      )}
+      {mode === "county" && !countyResult && !countyLoading && !countyError && (
+        <div style={{ fontSize:12, color:C.dim, padding:"8px 0" }}>
+          Ask a question above to get AI-powered CEO analysis for this county.
+        </div>
+      )}
+
       {/* ── Loading ── */}
-      {loading && (
+      {mode === "zip" && loading && (
         <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
           <Panel><Skeleton h={20} w="50%" /><div style={{ marginTop:12 }}><Skeleton h={14} /></div><div style={{ marginTop:8 }}><Skeleton h={14} w="80%" /></div></Panel>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
@@ -680,14 +848,24 @@ export default function CeoIntelPage() {
       )}
 
       {/* ── Error ── */}
-      {!loading && error && (
+      {mode === "zip" && !loading && error && (
         <Panel style={{ textAlign:"center", padding:40 }}>
           <span style={{ fontSize:13, color:C.dim }}>No assessment available for ZIP {zip}</span>
         </Panel>
       )}
 
+      {/* ── County mode results ── */}
+      {mode === "county" && (countyResult || countyLoading || countyError) && (
+        <CountyAnalysisPanel
+          r={countyResult}
+          loading={countyLoading}
+          error={countyError}
+          onZipClick={(z) => { setMode("zip"); setZip(z); }}
+        />
+      )}
+
       {/* ── Results ── */}
-      {!loading && !error && d && (
+      {mode === "zip" && !loading && !error && d && (
         <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
 
           {/* Executive Summary */}
