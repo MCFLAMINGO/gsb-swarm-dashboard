@@ -72,6 +72,15 @@ interface WorldModel {
 }
 interface Demand { top_sms_intents?: IntentRow[]; unmet_demand?: IntentRow[]; }
 
+interface LeaseSignal { viable?: boolean; note?: string; }
+interface CeoQueryResult {
+  verdict?: string;
+  answer?: string;
+  supporting_data?: Record<string, string | number | boolean | null>;
+  lease_signal?: LeaseSignal;
+  confidence?: "high" | "medium" | "low" | string;
+}
+
 interface CeoAssessment {
   zip: string; query_context: string | null; assessed_at: string;
   populated_sections: string[];
@@ -477,6 +486,83 @@ function DemandPanel({ d }: { d: Demand }) {
   );
 }
 
+function CeoAnalysisPanel({ r, loading, error }: { r: CeoQueryResult | null; loading: boolean; error: boolean }) {
+  const confColor =
+    r?.confidence === "high"   ? C.green :
+    r?.confidence === "medium" ? C.amber :
+    r?.confidence === "low"    ? C.red   : C.dim;
+
+  const supporting = r?.supporting_data ?? {};
+  const supportingEntries = Object.entries(supporting).filter(([, v]) => v != null && v !== "");
+  const lease = r?.lease_signal;
+
+  return (
+    <Panel style={{ borderLeft:`3px solid ${C.green}` }}>
+      <SectionHeader icon={BrainCircuit} title="CEO Analysis" color={C.green}
+        right={r?.confidence ? (
+          <span style={{ padding:"3px 9px", borderRadius:99, fontSize:10, fontWeight:600,
+                          textTransform:"uppercase", letterSpacing:"0.06em",
+                          background:`${confColor}1a`, border:`1px solid ${confColor}4d`, color:confColor }}>
+            {r.confidence} confidence
+          </span>
+        ) : null} />
+
+      {loading && (
+        <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+          <Skeleton h={24} w="60%" />
+          <Skeleton h={14} />
+          <Skeleton h={14} w="85%" />
+        </div>
+      )}
+
+      {!loading && error && (
+        <span style={{ fontSize:12, color:C.dim }}>Unable to load CEO analysis for this question.</span>
+      )}
+
+      {!loading && !error && r && (
+        <>
+          {r.verdict && (
+            <div style={{ fontSize:20, fontWeight:700, color:C.text, lineHeight:1.3, marginBottom:12 }}>
+              {r.verdict}
+            </div>
+          )}
+          {r.answer && (
+            <p style={{ fontSize:13, lineHeight:1.6, color:C.mid, margin:"0 0 14px 0" }}>
+              {r.answer}
+            </p>
+          )}
+
+          {lease && (lease.viable != null || lease.note) && (
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14, padding:"10px 12px",
+                           background:"hsl(0 0% 5%)", border:`1px solid ${C.border}`, borderRadius:8 }}>
+              {lease.viable != null && (
+                <Pill text={lease.viable ? "Viable" : "Not Viable"}
+                      color={lease.viable ? C.green : C.red} />
+              )}
+              {lease.note && (
+                <span style={{ fontSize:12, color:C.mid, flex:1 }}>{lease.note}</span>
+              )}
+            </div>
+          )}
+
+          {supportingEntries.length > 0 && (
+            <>
+              <div style={{ fontSize:10, color:C.dim, textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:6 }}>
+                Supporting Data
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0 24px" }}>
+                {supportingEntries.map(([k, v]) => (
+                  <KV key={k} label={k.replace(/_/g, " ")} value={String(v)} />
+                ))}
+              </div>
+            </>
+          )}
+        </>
+      )}
+    </Panel>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function CeoIntelPage() {
@@ -485,6 +571,9 @@ export default function CeoIntelPage() {
   const [data,    setData]    = useState<CeoAssessment | null>(null);
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState(false);
+  const [queryResult,  setQueryResult]  = useState<CeoQueryResult | null>(null);
+  const [queryLoading, setQueryLoading] = useState(false);
+  const [queryError,   setQueryError]   = useState(false);
 
   const fetchAssessment = useCallback(async (z: string, q: string) => {
     setLoading(true); setError(false);
@@ -498,9 +587,32 @@ export default function CeoIntelPage() {
     setLoading(false);
   }, []);
 
+  const fetchCeoQuery = useCallback(async (z: string, q: string) => {
+    setQueryLoading(true); setQueryError(false);
+    try {
+      const res = await fetch(`${RAILWAY}/api/local-intel/ceo-query`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...ADMIN_HDR },
+        body: JSON.stringify({ zip: z, question: q }),
+        cache: "no-store",
+      });
+      if (!res.ok) { setQueryError(true); setQueryResult(null); }
+      else {
+        const json = await res.json() as CeoQueryResult;
+        setQueryResult(json);
+      }
+    } catch {
+      setQueryError(true); setQueryResult(null);
+    }
+    setQueryLoading(false);
+  }, []);
+
   useEffect(() => { fetchAssessment(zip, ""); }, [zip, fetchAssessment]);
 
-  const handleAsk = () => fetchAssessment(zip, query);
+  const handleAsk = () => {
+    fetchAssessment(zip, query);
+    if (query.trim()) fetchCeoQuery(zip, query.trim());
+  };
   const handleKey = (e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key === "Enter") handleAsk(); };
 
   const d = data;
@@ -545,14 +657,14 @@ export default function CeoIntelPage() {
                  placeholder="context for this brief — e.g. 'restaurant site selection', 'real estate entry', 'competitive landscape'..."
                  style={{ flex:1, background:"transparent", border:"none", outline:"none",
                            color:C.text, fontSize:14, padding:"8px 4px" }} />
-          <button onClick={handleAsk} disabled={loading} style={{
+          <button onClick={handleAsk} disabled={loading || queryLoading} style={{
             display:"flex", alignItems:"center", gap:6,
             padding:"8px 18px", borderRadius:8, fontSize:13, fontWeight:600,
-            background: loading ? "hsl(0 0% 10%)" : `${C.green}1a`,
-            border: `1px solid ${loading ? "hsl(0 0% 18%)" : C.green}`,
-            color: loading ? C.dim : C.green, cursor: loading ? "default" : "pointer", transition:"all 200ms"
+            background: (loading || queryLoading) ? "hsl(0 0% 10%)" : `${C.green}1a`,
+            border: `1px solid ${(loading || queryLoading) ? "hsl(0 0% 18%)" : C.green}`,
+            color: (loading || queryLoading) ? C.dim : C.green, cursor: (loading || queryLoading) ? "default" : "pointer", transition:"all 200ms"
           }}>
-            <Send size={13} />{loading ? "Assessing…" : "Assess"}
+            <Send size={13} />{(loading || queryLoading) ? "Assessing…" : "Assess"}
           </button>
         </div>
       </Panel>
@@ -613,6 +725,11 @@ export default function CeoIntelPage() {
               </div>
             )}
           </div>
+
+          {/* CEO Analysis — only when a query has been run */}
+          {(queryLoading || queryError || queryResult) && (
+            <CeoAnalysisPanel r={queryResult} loading={queryLoading} error={queryError} />
+          )}
 
           {/* World Model — full width if present */}
           {d.world_model && <WorldModelPanel d={d.world_model} />}
