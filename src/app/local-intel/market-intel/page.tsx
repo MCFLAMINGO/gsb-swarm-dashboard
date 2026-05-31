@@ -87,7 +87,22 @@ export default function MarketIntelPage() {
     }
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    // Auto-retry up to 3× with 5s delay when DB is still warming at boot
+    let retries = 0;
+    async function loadWithRetry() {
+      await load();
+      // If we got 0 signals and no hard error, retry — DB may still be booting
+      setSignals(prev => {
+        if (prev.length === 0 && retries < 3) {
+          retries++;
+          setTimeout(loadWithRetry, 5000);
+        }
+        return prev;
+      });
+    }
+    loadWithRetry();
+  }, []);
 
   const filtered = filter === "ALL" ? signals : signals.filter(s => s.direction === filter);
   const longs    = signals.filter(s => s.direction === "LONG").length;
