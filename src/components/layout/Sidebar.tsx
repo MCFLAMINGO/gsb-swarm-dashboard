@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
-  LayoutDashboard, Bot, DollarSign, Plug, Settings, ChevronLeft, ChevronRight, Gauge, Activity, Swords, Zap, FlaskConical, ShoppingBag, Globe, Radio, TrendingUp, Eye, Search, MapPin, Coins, Brain, Network, Phone, Ban, MessageSquare, Cpu
+  LayoutDashboard, Bot, DollarSign, Plug, Settings, ChevronLeft, ChevronRight, Gauge, Activity, Swords, Zap, FlaskConical, ShoppingBag, Globe, Radio, TrendingUp, Eye, Search, MapPin, Coins, Brain, Network, Phone, Ban, MessageSquare, Cpu, GitBranch
 } from "lucide-react";
 import { useState } from "react";
 
@@ -24,6 +24,7 @@ const NAV = [
   { href: "/local-intel/oracle",  label: "↳ Oracle Signals", icon: Eye,        tip: "Live signal layer — opportunities, gaps, growth anomalies across all ZIPs" },
   { href: "/local-intel/search",  label: "↳ Search",          icon: Search,     tip: "Search businesses by query and ZIP across the LocalIntel dataset" },
   { href: "/local-intel/fees",      label: "↳ Fee Control",    icon: Coins,      tip: "RFQ match fees, order fee %, routing toggle, fee event log" },
+  { href: "/local-intel/rails",     label: "↳ Rail Router",    icon: GitBranch,  tip: "OpenRouter-style rail selector — surge/tempo/rfq routing stats, weights, Surge audit" },
   { href: "/local-intel/zip-intel", label: "↳ ZIP Intel",      icon: Brain,      tip: "Hive intelligence — census, income, permits, LLM query per ZIP" },
   { href: "/local-intel/nodes",     label: "↳ Node Map",       icon: Network,    tip: "LocalIntel intelligence nodes — capabilities, signals, live demo" },
   { href: "/local-intel/ceo",         label: "↳ CEO",          icon: Cpu,        tip: "CEO Intelligence — ZIP-level business assessment from government data (zero hallucination)" },
