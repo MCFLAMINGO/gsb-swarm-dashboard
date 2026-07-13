@@ -33,12 +33,12 @@ export default function Header({ title, subtitle }: { title: string; subtitle?: 
 
       {/* x402 link */}
       <a
-        href="https://gsb-swarm-dashboard.vercel.app/api/dispatch"
+        href="/x402"
         target="_blank"
         rel="noopener noreferrer"
         className="hidden md:flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
-        Dispatch API <ExternalLink size={10} />
+        x402 API <ExternalLink size={10} />
       </a>
     </header>
   );

@@ -218,29 +218,16 @@ function DispatchModal({
         return;
       }
 
-      setJobId(data.jobId);
-      toast.success(`Job dispatched: ${data.jobId}`);
-
-      // Poll for result
-      let attempts = 0;
-      const poll = setInterval(async () => {
-        attempts++;
-        try {
-          const jobRes = await fetch(`/api/jobs/${data.jobId}`);
-          const job = await jobRes.json();
-          if (job.status === "completed" || job.status === "failed") {
-            clearInterval(poll);
-            setResult(job.result || "No result returned");
-            setLoading(false);
-          } else if (attempts > 60) {
-            clearInterval(poll);
-            setResult("Timeout — job is still running. Check /api/jobs/" + data.jobId);
-            setLoading(false);
-          }
-        } catch {
-          // Keep polling
-        }
-      }, 1000);
+      setJobId(data.jobId || null);
+      // Dispatch returns the result synchronously (no cross-instance job polling)
+      if (data.status === "completed") {
+        toast.success(`Job completed: ${data.jobId}`);
+        setResult(data.result || "No result returned");
+      } else {
+        toast.error(`Job failed: ${data.jobId || "unknown"}`);
+        setResult(data.result || data.error || "Job failed");
+      }
+      setLoading(false);
     } catch (err) {
       setResult(`Network error: ${err instanceof Error ? err.message : "Unknown"}`);
       setLoading(false);

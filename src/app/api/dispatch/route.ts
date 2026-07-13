@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isValidAgent, runAgent } from "@/lib/agents";
 import type { AgentId } from "@/lib/agents";
+import { createJob, completeJob, failJob } from "@/lib/jobStore";
 
 export const maxDuration = 60;
 
@@ -37,10 +38,13 @@ export async function POST(request: NextRequest) {
   const agentId = body.agentId as AgentId;
   const { mission, context } = body;
 
-  // Run synchronously — wait for result and return it directly.
-  // This avoids serverless instance isolation killing async jobs.
+  // Persist for same-instance /api/jobs lookups + results feed.
+  // Still run synchronously — serverless isolation can't reliably poll across instances.
+  createJob(jobId, agentId, mission);
+
   try {
     const output = await runAgent(agentId, { mission, context });
+    completeJob(jobId, output.result, output.usdcEarned);
     return NextResponse.json({
       jobId,
       status: "completed",
@@ -50,10 +54,29 @@ export async function POST(request: NextRequest) {
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
+    failJob(jobId, msg);
     console.error(`[Dispatch] Agent ${agentId} failed:`, msg);
     return NextResponse.json(
       { jobId, status: "failed", result: msg },
       { status: 500 }
     );
   }
+}
+
+export async function GET() {
+  return NextResponse.json({
+    status: "ok",
+    service: "GSB Swarm Dispatch",
+    docs: "POST { agentId, mission, context? } → runs agent synchronously and returns { jobId, status, result, usdcEarned }",
+    agents: [
+      "oracle",
+      "preacher",
+      "onboarding",
+      "alert",
+      "token_analyst",
+      "wallet_profiler",
+      "alpha_scanner",
+      "thread_writer",
+    ],
+  });
 }
