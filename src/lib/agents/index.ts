@@ -5,19 +5,18 @@ import { runAlert } from "./alert";
 import { runThreadWriter } from "./threadwriter";
 
 // Railway ACP worker IDs — proxied to Railway fire-job
+// thread_writer runs locally (Railway fire-job/ACP currently unreliable after SDK migration)
 const RAILWAY_WORKER_IDS = new Set([
   "token_analyst",
   "wallet_profiler",
   "alpha_scanner",
-  "thread_writer",
 ]);
 
-// Map Vercel agent ID → Railway worker name
+// Map Vercel agent ID → Railway worker name (must match Railway /api/agent-status names)
 const RAILWAY_WORKER_MAP: Record<string, string> = {
-  token_analyst:   "GSB Token Analyst",
-  wallet_profiler: "GSB Wallet Profiler",
-  alpha_scanner:   "GSB Alpha Scanner",
-  thread_writer:   "GSB Thread Writer",
+  token_analyst: "GSB Token Analyst",
+  wallet_profiler: "GSB Wallet Profiler & DCA Engine",
+  alpha_scanner: "GSB Alpha Scanner",
 };
 
 export type AgentId =
@@ -26,10 +25,10 @@ export type AgentId =
   | "onboarding"
   | "alert"
   | "thread-writer"
+  | "thread_writer"
   | "token_analyst"
   | "wallet_profiler"
-  | "alpha_scanner"
-  | "thread_writer";
+  | "alpha_scanner";
 
 interface AgentInput {
   mission: string;
@@ -110,15 +109,14 @@ async function runRailwayWorker(
 
   // Rough USDC earned based on worker
   const priceMap: Record<string, number> = {
-    token_analyst:  0.25,
-    wallet_profiler: 0.50,
-    alpha_scanner:  0.10,
-    thread_writer:  0.15,
+    token_analyst: 0.25,
+    wallet_profiler: 0.5,
+    alpha_scanner: 0.1,
   };
 
   return {
     result: data.result,
-    usdcEarned: priceMap[agentId] ?? 0.10,
+    usdcEarned: priceMap[agentId] ?? 0.1,
   };
 }
 
@@ -131,6 +129,7 @@ const vercelHandlers: Record<
   onboarding: runOnboarding,
   alert: runAlert,
   "thread-writer": runThreadWriter,
+  thread_writer: runThreadWriter,
 };
 
 export function isValidAgent(id: string): boolean {

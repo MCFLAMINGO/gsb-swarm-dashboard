@@ -62,10 +62,10 @@ export const RAILWAY_AGENT_IDS: Record<string, string> = {
 };
 
 export const DEFAULT_MISSIONS: Record<string, string> = {
-  token_analyst: "Analyze $GSB token contract 0x6dA1A9793Ebe96975c240501A633ab8B3c83D14A on Base",
+  token_analyst: "Analyze $GSB token contract 0x8E223841aA396d36a6727EfcEAFC61d691692a37 on Base",
   wallet_profiler: "Profile wallet 0x592b6eEbd4C99b49Cf23f722E4F62FAEf4cD044d",
   alpha_scanner: "Scan for alpha signals on Base chain",
-  thread_writer: "Write a thread about $GSB token performance and ACP agent earnings",
+  thread_writer: "Write a thread about $GSB token performance and ACP agent earnings. Company: Agent Gas Bible. Website: https://www.raidersofthechain.com",
 };
 
 // ── Graduation data (hardcoded — one-time milestone) ────────────────────────
