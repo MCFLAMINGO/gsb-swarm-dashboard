@@ -14,32 +14,32 @@ const KNOWN_AGENTS = [
     id: "token-analyst",
     name: "GSB Token Analyst",
     virtualsId: "019d756b-0217-7252-8094-7854afde1703",
-    hireUrl: "https://app.virtuals.io/acp/agent/019d756b-0217-7252-8094-7854afde1703",
+    hireUrl: "https://app.virtuals.io/acp/agents/019d756b-0217-7252-8094-7854afde1703",
   },
   {
     id: "alpha-scanner",
     name: "GSB Alpha Scanner",
     virtualsId: "019d755e-dfd0-7b6c-8b4c-21cfbe6fda1c",
-    hireUrl: "https://app.virtuals.io/acp/agent/019d755e-dfd0-7b6c-8b4c-21cfbe6fda1c",
+    hireUrl: "https://app.virtuals.io/acp/agents/019d755e-dfd0-7b6c-8b4c-21cfbe6fda1c",
   },
   {
     id: "thread-writer",
     name: "GSB Thread Writer",
     virtualsId: "019d7565-5b56-778e-8550-66ec4b179a81",
-    hireUrl: "https://app.virtuals.io/acp/agent/019d7565-5b56-778e-8550-66ec4b179a81",
-    runtime: "vercel", // runs on dashboard after SDK breakage
+    hireUrl: "https://app.virtuals.io/acp/agents/019d7565-5b56-778e-8550-66ec4b179a81",
+    runtime: "vercel",
   },
   {
     id: "wallet-profiler",
     name: "GSB Wallet Profiler & DCA Engine",
     virtualsId: "019d756c-9eba-7600-81ba-f1c78f43277c",
-    hireUrl: "https://app.virtuals.io/acp/agent/019d756c-9eba-7600-81ba-f1c78f43277c",
+    hireUrl: "https://app.virtuals.io/acp/agents/019d756c-9eba-7600-81ba-f1c78f43277c",
   },
   {
     id: "ceo",
     name: "GSB CEO Agent",
     virtualsId: "019d7568-cd41-7523-9538-e501cc1875cc",
-    hireUrl: "https://app.virtuals.io/acp/agent/019d7568-cd41-7523-9538-e501cc1875cc",
+    hireUrl: "https://app.virtuals.io/acp/agents/019d7568-cd41-7523-9538-e501cc1875cc",
   },
 ];
 

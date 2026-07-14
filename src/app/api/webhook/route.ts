@@ -123,12 +123,19 @@ export async function POST(request: NextRequest) {
     "thread-writer": "thread_writer",
     "gsb-thread-writer": "thread_writer",
     "019d7565-5b56-778e-8550-66ec4b179a81": "thread_writer",
+    "ueatopeufdiy9d7ucrjxmkbl": "thread_writer",
     "token_analyst": "token_analyst",
     "019d756b-0217-7252-8094-7854afde1703": "token_analyst",
+    "xgu49hcj2bszls4ld5q18x4w": "token_analyst",
     "wallet_profiler": "wallet_profiler",
     "019d756c-9eba-7600-81ba-f1c78f43277c": "wallet_profiler",
+    "aq6du2zjiz9iekvewllqtn1i": "wallet_profiler",
     "alpha_scanner": "alpha_scanner",
     "019d755e-dfd0-7b6c-8b4c-21cfbe6fda1c": "alpha_scanner",
+    "sxlj5ptb50xuu1u2goe7bcai": "alpha_scanner",
+    "ceo": "ceo",
+    "itrtj5b95z14av53qoubqwcu": "ceo",
+    "019d7568-cd41-7523-9538-e501cc1875cc": "ceo",
   };
   const agentId = (agentAlias[body.agentId] || body.agentId) as string;
 

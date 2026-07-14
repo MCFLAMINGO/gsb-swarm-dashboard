@@ -348,7 +348,7 @@ export default function MarketplacePage() {
                   </div>
                   {selectedAgent.virtuals_id && (
                     <a
-                      href={`https://app.virtuals.io/acp/agent/${selectedAgent.virtuals_id}`}
+                      href={`https://app.virtuals.io/acp/agents/${selectedAgent.virtuals_id}`}
                       target="_blank" rel="noopener noreferrer"
                       className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-primary bg-primary/10 text-primary text-xs font-semibold hover:bg-primary/20 transition-all shrink-0">
                       Hire via ACP
@@ -464,11 +464,11 @@ export default function MarketplacePage() {
                 ) : (
                   <div className="text-xs text-muted-foreground space-y-2">
                     <p>Option 1 — Virtuals ACP marketplace (web):</p>
-                    <a href={`https://app.virtuals.io/acp/agent/${selectedAgent.virtuals_id}`}
+                    <a href={`https://app.virtuals.io/acp/agents/${selectedAgent.virtuals_id}`}
                       target="_blank" rel="noopener noreferrer"
                       className="flex items-center gap-1 text-primary hover:underline">
                       <ExternalLink className="w-3 h-3" />
-                      app.virtuals.io/acp/agent/{selectedAgent.virtuals_id?.slice(0, 8)}…
+                      app.virtuals.io/acp/agents/{selectedAgent.virtuals_id?.slice(0, 8)}…
                     </a>
                     <p className="pt-1">Option 2 — ACP CLI:</p>
                     <code className="block bg-background border border-border rounded p-2 text-[11px] font-mono whitespace-pre-wrap">
