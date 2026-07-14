@@ -113,60 +113,48 @@ export const useStore = create<GsbStore>()(
             body: JSON.stringify({ agentId, mission }),
           });
           const data = await res.json();
-          if (!res.ok) {
-            throw new Error(data.error || `HTTP ${res.status}`);
+          if (!res.ok && data.status !== "failed") {
+            throw new Error(data.error || data.result || `HTTP ${res.status}`);
           }
-          if (data.jobId) {
-            // Poll for result
-            const poll = setInterval(async () => {
-              try {
-                const jobRes = await fetch(`/api/jobs/${data.jobId}`);
-                const job = await jobRes.json();
-                if (job.status === "completed" || job.status === "failed") {
-                  clearInterval(poll);
-                  const earned = job.usdcEarned ?? agent.pricePerJob;
-                  set(s => ({
-                    jobs: [{
-                      id: data.jobId,
-                      agentId,
-                      agentName: agent.shortName,
-                      jobRef: data.jobId,
-                      usdcAmount: earned,
-                      status: job.status === "completed" ? "confirmed" as const : "failed" as const,
-                      type: "micro" as const,
-                      createdAt: job.createdAt || new Date().toISOString(),
-                      confirmedAt: job.completedAt || new Date().toISOString(),
-                    }, ...s.jobs],
-                    agents: s.agents.map(a =>
-                      a.id === agentId
-                        ? {
-                            ...a,
-                            jobsCompleted: a.jobsCompleted + (job.status === "completed" ? 1 : 0),
-                            totalEarned: a.totalEarned + (job.status === "completed" ? earned : 0),
-                            status: "active" as const,
-                            lastActiveAt: new Date().toISOString(),
-                          }
-                        : a
-                    ),
-                    logs: [{
-                      id: `log_${Date.now()}`,
-                      agentId,
-                      type: "job" as const,
-                      message: job.status === "completed"
-                        ? `Job completed: ${earned} USDC`
-                        : `Job failed: ${job.result || "unknown error"}`,
-                      detail: `ref: ${data.jobId}`,
-                      createdAt: new Date().toISOString(),
-                    }, ...s.logs],
-                  }));
-                }
-              } catch {
-                // polling error — will retry on next interval
-              }
-            }, 2000);
-            // Timeout after 2 minutes
-            setTimeout(() => clearInterval(poll), 120_000);
-          }
+
+          // Dispatch runs synchronously — use the result directly
+          // (polling /api/jobs fails across Vercel serverless instances)
+          const ok = data.status === "completed";
+          const earned = data.usdcEarned ?? agent.pricePerJob;
+          set(s => ({
+            jobs: [{
+              id: data.jobId || `job_${Date.now()}`,
+              agentId,
+              agentName: agent.shortName,
+              jobRef: data.jobId || "",
+              usdcAmount: earned,
+              status: ok ? "confirmed" as const : "failed" as const,
+              type: "micro" as const,
+              createdAt: new Date().toISOString(),
+              confirmedAt: data.completedAt || new Date().toISOString(),
+            }, ...s.jobs],
+            agents: s.agents.map(a =>
+              a.id === agentId
+                ? {
+                    ...a,
+                    jobsCompleted: a.jobsCompleted + (ok ? 1 : 0),
+                    totalEarned: a.totalEarned + (ok ? earned : 0),
+                    status: ok ? "active" as const : "error" as const,
+                    lastActiveAt: new Date().toISOString(),
+                  }
+                : a
+            ),
+            logs: [{
+              id: `log_${Date.now()}`,
+              agentId,
+              type: ok ? "job" as const : "error" as const,
+              message: ok
+                ? `Job completed: ${earned} USDC`
+                : `Job failed: ${data.result || data.error || "unknown error"}`,
+              detail: data.jobId ? `ref: ${data.jobId}` : undefined,
+              createdAt: new Date().toISOString(),
+            }, ...s.logs],
+          }));
         } catch (e) {
           console.error("Dispatch failed:", e);
           set(s => ({

@@ -13,8 +13,14 @@
     "src/app/api/dispatch/route.ts": {
       "maxDuration": 60
     },
+    "src/app/api/webhook/route.ts": {
+      "maxDuration": 60
+    },
     "src/app/api/jobs/[jobId]/route.ts": {
       "maxDuration": 30
+    },
+    "src/app/x402/[agent]/route.ts": {
+      "maxDuration": 60
     }
   }
 }

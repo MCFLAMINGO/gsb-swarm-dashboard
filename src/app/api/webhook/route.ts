@@ -1,11 +1,15 @@
 /**
  * GSB Swarm — ACP Webhook Receiver
  *
- * POST /api/webhook  — receive ACP job events, store to in-memory log
+ * POST /api/webhook  — receive ACP job events; on job.created run the agent
  * GET  /api/webhook  — health check
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { isValidAgent, runAgent, type AgentId } from "@/lib/agents";
+import { createJob, completeJob, failJob } from "@/lib/jobStore";
+
+export const maxDuration = 60;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface AcpWebhookPayload {
@@ -14,7 +18,12 @@ interface AcpWebhookPayload {
   agentId: string;
   jobRef?: string;
   usdcAmount?: number;
+  mission?: string;
+  requirement?: string;
+  prompt?: string;
   metadata?: Record<string, unknown>;
+  context?: Record<string, unknown>;
+  callbackUrl?: string;
   timestamp?: string;
 }
 
@@ -24,6 +33,8 @@ interface WebhookLogEntry {
   event: string;
   usdcAmount?: number;
   receivedAt: string;
+  status?: string;
+  resultPreview?: string;
   payload: AcpWebhookPayload;
 }
 
@@ -33,6 +44,46 @@ const MAX_LOG = 200;
 
 export function getWebhookLog(n: number): WebhookLogEntry[] {
   return webhookLog.slice(-n).reverse();
+}
+
+function pushLog(entry: WebhookLogEntry) {
+  webhookLog.push(entry);
+  if (webhookLog.length > MAX_LOG) {
+    webhookLog.splice(0, webhookLog.length - MAX_LOG);
+  }
+}
+
+function extractMission(body: AcpWebhookPayload): string {
+  const fromMeta =
+    typeof body.metadata?.mission === "string"
+      ? body.metadata.mission
+      : typeof body.metadata?.requirement === "string"
+        ? body.metadata.requirement
+        : null;
+  return (
+    body.mission ||
+    body.requirement ||
+    body.prompt ||
+    fromMeta ||
+    `ACP job ${body.jobId} for agent ${body.agentId}`
+  );
+}
+
+async function maybeCallback(
+  callbackUrl: string | undefined,
+  payload: Record<string, unknown>
+) {
+  if (!callbackUrl) return;
+  try {
+    await fetch(callbackUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch (err) {
+    console.warn("[GSB Webhook] callback failed:", err);
+  }
 }
 
 // ── POST Handler ─────────────────────────────────────────────────────────────
@@ -51,32 +102,138 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Store to in-memory log
-  const entry: WebhookLogEntry = {
-    jobId: body.jobId,
-    agentId: body.agentId,
-    event: body.event,
-    usdcAmount: body.usdcAmount,
-    receivedAt: new Date().toISOString(),
-    payload: body,
-  };
+  const receivedAt = new Date().toISOString();
+  const shouldRun =
+    body.event === "job.created" ||
+    body.event === "job.started" ||
+    body.event === "job.request";
 
-  webhookLog.push(entry);
-  if (webhookLog.length > MAX_LOG) {
-    webhookLog.splice(0, webhookLog.length - MAX_LOG);
+  // Map common ACP aliases → local agent ids
+  const agentAlias: Record<string, string> = {
+    "gsb-compute-oracle": "oracle",
+    "gsb-marketing-preacher": "preacher",
+    "gsb-onboarding-broker": "onboarding",
+    "gsb-alert-manager": "alert",
+    "compute-oracle": "oracle",
+    "marketing-preacher": "preacher",
+    "onboarding-broker": "onboarding",
+    "alert-manager": "alert",
+  };
+  const agentId = (agentAlias[body.agentId] || body.agentId) as string;
+
+  if (shouldRun && isValidAgent(agentId)) {
+    const mission = extractMission(body);
+    createJob(body.jobId, agentId, mission);
+
+    try {
+      const output = await runAgent(agentId as AgentId, {
+        mission,
+        context: body.context || body.metadata,
+      });
+      completeJob(body.jobId, output.result, output.usdcEarned);
+
+      const entry: WebhookLogEntry = {
+        jobId: body.jobId,
+        agentId,
+        event: body.event,
+        usdcAmount: output.usdcEarned ?? body.usdcAmount,
+        receivedAt,
+        status: "completed",
+        resultPreview: output.result.slice(0, 200),
+        payload: body,
+      };
+      pushLog(entry);
+
+      await maybeCallback(body.callbackUrl, {
+        jobId: body.jobId,
+        agentId,
+        status: "completed",
+        result: output.result,
+        usdcEarned: output.usdcEarned,
+        jobRef: body.jobRef,
+      });
+
+      console.log("[GSB Webhook]", receivedAt, body.event, {
+        jobId: body.jobId,
+        agentId,
+        status: "completed",
+        usdcEarned: output.usdcEarned,
+      });
+
+      return NextResponse.json(
+        {
+          received: true,
+          executed: true,
+          jobId: body.jobId,
+          agentId,
+          event: body.event,
+          status: "completed",
+          result: output.result,
+          usdcEarned: output.usdcEarned,
+          timestamp: new Date().toISOString(),
+        },
+        { status: 200 }
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      failJob(body.jobId, msg);
+      pushLog({
+        jobId: body.jobId,
+        agentId,
+        event: body.event,
+        usdcAmount: body.usdcAmount,
+        receivedAt,
+        status: "failed",
+        resultPreview: msg,
+        payload: body,
+      });
+      await maybeCallback(body.callbackUrl, {
+        jobId: body.jobId,
+        agentId,
+        status: "failed",
+        error: msg,
+        jobRef: body.jobRef,
+      });
+      return NextResponse.json(
+        {
+          received: true,
+          executed: true,
+          jobId: body.jobId,
+          agentId,
+          event: body.event,
+          status: "failed",
+          error: msg,
+          timestamp: new Date().toISOString(),
+        },
+        { status: 500 }
+      );
+    }
   }
 
-  console.log("[GSB Webhook]", entry.receivedAt, body.event, {
+  // Non-executable events — acknowledge & log only
+  const entry: WebhookLogEntry = {
     jobId: body.jobId,
-    agentId: body.agentId,
+    agentId,
+    event: body.event,
+    usdcAmount: body.usdcAmount,
+    receivedAt,
+    status: "acked",
+    payload: body,
+  };
+  pushLog(entry);
+
+  console.log("[GSB Webhook]", receivedAt, body.event, {
+    jobId: body.jobId,
+    agentId,
     usdcAmount: body.usdcAmount ?? "n/a",
   });
 
   return NextResponse.json(
     {
       received: true,
+      executed: false,
       jobId: body.jobId,
-      agentId: body.agentId,
+      agentId,
       event: body.event,
       timestamp: new Date().toISOString(),
     },
@@ -90,8 +247,9 @@ export async function GET() {
     {
       status: "ok",
       service: "GSB Swarm ACP Webhook",
-      version: "2.0.0",
+      version: "2.1.0",
       docs: "POST /api/webhook with ACP job payload | GET /api/webhook/jobs for last 50 jobs",
+      executesOn: ["job.created", "job.started", "job.request"],
     },
     { status: 200 }
   );
