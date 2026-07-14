@@ -21,6 +21,9 @@
     },
     "src/app/x402/[agent]/route.ts": {
       "maxDuration": 60
+    },
+    "src/app/api/x/webhook/route.ts": {
+      "maxDuration": 60
     }
   }
 }
