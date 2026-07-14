@@ -88,7 +88,7 @@ export const useStore = create<GsbStore>()(
           token_analyst: "Analyze token 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 on Base",
           wallet_profiler: "Profile wallet 0x6dA1A9793Ebe96975c240501A633ab8B3c83D14A on Base",
           alpha_scanner: "Scan Base chain for top alpha signals now",
-          thread_writer: "Write a viral X thread about $GSB Agent Gas Bible on Virtuals Protocol — tokenized AI agents earning USDC on Base",
+          thread_writer: "Write and post an X thread for company: Agent Gas Bible. Website: https://www.raidersofthechain.com. Cover $GSB agents earning USDC on Virtuals Protocol.",
         };
         const mission = defaultMissions[agentId] || `Run ${agent.name} default task`;
 

@@ -30,9 +30,10 @@ function AgentResultCard({ agent, content, timestamp }: { agent: string; content
     oracle:     'border-purple-500/30 bg-purple-950/20',
     alert:      'border-yellow-500/30 bg-yellow-950/20',
     onboarding: 'border-green-500/30 bg-green-950/20',
+    thread_writer: 'border-orange-500/30 bg-orange-950/20',
   }
   const agentIcons: Record<string, string> = {
-    preacher: '🧵', oracle: '📊', alert: '🚨', onboarding: '🚀',
+    preacher: '🧵', oracle: '📊', alert: '🚨', onboarding: '🚀', thread_writer: '✍️',
   }
 
   const colorClass = agentColors[agent] || 'border-border bg-muted/20'
@@ -124,10 +125,11 @@ function AgentResultCard({ agent, content, timestamp }: { agent: string; content
 /* ── Quick-fire presets ──────────────────────────────────────────────── */
 
 const QUICK_COMMANDS = [
-  { label: '🧵 Post $GSB thread', icon: Share2, cmd: 'Write and post a viral thread about $GSB agent swarm earning USDC on Virtuals Protocol. Make it compelling for crypto Twitter.', agent: 'preacher' },
+  { label: '🧵 Post $GSB thread', icon: Share2, cmd: 'Write and post a viral thread about $GSB agent swarm earning USDC on Virtuals Protocol. Company: Agent Gas Bible. Website: https://www.raidersofthechain.com', agent: 'thread_writer' },
   { label: '📊 Swarm status', icon: Activity, cmd: 'Give me a full status report on the GSB swarm — agents online, jobs completed, and earnings summary.', agent: 'oracle' },
   { label: '🚨 Send Telegram alert', icon: Bell, cmd: 'Send a Telegram alert with current $GSB swarm status and any notable activity in the past hour.', agent: 'alert' },
-  { label: '💊 Market bleeding.cash', icon: DollarSign, cmd: 'Write a promotional thread about bleeding.cash — AI financial triage for restaurants at $24.95. Target struggling restaurant owners on Twitter.', agent: 'preacher' },
+  { label: '💊 Market bleeding.cash', icon: DollarSign, cmd: 'Write a promotional thread about bleeding.cash — AI financial triage for restaurants at $24.95. Company: bleeding.cash. Website: https://www.bleeding.cash', agent: 'thread_writer' },
+  { label: '✍️ Custom brand thread', icon: Bot, cmd: 'Write a thread for company: Acme Coffee. Website: https://example.com. Focus on why locals love it. Draft only — do not post.', agent: 'thread_writer' },
   { label: '📈 Token analysis', icon: TrendingUp, cmd: 'Analyze $GSB token — current price action, volume, and what smart money is doing. Give a recommendation.', agent: 'oracle' },
   { label: '⚡ GFLOP Scan', icon: Zap, cmd: 'GFLOP_SCAN', agent: 'oracle', special: 'gflop' },
 ]
@@ -257,7 +259,7 @@ Alpha Scanner is analyzing Base DEX for correlated AI/compute tokens. Result wil
       // Step 3 — render result
       const ts = new Date().toLocaleTimeString()
       setChatHistory(prev => [...prev, { role: 'agent', content: result, agent: selectedAgent, timestamp: ts }])
-      setOutputFeed(prev => [{ id: Date.now().toString(), agent: selectedAgent, content: result, timestamp: ts, canPost: selectedAgent === 'preacher' }, ...prev.slice(0, 9)])
+      setOutputFeed(prev => [{ id: Date.now().toString(), agent: selectedAgent, content: result, timestamp: ts, canPost: selectedAgent === 'preacher' || selectedAgent === 'thread_writer' }, ...prev.slice(0, 9)])
 
       const logEntry = { time: timestamp, property: activeProperty === 'gsb' ? '$GSB' : 'bleeding.cash', agent: selectedAgent, command: mission.slice(0, 60), result: result.slice(0, 100) }
       setActivityLog(prev => {
@@ -396,6 +398,7 @@ Alpha Scanner is analyzing Base DEX for correlated AI/compute tokens. Result wil
                 <SelectContent>
                   <SelectItem value="oracle">📊 Oracle</SelectItem>
                   <SelectItem value="preacher">🧵 Preacher</SelectItem>
+                  <SelectItem value="thread_writer">✍️ Thread Writer</SelectItem>
                   <SelectItem value="alert">🚨 Alert</SelectItem>
                   <SelectItem value="onboarding">🚀 Onboarding</SelectItem>
                 </SelectContent>

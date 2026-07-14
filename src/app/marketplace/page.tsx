@@ -55,14 +55,14 @@ const AGENTS = [
     id: "thread-writer",
     virtuals_id: "019d7565-5b56-778e-8550-66ec4b179a81",
     name: "GSB Thread Writer",
-    tagline: "Crypto content agent — threads, reports, market updates",
+    tagline: "Multi-company content agent — threads for any brand, posted to X",
     icon: Globe,
     color: "hsl(280 70% 60%)",
     colorClass: "text-purple-400",
     borderClass: "border-purple-400/25",
     bgClass: "bg-purple-400/5",
     skills: [
-      { id: "write_thread",       name: "Twitter Thread",       price: "$0.10", sla: "~60s",  desc: "Engaging crypto thread about any topic or token" },
+      { id: "write_thread",       name: "Twitter Thread",       price: "$0.10", sla: "~60s",  desc: "Engaging thread for any company/brand — not just $GSB" },
       { id: "write_alpha_report", name: "Alpha Report",         price: "$0.15", sla: "~90s",  desc: "Formatted alpha report with on-chain data for any opportunity" },
       { id: "write_market_update",name: "Market Update",        price: "$0.10", sla: "~45s",  desc: "Summarize current market conditions into a shareable post" },
       { id: "token_intel_report", name: "Full Intel Report",    price: "$0.25", sla: "~2min", desc: "Research a token across X and on-chain, then write and post the thread" },
@@ -155,16 +155,35 @@ const AGENTS = [
 
 type SkillStatus = { [key: string]: { status: string; successRate: string; avgMs: number | null; confidenceScore: number } };
 
+type AcpHealth = {
+  acpReady: boolean;
+  issues: string[];
+  remediation: string[];
+  endpoints: { skillReport: string; acpSync: string; agentStatus: string };
+  totalJobsServed: number;
+};
+
 export default function MarketplacePage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [skillStatuses, setSkillStatuses] = useState<SkillStatus>({});
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [acpHealth, setAcpHealth] = useState<AcpHealth | null>(null);
+
+  const fetchAcpHealth = async () => {
+    try {
+      const res = await fetch("/api/acp/status");
+      if (res.ok) setAcpHealth(await res.json());
+    } catch {
+      setAcpHealth(null);
+    }
+  };
 
   const fetchSkillReport = async () => {
     setLoading(true);
     try {
+      await fetchAcpHealth();
       const res = await fetch(`${RAILWAY_URL}/api/skill-report`);
       if (res.ok) {
         const data = await res.json();
@@ -173,8 +192,12 @@ export default function MarketplacePage() {
           map[`${s.agentName}::${s.skillId}`] = s;
         }
         setSkillStatuses(map);
+      } else {
+        setSkillStatuses({});
       }
-    } catch {}
+    } catch {
+      setSkillStatuses({});
+    }
     setLoading(false);
   };
 
@@ -182,17 +205,32 @@ export default function MarketplacePage() {
     setSyncing(true);
     setSyncResult(null);
     try {
+      // Probe via our status aggregator first — Railway removed /api/acp-sync after SDK migration
+      const healthRes = await fetch("/api/acp/status");
+      const health = healthRes.ok ? await healthRes.json() : null;
+      if (health) setAcpHealth(health);
+
+      if (health?.endpoints?.acpSync === "missing") {
+        setSyncResult({
+          ok: false,
+          msg: "Railway /api/acp-sync missing after SDK migration — restore ACP client on gsb-swarm-production",
+        });
+        setSyncing(false);
+        setTimeout(() => setSyncResult(null), 10000);
+        return;
+      }
+
       const secret = process.env.NEXT_PUBLIC_OPERATOR_SECRET || "";
       const res = await fetch(`${RAILWAY_URL}/api/acp-sync`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ secret }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       setSyncResult(
         data.ok
           ? { ok: true,  msg: `Synced in ${data.elapsed}` }
-          : { ok: false, msg: data.error || "Sync failed" }
+          : { ok: false, msg: data.error || `Sync failed (HTTP ${res.status})` }
       );
     } catch (e: unknown) {
       setSyncResult({ ok: false, msg: e instanceof Error ? e.message : "Network error" });
@@ -237,6 +275,27 @@ export default function MarketplacePage() {
           </button>
         </div>
       </div>
+
+      {acpHealth && !acpHealth.acpReady && (
+        <div className="mx-6 mt-4 rounded-xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-sm">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-yellow-400 mt-0.5 shrink-0" />
+            <div className="space-y-1">
+              <p className="font-semibold text-yellow-300">
+                Railway ACP SDK offline (acpReady=false) — agents may not be findable/hireable on Virtuals marketplace
+              </p>
+              <ul className="text-xs text-yellow-200/80 list-disc pl-4 space-y-0.5">
+                {acpHealth.issues.slice(0, 4).map((issue) => (
+                  <li key={issue}>{issue}</li>
+                ))}
+              </ul>
+              <p className="text-xs text-muted-foreground pt-1">
+                Thread Writer still works from Driver&apos;s Seat / Agents via Vercel dispatch. Fix the Railway ACP client to restore marketplace discovery.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex h-[calc(100vh-120px)]">
         {/* Agent list */}

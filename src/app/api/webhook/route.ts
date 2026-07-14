@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
     body.event === "job.started" ||
     body.event === "job.request";
 
-  // Map common ACP aliases → local agent ids
+  // Map common ACP aliases / Virtuals UUIDs → local agent ids
   const agentAlias: Record<string, string> = {
     "gsb-compute-oracle": "oracle",
     "gsb-marketing-preacher": "preacher",
@@ -118,6 +118,17 @@ export async function POST(request: NextRequest) {
     "marketing-preacher": "preacher",
     "onboarding-broker": "onboarding",
     "alert-manager": "alert",
+    // Railway / marketplace agents
+    "thread_writer": "thread_writer",
+    "thread-writer": "thread_writer",
+    "gsb-thread-writer": "thread_writer",
+    "019d7565-5b56-778e-8550-66ec4b179a81": "thread_writer",
+    "token_analyst": "token_analyst",
+    "019d756b-0217-7252-8094-7854afde1703": "token_analyst",
+    "wallet_profiler": "wallet_profiler",
+    "019d756c-9eba-7600-81ba-f1c78f43277c": "wallet_profiler",
+    "alpha_scanner": "alpha_scanner",
+    "019d755e-dfd0-7b6c-8b4c-21cfbe6fda1c": "alpha_scanner",
   };
   const agentId = (agentAlias[body.agentId] || body.agentId) as string;
 
