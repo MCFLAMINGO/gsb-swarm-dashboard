@@ -14,7 +14,7 @@ const VIRTUALS_BROWSE = "https://app.virtuals.io/acp";
 const AGENTS = [
   {
     id: "token-analyst",
-    virtuals_id: "019d756b-0217-7252-8094-7854afde1703",
+    virtuals_id: "xgu49hcj2bszls4ld5q18x4w",
     name: "GSB Token Analyst",
     tagline: "On-chain token intelligence — price, liquidity, whale tracking",
     icon: BarChart3,
@@ -33,7 +33,7 @@ const AGENTS = [
   },
   {
     id: "alpha-scanner",
-    virtuals_id: "019d755e-dfd0-7b6c-8b4c-21cfbe6fda1c",
+    virtuals_id: "sxlj5ptb50xuu1u2goe7bcai",
     name: "GSB Alpha Scanner",
     tagline: "Early signal detection — trending tokens, new launches, volume spikes",
     icon: Globe,
@@ -53,7 +53,7 @@ const AGENTS = [
   },
   {
     id: "thread-writer",
-    virtuals_id: "019d7565-5b56-778e-8550-66ec4b179a81",
+    virtuals_id: "ueatopeufdiy9d7ucrjxmkbl",
     name: "GSB Thread Writer",
     tagline: "Multi-company content agent — threads for any brand, posted to X",
     icon: Globe,
@@ -72,7 +72,7 @@ const AGENTS = [
   },
   {
     id: "wallet-profiler",
-    virtuals_id: "019d756c-9eba-7600-81ba-f1c78f43277c",
+    virtuals_id: "aq6du2zjiz9iekvewllqtn1i",
     name: "GSB Wallet Profiler & DCA Engine",
     tagline: "Wallet intelligence + automated DCA buying on Base",
     icon: TrendingDown,
@@ -91,7 +91,7 @@ const AGENTS = [
   },
   {
     id: "ceo",
-    virtuals_id: "019d7568-cd41-7523-9538-e501cc1875cc",
+    virtuals_id: "itrtj5b95z14av53qoubqwcu",
     name: "GSB CEO Agent",
     tagline: "Orchestrator — routes complex multi-step jobs across the whole swarm",
     icon: Zap,
@@ -348,7 +348,7 @@ export default function MarketplacePage() {
                   </div>
                   {selectedAgent.virtuals_id && (
                     <a
-                      href={`https://app.virtuals.io/acp/agent/${selectedAgent.virtuals_id}`}
+                      href={`https://app.virtuals.io/acp/agents/${selectedAgent.virtuals_id}`}
                       target="_blank" rel="noopener noreferrer"
                       className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-primary bg-primary/10 text-primary text-xs font-semibold hover:bg-primary/20 transition-all shrink-0">
                       Hire via ACP
@@ -464,11 +464,11 @@ export default function MarketplacePage() {
                 ) : (
                   <div className="text-xs text-muted-foreground space-y-2">
                     <p>Option 1 — Virtuals ACP marketplace (web):</p>
-                    <a href={`https://app.virtuals.io/acp/agent/${selectedAgent.virtuals_id}`}
+                    <a href={`https://app.virtuals.io/acp/agents/${selectedAgent.virtuals_id}`}
                       target="_blank" rel="noopener noreferrer"
                       className="flex items-center gap-1 text-primary hover:underline">
                       <ExternalLink className="w-3 h-3" />
-                      app.virtuals.io/acp/agent/{selectedAgent.virtuals_id?.slice(0, 8)}…
+                      app.virtuals.io/acp/agents/{selectedAgent.virtuals_id?.slice(0, 8)}…
                     </a>
                     <p className="pt-1">Option 2 — ACP CLI:</p>
                     <code className="block bg-background border border-border rounded p-2 text-[11px] font-mono whitespace-pre-wrap">
