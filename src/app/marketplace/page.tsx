@@ -66,6 +66,7 @@ const AGENTS = [
       { id: "write_alpha_report", name: "Alpha Report",         price: "$0.15", sla: "~90s",  desc: "Formatted alpha report with on-chain data for any opportunity" },
       { id: "write_market_update",name: "Market Update",        price: "$0.10", sla: "~45s",  desc: "Summarize current market conditions into a shareable post" },
       { id: "token_intel_report", name: "Full Intel Report",    price: "$0.25", sla: "~2min", desc: "Research a token across X and on-chain, then write and post the thread" },
+      { id: "mention_reply",      name: "Mention Reply Draft",  price: "$0.10", sla: "~45s",  desc: "X Activity API → auto-draft reply when @mentioned (via /api/x/webhook)" },
     ],
     chains: ["Any"],
     earning: "$0.10–$0.25/job",

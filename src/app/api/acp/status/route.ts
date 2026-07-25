@@ -102,7 +102,9 @@ export async function GET() {
       "Restore ACP SDK client on gsb-swarm-production until acpReady=true",
       "Re-expose /api/acp-sync and /api/skill-report OR replace with current Virtuals SDK registration flow",
       "Set env:X_API_KEY on Railway MCP (secret/tokens exist; consumer key is missing) so Thread Writer can post",
+      "Register https://YOUR_DOMAIN/api/x/webhook with X Webhooks API + Activity subscriptions (mentions/likes/follows/DMs)",
       "Thread Writer now runs on Vercel /api/dispatch — works for multi-company threads even while Railway ACP is down",
+      "Optional: connect https://api.x.com/mcp in Cursor (xurl bridge) for operator search/post tooling",
     ],
   });
 }
