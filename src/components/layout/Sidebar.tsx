@@ -10,6 +10,7 @@ import { useState } from "react";
 
 const NAV = [
   { href: "/",            label: "Swarm Overview", icon: LayoutDashboard, tip: "Live status of all 4 broker agents" },
+  { href: "/elite-deep-dive", label: "Elite Deep Dive", icon: Brain, tip: "Multi-factor research — technicals, fundamentals, online intel, industry" },
   { href: "/drivers-seat",label: "Driver's Seat",  icon: Gauge,           tip: "Multi-property TV control room — $GSB + bleeding.cash" },
   { href: "/agents",      label: "Agents",         icon: Bot,             tip: "Individual agent config & simulate" },
   { href: "/earnings",    label: "Earnings",       icon: DollarSign,      tip: "USDC earned, payouts, withdraw" },

@@ -103,6 +103,7 @@ const AGENTS = [
     skills: [
       { id: "daily_brief",        name: "Daily Intelligence Brief", price: "$0.50", sla: "~3min", desc: "All 4 workers run in parallel — CEO synthesizes a full morning brief" },
       { id: "token_deep_dive",    name: "Token Deep Dive",          price: "$0.35", sla: "~2min", desc: "Token Analyst + Wallet Profiler in parallel, CEO synthesizes" },
+      { id: "elite_deep_dive",    name: "Elite Deep Dive",          price: "$0.55", sla: "~1–2min", desc: "Technicals + micro/macro fundamentals + Reddit/news/Substack/employee intel + industry/adjacent" },
       { id: "social_blast",       name: "Social Blast",             price: "$0.35", sla: "~2min", desc: "Scan alpha → write thread → coordinate X post via CEO" },
       { id: "swarm_task",         name: "Natural Language Task",    price: "$0.35", sla: "~2min", desc: "Describe what you need — CEO routes it to the right agent automatically" },
       { id: "financial_triage",   name: "Restaurant Triage",        price: "$24.95", sla: "~60s", desc: "Bank statements + POS export → burn rate report + vendor + loan letters" },
@@ -275,6 +276,22 @@ export default function MarketplacePage() {
             Refresh
           </button>
         </div>
+      </div>
+
+      <div className="mx-6 mt-4 rounded-xl border border-primary/25 bg-primary/5 px-4 py-3 flex items-center justify-between gap-4">
+        <div>
+          <p className="text-sm font-semibold text-foreground">Elite Deep Dive</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Run multi-factor research from the dashboard — uses Railway gsb-swarm keys (NVIDIA / FRED / X).
+          </p>
+        </div>
+        <a
+          href="/elite-deep-dive"
+          className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-primary bg-primary/10 text-primary text-xs font-semibold hover:bg-primary/20 transition-all"
+        >
+          Open Elite Dive
+          <ArrowRight className="w-3 h-3" />
+        </a>
       </div>
 
       {acpHealth && !acpHealth.acpReady && (
