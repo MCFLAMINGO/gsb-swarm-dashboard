@@ -128,6 +128,9 @@ export default function EliteDeepDivePage() {
         setReport(data.report);
         setDurationMs(data.duration_ms ?? null);
         if (data.sources) setSources((prev) => ({ ...(prev || {}), ...data.sources }));
+        setTimeout(() => {
+          document.getElementById("elite-summation")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 50);
       } catch (e) {
         setError((e as Error).message);
       }
@@ -278,7 +281,7 @@ export default function EliteDeepDivePage() {
           </div>
 
           {/* 2. Summation */}
-          <section className="rounded-lg border border-primary/35 bg-primary/5 p-5 md:p-6 space-y-3">
+          <section id="elite-summation" className="rounded-lg border border-primary/35 bg-primary/5 p-5 md:p-6 space-y-3 scroll-mt-4">
             <h2 className="text-xl font-semibold flex items-center gap-2 text-foreground">
               <Newspaper className="h-5 w-5 text-accent" /> Research summation
             </h2>
