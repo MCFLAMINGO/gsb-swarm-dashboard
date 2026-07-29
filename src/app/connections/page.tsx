@@ -189,9 +189,12 @@ function RobinhoodConnectCard() {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" className="h-8 text-xs" asChild>
-            <a href="/execute">Open Execute (connect guide)</a>
-          </Button>
+          <a
+            href="/execute"
+            className="inline-flex h-8 items-center rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/80"
+          >
+            Open Execute (connect guide)
+          </a>
           <Button
             size="sm"
             variant="secondary"
