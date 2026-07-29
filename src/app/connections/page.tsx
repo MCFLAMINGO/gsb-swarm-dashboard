@@ -213,9 +213,12 @@ function RobinhoodConnectCard() {
           >
             Refresh status
           </Button>
-          <Button size="sm" variant="outline" className="h-8 text-xs" asChild>
-            <Link href="/elite-deep-dive">Open Elite Desk →</Link>
-          </Button>
+          <Link
+            href="/elite-deep-dive"
+            className="inline-flex items-center justify-center h-8 px-3 rounded-md border border-border bg-background text-xs hover:bg-secondary"
+          >
+            Open Elite Desk →
+          </Link>
         </div>
 
         {error && <p className="text-xs text-red-400">{error}</p>}
