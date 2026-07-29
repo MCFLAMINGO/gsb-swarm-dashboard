@@ -67,11 +67,10 @@ export default function EliteDeepDivePage() {
       const res = await fetch("/api/robinhood?action=connect", { cache: "no-store" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-      if (data.authorize_url) {
-        window.open(data.authorize_url, "_blank", "noopener,noreferrer");
-      } else {
+      if (!data.authorize_url) {
         throw new Error("No authorize_url returned — deploy gsb-swarm Robinhood routes first");
       }
+      window.location.assign(data.authorize_url);
     } catch (e) {
       setRhError((e as Error).message);
     } finally {

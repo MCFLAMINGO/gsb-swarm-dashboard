@@ -29,14 +29,13 @@ export default function ExecutePage() {
       const res = await fetch("/api/robinhood?action=connect", { cache: "no-store" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-      if (data.authorize_url) {
-        window.open(data.authorize_url, "_blank", "noopener,noreferrer");
-        toast.message("Complete Robinhood Allow in the new tab, then Refresh.");
-      }
+      if (!data.authorize_url) throw new Error("No authorize_url from Swarm");
+      toast.message("Redirecting to Robinhood — tap Allow for GSB Swarm");
+      // Same-tab — avoids popup blockers that look like a failed connect
+      window.location.assign(data.authorize_url);
     } catch (e) {
-      toast.error("Connect failed", { description: (e as Error).message });
-    } finally {
       setBusy(false);
+      toast.error("Connect failed", { description: (e as Error).message });
     }
   }
 

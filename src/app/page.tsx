@@ -62,7 +62,9 @@ export default function DeskHomePage() {
       const res = await fetch("/api/robinhood?action=connect", { cache: "no-store" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-      if (data.authorize_url) window.open(data.authorize_url, "_blank", "noopener,noreferrer");
+      if (!data.authorize_url) throw new Error("No authorize_url from Swarm");
+      // Same-tab redirect — popups are often blocked and look like "won't connect"
+      window.location.assign(data.authorize_url);
     } catch (e) {
       setError((e as Error).message);
     }

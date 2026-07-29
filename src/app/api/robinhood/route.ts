@@ -64,6 +64,17 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(data, { status: res.status });
     }
 
+    if (action === "health") {
+      let res = await railwayFetch("/api/robinhood/health", {}, token);
+      if (res.status === 401) {
+        _railwayToken = null;
+        const fresh = await getRailwayToken();
+        res = await railwayFetch("/api/robinhood/health", {}, fresh);
+      }
+      const data = await res.json().catch(() => ({}));
+      return NextResponse.json(data, { status: res.status });
+    }
+
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   } catch (err) {
     return NextResponse.json(
