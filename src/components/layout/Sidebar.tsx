@@ -34,7 +34,7 @@ const NAV = [
   { href: "/local-intel/sms-log",     label: "↳ SMS Log",      icon: MessageSquare, tip: "Inbound SMS query log — what was asked, how it routed, what was sent back" },
   { href: "/local-intel/market-intel", label: "↳ Market Intel",  icon: TrendingUp,    tip: "FL-concentrated equity signals scored weekly against LocalIntel data" },
   { href: "https://www.thelocalintel.com/admin", label: "↳ Biz Admin", icon: MapPin, tip: "Business Admin Portal — manage profiles, claim businesses, view RFQ/fee history", external: true },
-  { href: "/connections", label: "API Connections",icon: Plug,            tip: "Telegram, X, x402, wallet keys" },
+  { href: "/connections", label: "API Connections",icon: Plug,            tip: "Robinhood Agentic OAuth, Telegram, X, x402, wallet keys" },
   { href: "/settings",    label: "Settings",       icon: Settings,        tip: "Dashboard & agent preferences" },
 ];
 
