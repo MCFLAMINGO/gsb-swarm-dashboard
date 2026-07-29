@@ -200,9 +200,88 @@ export default function EliteDeepDivePage() {
 
           {report.analyst_memo && (
             <section className="rounded-lg border border-border bg-card p-4 space-y-2">
-              <h3 className="text-sm font-medium flex items-center gap-2"><Newspaper className="h-4 w-4 text-accent" /> Analyst memo</h3>
+              <h3 className="text-sm font-medium flex items-center gap-2"><Newspaper className="h-4 w-4 text-accent" /> Institutional note</h3>
+              <p className="text-[11px] text-muted-foreground">Goldman / BlackRock rigor + deeper alt-data layer</p>
               <p className="text-sm leading-relaxed text-foreground/90 whitespace-pre-wrap">{report.analyst_memo}</p>
             </section>
+          )}
+
+          {report.trade_plan?.summary_table && (
+            <section className="rounded-lg border border-accent/30 bg-accent/5 p-4 space-y-3">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <h3 className="text-sm font-medium flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4 text-accent" /> Trade plan — target ROI
+                </h3>
+                <div className="text-xs text-muted-foreground">
+                  Bias <span className="text-foreground font-medium">{report.trade_plan.bias}</span>
+                  {report.trade_plan.mark_price != null && <> · Mark {fmt(report.trade_plan.mark_price)}</>}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                {(["day", "week", "month", "year"] as const).map((h) => {
+                  const plan = report.trade_plan.horizons?.[h];
+                  if (!plan) return null;
+                  return (
+                    <div key={h} className="rounded-md border border-border bg-card/80 p-3 space-y-1.5">
+                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{plan.label}</div>
+                      <div className="text-xs font-medium text-foreground">{plan.action}</div>
+                      <div className="text-lg font-semibold text-accent">
+                        {plan.target_roi_pct > 0 ? "+" : ""}{plan.target_roi_pct}%
+                      </div>
+                      <div className="text-[11px] text-muted-foreground">target ROI</div>
+                      <div className="pt-1 space-y-1 border-t border-border/60">
+                        <Kv label="Stop" value={fmtPct(plan.stop_loss_pct)} />
+                        <Kv label="R:R" value={plan.risk_reward != null ? `${plan.risk_reward}x` : null} />
+                        <Kv label="Target px" value={fmt(plan.target_price)} />
+                        <Kv label="Stop px" value={fmt(plan.stop_price)} />
+                        <Kv label="Conf" value={plan.confidence != null ? `${Math.round(plan.confidence * 100)}%` : null} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {report.trade_plan.execution && (
+                <p className="text-[11px] text-muted-foreground">
+                  {report.trade_plan.execution.entry_style} · {report.trade_plan.execution.take_profit_rule} · Max book risk{" "}
+                  {report.trade_plan.execution.max_book_risk_pct}%
+                </p>
+              )}
+            </section>
+          )}
+
+          {report.institutional && (
+            <div className="grid md:grid-cols-2 gap-4">
+              <Panel icon={<Building2 className="h-4 w-4" />} title="Investment thesis">
+                <p className="text-xs text-foreground/90 leading-relaxed">{report.institutional.investment_thesis}</p>
+                <div className="pt-2 space-y-1">
+                  <div className="text-[10px] uppercase text-muted-foreground">Catalysts up</div>
+                  {(report.institutional.catalysts_up || []).slice(0, 4).map((c: string, i: number) => (
+                    <div key={i} className="text-xs text-emerald-400/90">• {c}</div>
+                  ))}
+                  <div className="text-[10px] uppercase text-muted-foreground pt-1">Catalysts down</div>
+                  {(report.institutional.catalysts_down || []).slice(0, 4).map((c: string, i: number) => (
+                    <div key={i} className="text-xs text-red-400/90">• {c}</div>
+                  ))}
+                </div>
+              </Panel>
+              <Panel icon={<Globe2 className="h-4 w-4" />} title="Scenarios (12m)">
+                {(["bull", "base", "bear"] as const).map((k) => {
+                  const s = report.institutional.scenarios?.[k];
+                  if (!s) return null;
+                  return (
+                    <div key={k} className="rounded-md border border-border/60 px-2 py-1.5 mb-1.5">
+                      <div className="flex justify-between text-xs">
+                        <span className="font-medium text-foreground">{s.label}</span>
+                        <span className="text-accent">{s.implied_12m_roi_pct > 0 ? "+" : ""}{s.implied_12m_roi_pct}% · {s.probability_pct}%</span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{s.narrative}</p>
+                    </div>
+                  );
+                })}
+                <Kv label="Sleeve" value={report.institutional.portfolio_fit?.suggested_sleeve_pct != null ? `${report.institutional.portfolio_fit.suggested_sleeve_pct}%` : null} />
+                <Kv label="Role" value={report.institutional.portfolio_fit?.role} />
+              </Panel>
+            </div>
           )}
 
           <div className="grid md:grid-cols-2 gap-4">
