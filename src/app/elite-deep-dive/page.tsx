@@ -149,8 +149,8 @@ export default function EliteDeepDivePage() {
           </div>
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-foreground">Elite Research</h1>
-            <p className="text-sm text-muted-foreground">
-              Chief Analyst for the Trading Desk — technicals, micro/macro, online intel, desk voice, contrarian, multi-horizon ROI.
+            <p className="text-base text-foreground/80">
+              Summation → thesis → positions laid out → multi-horizon ROI. Supporting research below.
             </p>
           </div>
         </div>
@@ -252,286 +252,415 @@ export default function EliteDeepDivePage() {
         </div>
       )}
 
-      {report && (
-        <div className="space-y-4">
+      {report && (() => {
+        const week = report.trade_plan?.horizons?.week;
+        const contra = report.trade_plan?.contrarian_play || report.institutional?.contrarian_play;
+        const sleeve = report.institutional?.portfolio_fit?.suggested_sleeve_pct;
+        const conviction = report.verdict?.conviction ?? report.institutional?.conviction_0_to_1;
+        return (
+        <div className="space-y-6 max-w-5xl">
+          {/* 1. Verdict strip */}
           <div className="flex flex-wrap items-center gap-3">
-            <div className={`rounded-md border px-3 py-1.5 text-sm font-semibold ${verdictColor}`}>
+            <div className={`rounded-md border px-4 py-2 text-lg font-bold ${verdictColor}`}>
               {verdict || "NO VERDICT"}
             </div>
-            <div className="text-sm text-muted-foreground">
-              {report.resolved_symbol || report.query} · {report.asset_type || assetType}
-              {durationMs != null && ` · ${(durationMs / 1000).toFixed(1)}s`}
+            <div className="text-base text-foreground/85">
+              <span className="font-semibold text-foreground">{report.resolved_symbol || report.query}</span>
+              {" · "}{report.asset_type || assetType}
+              {report.trade_plan?.bias && <> · Bias <span className="font-semibold">{report.trade_plan.bias}</span></>}
+              {conviction != null && <> · Conviction {Math.round(Number(conviction) * 100)}%</>}
+              {durationMs != null && <> · {(durationMs / 1000).toFixed(1)}s</>}
             </div>
           </div>
 
-          {report.analyst_memo && (
-            <section className="rounded-lg border border-border bg-card p-4 space-y-2">
-              <h3 className="text-sm font-medium flex items-center gap-2"><Newspaper className="h-4 w-4 text-accent" /> Institutional note</h3>
-              <p className="text-[11px] text-muted-foreground">Goldman / BlackRock rigor + deeper alt-data layer</p>
-              <p className="text-sm leading-relaxed text-foreground/90 whitespace-pre-wrap">{report.analyst_memo}</p>
-            </section>
-          )}
+          {/* 2. Summation */}
+          <section className="rounded-lg border border-primary/35 bg-primary/5 p-5 md:p-6 space-y-3">
+            <h2 className="text-xl font-semibold flex items-center gap-2 text-foreground">
+              <Newspaper className="h-5 w-5 text-accent" /> Research summation
+            </h2>
+            <p className="text-sm text-foreground/70">
+              Full analyst note — what the desk concludes after mining tape, filings, macro, and online intel.
+            </p>
+            <div className="text-base leading-relaxed text-foreground whitespace-pre-wrap">
+              {report.analyst_memo || report.institutional?.investment_thesis || "No memo returned."}
+            </div>
+          </section>
 
-          {report.trade_plan?.summary_table && (
-            <section className="rounded-lg border border-accent/30 bg-accent/5 p-4 space-y-3">
-              <div className="flex items-center justify-between gap-3 flex-wrap">
-                <h3 className="text-sm font-medium flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4 text-accent" /> Trade plan — target ROI
-                </h3>
-                <div className="text-xs text-muted-foreground">
-                  Bias <span className="text-foreground font-medium">{report.trade_plan.bias}</span>
-                  {report.trade_plan.mark_price != null && <> · Mark {fmt(report.trade_plan.mark_price)}</>}
-                </div>
+          {/* 3. Thesis / thinking */}
+          <section className="rounded-lg border border-border bg-card p-5 md:p-6 space-y-4">
+            <h2 className="text-xl font-semibold flex items-center gap-2">
+              <Brain className="h-5 w-5 text-primary" /> Thesis — why we think this
+            </h2>
+            <p className="text-base leading-relaxed text-foreground">
+              {report.institutional?.investment_thesis || "Thesis not available."}
+            </p>
+            {report.institutional?.valuation?.commentary && (
+              <p className="text-base text-foreground/90 leading-relaxed border-l-2 border-accent/50 pl-3">
+                {report.institutional.valuation.commentary}
+              </p>
+            )}
+            {(report.verdict?.reasons || []).length > 0 && (
+              <div className="space-y-2">
+                <div className="text-sm font-semibold uppercase tracking-wider text-foreground/70">Thinking chain</div>
+                <ul className="space-y-2">
+                  {report.verdict.reasons.map((r: string, i: number) => (
+                    <li key={i} className="text-base text-foreground/90 flex gap-2">
+                      <span className="text-accent font-bold shrink-0">{i + 1}.</span>
+                      <span>{r}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            )}
+            <div className="grid md:grid-cols-2 gap-4 pt-2">
+              <div className="space-y-2">
+                <div className="text-sm font-semibold text-emerald-300">Catalysts up</div>
+                {(report.institutional?.catalysts_up || []).length
+                  ? (report.institutional.catalysts_up as string[]).slice(0, 6).map((c, i) => (
+                      <div key={i} className="text-base text-foreground/90">• {c}</div>
+                    ))
+                  : <div className="text-base text-foreground/60">None flagged</div>}
+              </div>
+              <div className="space-y-2">
+                <div className="text-sm font-semibold text-red-300">Catalysts down</div>
+                {(report.institutional?.catalysts_down || []).length
+                  ? (report.institutional.catalysts_down as string[]).slice(0, 6).map((c, i) => (
+                      <div key={i} className="text-base text-foreground/90">• {c}</div>
+                    ))
+                  : <div className="text-base text-foreground/60">None flagged</div>}
+              </div>
+            </div>
+            {report.institutional?.portfolio_fit && (
+              <div className="rounded-md border border-border bg-secondary/40 px-4 py-3 text-base">
+                <span className="font-semibold">Book role:</span>{" "}
+                {report.institutional.portfolio_fit.role}
+                {sleeve != null && <> · <span className="font-semibold">Suggested sleeve</span> {sleeve}% of liquid risk book</>}
+                {report.institutional.portfolio_fit.notes && (
+                  <p className="text-sm text-foreground/75 mt-1">{report.institutional.portfolio_fit.notes}</p>
+                )}
+              </div>
+            )}
+          </section>
+
+          {/* 4. Positions laid out */}
+          <section className="space-y-4">
+            <h2 className="text-xl font-semibold flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-accent" /> Positions laid out
+            </h2>
+            <p className="text-base text-foreground/80 -mt-2">
+              Primary desk book vs always-on contrarian fade. Entry · target · stop · size.
+            </p>
+            <div className="grid md:grid-cols-2 gap-4">
+              <PositionCard
+                title="Primary position"
+                badge={week?.action || report.trade_plan?.bias || "—"}
+                tone="primary"
+                thesis={week?.thesis}
+                rows={[
+                  ["Symbol", report.resolved_symbol],
+                  ["Direction", week?.direction || report.trade_plan?.bias],
+                  ["Horizon", week?.label || "1 week"],
+                  ["Mark / entry", fmt(week?.entry_price ?? report.trade_plan?.mark_price)],
+                  ["Target", fmt(week?.target_price)],
+                  ["Stop", fmt(week?.stop_price)],
+                  ["Target ROI", fmtPct(week?.target_roi_pct)],
+                  ["Stop loss", fmtPct(week?.stop_loss_pct)],
+                  ["R:R", week?.risk_reward != null ? `${week.risk_reward}x` : null],
+                  ["Confidence", week?.confidence != null ? `${Math.round(week.confidence * 100)}%` : null],
+                  ["Sleeve", sleeve != null ? `${sleeve}% of book` : null],
+                  ["Invalidation", week?.invalidation],
+                ]}
+              />
+              <PositionCard
+                title="Contrarian position"
+                badge={contra?.action || "FADE"}
+                tone="contra"
+                thesis={contra?.thesis}
+                rows={[
+                  ["Vs primary", contra?.vs_primary_bias],
+                  ["Direction", contra?.setup?.direction || (String(contra?.action || "").includes("LONG") ? "long" : "short")],
+                  ["Horizon", "1 week fade"],
+                  ["Trigger", contra?.setup?.entry_trigger],
+                  ["Entry", fmt(contra?.setup?.entry_price)],
+                  ["Target", fmt(contra?.setup?.target_price)],
+                  ["Stop", fmt(contra?.setup?.stop_price)],
+                  ["Target ROI", fmtPct(contra?.setup?.target_roi_pct)],
+                  ["Stop loss", fmtPct(contra?.setup?.stop_loss_pct)],
+                  ["R:R", contra?.setup?.risk_reward != null ? `${contra.setup.risk_reward}x` : null],
+                  ["Confidence", contra?.setup?.confidence != null ? `${Math.round(contra.setup.confidence * 100)}%` : null],
+                  ["Sizing", contra?.sizing_note],
+                  ["Invalidation", contra?.invalidation],
+                ]}
+              />
+            </div>
+            {contra && (
+              <ContrarianPlayPanel play={contra} fmt={fmt} fmtPct={fmtPct} />
+            )}
+          </section>
+
+          {/* 5. Multi-horizon ROI grid */}
+          {report.trade_plan?.horizons && (
+            <section className="rounded-lg border border-accent/30 bg-accent/5 p-5 space-y-3">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-accent" /> Multi-horizon targets
+              </h2>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {(["day", "week", "month", "year"] as const).map((h) => {
                   const plan = report.trade_plan.horizons?.[h];
                   if (!plan) return null;
                   return (
-                    <div key={h} className="rounded-md border border-border bg-card/80 p-3 space-y-1.5">
-                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{plan.label}</div>
-                      <div className="text-xs font-medium text-foreground">{plan.action}</div>
-                      <div className="text-lg font-semibold text-accent">
+                    <div key={h} className="rounded-md border border-border bg-card p-4 space-y-2">
+                      <div className="text-sm font-semibold uppercase tracking-wider text-foreground/70">{plan.label}</div>
+                      <div className="text-base font-medium text-foreground">{plan.action}</div>
+                      <div className="text-2xl font-bold text-accent">
                         {plan.target_roi_pct > 0 ? "+" : ""}{plan.target_roi_pct}%
                       </div>
-                      <div className="text-[11px] text-muted-foreground">target ROI</div>
-                      <div className="pt-1 space-y-1 border-t border-border/60">
+                      <div className="text-sm text-foreground/70">target ROI</div>
+                      <div className="pt-2 space-y-1.5 border-t border-border">
                         <Kv label="Stop" value={fmtPct(plan.stop_loss_pct)} />
                         <Kv label="R:R" value={plan.risk_reward != null ? `${plan.risk_reward}x` : null} />
                         <Kv label="Target px" value={fmt(plan.target_price)} />
                         <Kv label="Stop px" value={fmt(plan.stop_price)} />
                         <Kv label="Conf" value={plan.confidence != null ? `${Math.round(plan.confidence * 100)}%` : null} />
                       </div>
+                      {plan.thesis && (
+                        <p className="text-sm text-foreground/80 leading-snug pt-1">{plan.thesis}</p>
+                      )}
                     </div>
                   );
                 })}
               </div>
               {report.trade_plan.execution && (
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-base text-foreground/85">
                   {report.trade_plan.execution.entry_style} · {report.trade_plan.execution.take_profit_rule} · Max book risk{" "}
                   {report.trade_plan.execution.max_book_risk_pct}%
                 </p>
               )}
-
-              {/* Contrarian play — always illustrated */}
-              {(report.trade_plan.contrarian_play || report.institutional?.contrarian_play) && (
-                <ContrarianPlayPanel
-                  play={report.trade_plan.contrarian_play || report.institutional.contrarian_play}
-                  fmt={fmt}
-                  fmtPct={fmtPct}
-                />
-              )}
-
-              {/* Robinhood Agentic execution */}
-              <div className="rounded-md border border-border bg-card/70 p-3 space-y-3">
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <div>
-                    <div className="text-sm font-medium text-foreground">Robinhood Agentic</div>
-                    <div className="text-[11px] text-muted-foreground">
-                      MCP https://agent.robinhood.com/mcp/trading · sandbox account only
-                    </div>
-                  </div>
-                  <div className="text-[11px]">
-                    {rhStatus?.configured ? (
-                      <span className="text-emerald-400">Connected</span>
-                    ) : (
-                      <span className="text-amber-400">Not connected</span>
-                    )}
-                    {rhStatus?.live_trading_enabled ? (
-                      <span className="text-red-400 ml-2">LIVE ON</span>
-                    ) : (
-                      <span className="text-muted-foreground ml-2">live off</span>
-                    )}
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 items-end">
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-muted-foreground">Horizon</label>
-                    <select
-                      value={rhHorizon}
-                      onChange={(e) => setRhHorizon(e.target.value as typeof rhHorizon)}
-                      className="w-full rounded-md border border-border bg-secondary px-2 py-2 text-xs"
-                    >
-                      <option value="day">Day</option>
-                      <option value="week">Week</option>
-                      <option value="month">Month</option>
-                      <option value="year">Year</option>
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-muted-foreground">Notional USD</label>
-                    <input
-                      value={rhNotional}
-                      onChange={(e) => setRhNotional(e.target.value)}
-                      className="w-full rounded-md border border-border bg-secondary px-2 py-2 text-xs"
-                    />
-                  </div>
-                  <button
-                    disabled={rhBusy}
-                    onClick={connectRobinhood}
-                    className="rounded-md border border-border bg-secondary px-3 py-2 text-xs hover:bg-secondary/80 disabled:opacity-50"
-                  >
-                    Connect Robinhood
-                  </button>
-                  <button
-                    disabled={rhBusy || report.trade_plan?.bias === "NEUTRAL"}
-                    onClick={() => executeOnRobinhood(false)}
-                    className="rounded-md border border-accent/40 bg-accent/10 text-accent px-3 py-2 text-xs font-medium hover:bg-accent/20 disabled:opacity-50"
-                  >
-                    {rhBusy ? "Working…" : "Review order"}
-                  </button>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-[10px] text-muted-foreground">
-                    Review uses <code>review_equity_order</code>. Live place needs Railway{" "}
-                    <code>ROBINHOOD_LIVE_TRADING=1</code> + confirm.
-                  </p>
-                  <button
-                    disabled={rhBusy || !rhStatus?.live_trading_enabled || report.trade_plan?.bias === "NEUTRAL"}
-                    onClick={() => {
-                      if (window.confirm(`Place LIVE Robinhood buy for ${report.resolved_symbol} ($${rhNotional})?`)) {
-                        executeOnRobinhood(true);
-                      }
-                    }}
-                    className="rounded-md border border-red-500/40 bg-red-500/10 text-red-300 px-3 py-1.5 text-[11px] disabled:opacity-40"
-                  >
-                    Place live
-                  </button>
-                </div>
-                {rhError && <p className="text-xs text-red-400">{rhError}</p>}
-                {rhResult && (
-                  <pre className="text-[10px] text-foreground/80 whitespace-pre-wrap max-h-48 overflow-auto rounded border border-border bg-secondary/40 p-2">
-                    {JSON.stringify({
-                      mode: rhResult.mode,
-                      message: rhResult.message,
-                      order: rhResult.order || rhResult.order_preview,
-                      meta: rhResult.meta,
-                      review: rhResult.review?.parsed || rhResult.review?.text || rhResult.review,
-                      placed: rhResult.placed?.parsed || rhResult.placed?.text || rhResult.placed,
-                    }, null, 2)}
-                  </pre>
-                )}
-              </div>
             </section>
           )}
 
-          {report.institutional && (
-            <div className="grid md:grid-cols-2 gap-4">
-              <Panel icon={<Building2 className="h-4 w-4" />} title="Investment thesis">
-                <p className="text-xs text-foreground/90 leading-relaxed">{report.institutional.investment_thesis}</p>
-                <div className="pt-2 space-y-1">
-                  <div className="text-[10px] uppercase text-muted-foreground">Catalysts up</div>
-                  {(report.institutional.catalysts_up || []).slice(0, 4).map((c: string, i: number) => (
-                    <div key={i} className="text-xs text-emerald-400/90">• {c}</div>
-                  ))}
-                  <div className="text-[10px] uppercase text-muted-foreground pt-1">Catalysts down</div>
-                  {(report.institutional.catalysts_down || []).slice(0, 4).map((c: string, i: number) => (
-                    <div key={i} className="text-xs text-red-400/90">• {c}</div>
-                  ))}
-                </div>
-              </Panel>
-              <Panel icon={<Globe2 className="h-4 w-4" />} title="Scenarios (12m)">
+          {/* 6. Scenarios */}
+          {report.institutional?.scenarios && (
+            <section className="rounded-lg border border-border bg-card p-5 space-y-3">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <Globe2 className="h-5 w-5 text-accent" /> 12-month scenarios
+              </h2>
+              <div className="grid md:grid-cols-3 gap-3">
                 {(["bull", "base", "bear"] as const).map((k) => {
                   const s = report.institutional.scenarios?.[k];
                   if (!s) return null;
                   return (
-                    <div key={k} className="rounded-md border border-border/60 px-2 py-1.5 mb-1.5">
-                      <div className="flex justify-between text-xs">
-                        <span className="font-medium text-foreground">{s.label}</span>
-                        <span className="text-accent">{s.implied_12m_roi_pct > 0 ? "+" : ""}{s.implied_12m_roi_pct}% · {s.probability_pct}%</span>
+                    <div key={k} className="rounded-md border border-border bg-secondary/30 px-4 py-3 space-y-1">
+                      <div className="flex justify-between text-base font-semibold">
+                        <span>{s.label}</span>
+                        <span className="text-accent">
+                          {s.implied_12m_roi_pct > 0 ? "+" : ""}{s.implied_12m_roi_pct}% · {s.probability_pct}%
+                        </span>
                       </div>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">{s.narrative}</p>
+                      <p className="text-sm text-foreground/85 leading-relaxed">{s.narrative}</p>
                     </div>
                   );
                 })}
-                <Kv label="Sleeve" value={report.institutional.portfolio_fit?.suggested_sleeve_pct != null ? `${report.institutional.portfolio_fit.suggested_sleeve_pct}%` : null} />
-                <Kv label="Role" value={report.institutional.portfolio_fit?.role} />
-              </Panel>
-            </div>
-          )}
-
-          <div className="grid md:grid-cols-2 gap-4">
-            <Panel icon={<LineChart className="h-4 w-4" />} title="Technicals">
-              <Kv label="Price" value={fmt(report.technicals?.price)} />
-              <Kv label="Trend" value={report.technicals?.trend} />
-              <Kv label="Change" value={fmtPct(report.technicals?.change_1d_pct ?? report.technicals?.change_24h_pct)} />
-              <Kv label="Liquidity" value={fmt(report.technicals?.liquidity_usd)} />
-            </Panel>
-
-            <Panel icon={<Building2 className="h-4 w-4" />} title="Fundamentals">
-              <Kv label="Company" value={report.fundamentals_micro?.sec?.company_name} />
-              <Kv label="CIK" value={report.fundamentals_micro?.sec?.cik} />
-              <Kv label="Sector" value={report.industry?.sector || report.fundamentals_micro?.yahoo?.sector} />
-              <Kv label="Industry" value={report.industry?.industry || report.fundamentals_micro?.yahoo?.industry} />
-              <Kv label="Macro regime" value={report.fundamentals_macro?.regime} />
-            </Panel>
-
-            <Panel icon={<Users className="h-4 w-4" />} title="Online / employee intel">
-              <Kv label="Reddit" value={`${report.online_intel?.reddit?.count ?? 0} posts · ${report.online_intel?.reddit?.sentiment?.label || "n/a"}`} />
-              <Kv label="News" value={`${report.online_intel?.news?.count ?? 0} items · ${report.online_intel?.news?.sentiment?.label || "n/a"}`} />
-              <Kv label="Journals/Substack" value={String(report.online_intel?.journals_employees?.journals_and_substacks?.length ?? 0)} />
-              <Kv label="Employee signals" value={String(report.online_intel?.journals_employees?.employee_social_and_complaint_signals?.length ?? 0)} />
-            </Panel>
-
-            <Panel icon={<Building2 className="h-4 w-4" />} title="Desk voice (public BR / JPM / GS)">
-              <Kv label="Mentions" value={String(report.online_intel?.desk_voice?.count ?? 0)} />
-              <Kv label="Mid-level hits" value={String(report.online_intel?.desk_voice?.midlevel_hits ?? 0)} />
-              <Kv label="Tone" value={report.online_intel?.desk_voice?.sentiment?.label || "n/a"} />
-              {(report.online_intel?.desk_voice?.by_firm || []).map((f: any) => (
-                <Kv
-                  key={f.firm}
-                  label={f.firm}
-                  value={`${f.mentions} · ${f.sentiment?.label || "n/a"}`}
-                />
-              ))}
-              <p className="text-[10px] text-muted-foreground pt-1">
-                Public news / transcripts / Substack / Reddit / X only — no LinkedIn scrape.
-              </p>
-              {(report.online_intel?.desk_voice?.voices || [])
-                .filter((v: any) => v.midlevel_signal)
-                .slice(0, 4)
-                .map((v: any, i: number) => (
-                  <a
-                    key={i}
-                    href={v.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block text-[11px] text-accent hover:underline truncate"
-                    title={v.title}
-                  >
-                    [{v.firm}] {v.title}
-                  </a>
-                ))}
-            </Panel>
-
-            <Panel icon={<TrendingUp className="h-4 w-4" />} title="Performance & industry">
-              <Kv label="1y return" value={fmtPct(report.past_performance?.return_1y_pct)} />
-              <Kv label="3y return" value={fmtPct(report.past_performance?.return_3y_pct)} />
-              <Kv label="Max drawdown" value={fmtPct(report.past_performance?.max_drawdown_pct)} />
-              <Kv label="Sector ETF" value={report.industry?.sector_etf} />
-              <Kv label="Adjacent" value={(report.industry?.adjacent_industries || []).slice(0, 4).join(", ")} />
-            </Panel>
-          </div>
-
-          {(report.verdict?.reasons || []).length > 0 && (
-            <section className="rounded-lg border border-border bg-card p-4">
-              <h3 className="text-sm font-medium mb-2 flex items-center gap-2"><Globe2 className="h-4 w-4 text-accent" /> Verdict reasons</h3>
-              <ul className="space-y-1">
-                {report.verdict.reasons.map((r: string, i: number) => (
-                  <li key={i} className="text-sm text-muted-foreground">• {r}</li>
-                ))}
-              </ul>
+              </div>
             </section>
           )}
 
+          {/* 7. Robinhood execute */}
+          {report.trade_plan && (
+            <section className="rounded-lg border border-emerald-500/35 bg-emerald-500/5 p-5 space-y-3">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div>
+                  <h2 className="text-lg font-semibold text-foreground">Execute on Robinhood Agentic</h2>
+                  <p className="text-sm text-foreground/75">Uses the primary position plan for the selected horizon.</p>
+                </div>
+                <div className="text-base flex items-center gap-2 flex-wrap">
+                  {rhStatus?.configured ? (
+                    <span className="text-emerald-300 font-semibold">Connected</span>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={rhBusy}
+                      onClick={connectRobinhood}
+                      className="text-amber-300 font-semibold underline-offset-2 hover:underline disabled:opacity-50"
+                    >
+                      Connect Robinhood
+                    </button>
+                  )}
+                  {rhStatus?.live_trading_enabled ? (
+                    <span className="text-red-300 font-semibold">LIVE ON</span>
+                  ) : (
+                    <span className="text-foreground/70">live off</span>
+                  )}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 items-end">
+                <div className="space-y-1">
+                  <label className="text-sm text-foreground/70">Horizon</label>
+                  <select
+                    value={rhHorizon}
+                    onChange={(e) => setRhHorizon(e.target.value as typeof rhHorizon)}
+                    className="w-full rounded-md border border-border bg-secondary px-3 py-2.5 text-base"
+                  >
+                    <option value="day">Day</option>
+                    <option value="week">Week</option>
+                    <option value="month">Month</option>
+                    <option value="year">Year</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm text-foreground/70">Notional USD</label>
+                  <input
+                    value={rhNotional}
+                    onChange={(e) => setRhNotional(e.target.value)}
+                    className="w-full rounded-md border border-border bg-secondary px-3 py-2.5 text-base"
+                  />
+                </div>
+                <button
+                  disabled={rhBusy || report.trade_plan?.bias === "NEUTRAL"}
+                  onClick={() => executeOnRobinhood(false)}
+                  className="rounded-md border border-accent/40 bg-accent/10 text-accent px-4 py-2.5 text-base font-semibold hover:bg-accent/20 disabled:opacity-50"
+                >
+                  {rhBusy ? "Working…" : "Review order"}
+                </button>
+                <button
+                  disabled={rhBusy || !rhStatus?.live_trading_enabled || report.trade_plan?.bias === "NEUTRAL"}
+                  onClick={() => {
+                    if (window.confirm(`Place LIVE Robinhood buy for ${report.resolved_symbol} ($${rhNotional})?`)) {
+                      executeOnRobinhood(true);
+                    }
+                  }}
+                  className="rounded-md border border-red-500/40 bg-red-500/10 text-red-300 px-4 py-2.5 text-base font-semibold disabled:opacity-40"
+                >
+                  Place live
+                </button>
+              </div>
+              {rhError && <p className="text-base text-red-300">{rhError}</p>}
+              {rhResult && (
+                <pre className="text-sm text-foreground/90 whitespace-pre-wrap max-h-56 overflow-auto rounded border border-border bg-secondary/40 p-3">
+                  {JSON.stringify({
+                    mode: rhResult.mode,
+                    message: rhResult.message,
+                    order: rhResult.order || rhResult.order_preview,
+                    meta: rhResult.meta,
+                    review: rhResult.review?.parsed || rhResult.review?.text || rhResult.review,
+                    placed: rhResult.placed?.parsed || rhResult.placed?.text || rhResult.placed,
+                  }, null, 2)}
+                </pre>
+              )}
+            </section>
+          )}
+
+          {/* 8. Supporting research */}
+          <section className="space-y-3">
+            <h2 className="text-lg font-semibold">Supporting research</h2>
+            <div className="grid md:grid-cols-2 gap-4">
+              <Panel icon={<LineChart className="h-4 w-4" />} title="Technicals">
+                <Kv label="Price" value={fmt(report.technicals?.price)} />
+                <Kv label="Trend" value={report.technicals?.trend} />
+                <Kv label="Change" value={fmtPct(report.technicals?.change_1d_pct ?? report.technicals?.change_24h_pct)} />
+                <Kv label="Liquidity" value={fmt(report.technicals?.liquidity_usd)} />
+              </Panel>
+              <Panel icon={<Building2 className="h-4 w-4" />} title="Fundamentals">
+                <Kv label="Company" value={report.fundamentals_micro?.sec?.company_name} />
+                <Kv label="Sector" value={report.industry?.sector || report.fundamentals_micro?.yahoo?.sector} />
+                <Kv label="Industry" value={report.industry?.industry || report.fundamentals_micro?.yahoo?.industry} />
+                <Kv label="Macro regime" value={report.fundamentals_macro?.regime} />
+                <Kv label="Trailing PE" value={report.institutional?.valuation?.trailing_pe != null ? String(report.institutional.valuation.trailing_pe) : null} />
+              </Panel>
+              <Panel icon={<Users className="h-4 w-4" />} title="Online / employee intel">
+                <Kv label="Reddit" value={`${report.online_intel?.reddit?.count ?? 0} · ${report.online_intel?.reddit?.sentiment?.label || "n/a"}`} />
+                <Kv label="News" value={`${report.online_intel?.news?.count ?? 0} · ${report.online_intel?.news?.sentiment?.label || "n/a"}`} />
+                <Kv label="X / Twitter" value={`${report.online_intel?.x_twitter?.count ?? 0} · ${report.online_intel?.x_twitter?.sentiment?.label || "n/a"}`} />
+                <Kv label="Employee signals" value={String(report.online_intel?.journals_employees?.employee_social_and_complaint_signals?.length ?? 0)} />
+              </Panel>
+              <Panel icon={<Building2 className="h-4 w-4" />} title="Desk voice (public BR / JPM / GS)">
+                <Kv label="Mentions" value={String(report.online_intel?.desk_voice?.count ?? 0)} />
+                <Kv label="Mid-level hits" value={String(report.online_intel?.desk_voice?.midlevel_hits ?? 0)} />
+                <Kv label="Tone" value={report.online_intel?.desk_voice?.sentiment?.label || "n/a"} />
+                {(report.online_intel?.desk_voice?.voices || [])
+                  .filter((v: any) => v.midlevel_signal)
+                  .slice(0, 4)
+                  .map((v: any, i: number) => (
+                    <a key={i} href={v.url} target="_blank" rel="noopener noreferrer"
+                      className="block text-sm text-accent hover:underline truncate" title={v.title}>
+                      [{v.firm}] {v.title}
+                    </a>
+                  ))}
+              </Panel>
+              <Panel icon={<TrendingUp className="h-4 w-4" />} title="Performance & industry">
+                <Kv label="1y return" value={fmtPct(report.past_performance?.return_1y_pct)} />
+                <Kv label="3y return" value={fmtPct(report.past_performance?.return_3y_pct)} />
+                <Kv label="Max drawdown" value={fmtPct(report.past_performance?.max_drawdown_pct)} />
+                <Kv label="Sector ETF" value={report.industry?.sector_etf} />
+                <Kv label="Adjacent" value={(report.industry?.adjacent_industries || []).slice(0, 4).join(", ")} />
+              </Panel>
+              {(report.institutional?.risk_matrix || []).length > 0 && (
+                <Panel icon={<AlertTriangle className="h-4 w-4" />} title="Risk matrix">
+                  {(report.institutional.risk_matrix as any[]).slice(0, 5).map((r, i) => (
+                    <div key={i} className="text-sm border-b border-border/50 pb-1.5 mb-1.5 last:border-0">
+                      <div className="flex justify-between gap-2">
+                        <span className="font-medium text-foreground">{r.risk}</span>
+                        <span className="text-amber-300">{r.severity}</span>
+                      </div>
+                      <p className="text-foreground/75 mt-0.5">{r.mitigation}</p>
+                    </div>
+                  ))}
+                </Panel>
+              )}
+            </div>
+          </section>
+
           <details className="rounded-lg border border-border bg-secondary/30 p-4">
-            <summary className="text-xs text-muted-foreground cursor-pointer">Raw structured report</summary>
-            <pre className="mt-3 text-[11px] text-foreground/80 whitespace-pre-wrap overflow-x-auto max-h-[420px]">
+            <summary className="text-base text-foreground/80 cursor-pointer font-medium">Raw structured report</summary>
+            <pre className="mt-3 text-sm text-foreground/85 whitespace-pre-wrap overflow-x-auto max-h-[420px]">
               {JSON.stringify(report, null, 2)}
             </pre>
           </details>
         </div>
-      )}
+        );
+      })()}
+    </div>
+  );
+}
+
+function PositionCard({
+  title,
+  badge,
+  tone,
+  thesis,
+  rows,
+}: {
+  title: string;
+  badge: string;
+  tone: "primary" | "contra";
+  thesis?: string;
+  rows: [string, string | number | null | undefined][];
+}) {
+  const shell =
+    tone === "primary"
+      ? "border-emerald-500/40 bg-emerald-500/10"
+      : "border-amber-500/40 bg-amber-500/10";
+  const badgeCls =
+    tone === "primary"
+      ? "bg-emerald-500/20 text-emerald-200 border-emerald-500/40"
+      : "bg-amber-500/20 text-amber-100 border-amber-500/40";
+  return (
+    <div className={`rounded-lg border ${shell} p-5 space-y-3`}>
+      <div className="flex items-start justify-between gap-3">
+        <h3 className="text-lg font-semibold text-foreground">{title}</h3>
+        <span className={`text-sm font-bold px-2.5 py-1 rounded-md border ${badgeCls}`}>{badge}</span>
+      </div>
+      {thesis && <p className="text-base text-foreground/90 leading-relaxed">{thesis}</p>}
+      <div className="space-y-2">
+        {rows.map(([label, value]) => (
+          <div key={label} className="flex justify-between gap-3 text-base border-b border-border/40 pb-1.5 last:border-0">
+            <span className="text-foreground/70 shrink-0">{label}</span>
+            <span className="text-foreground font-medium text-right break-words max-w-[60%]">
+              {value == null || value === "" ? "—" : String(value)}
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -663,19 +792,19 @@ function ContrarianPlayPanel({
 function Panel({ icon, title, children }: { icon: ReactNode; title: string; children: ReactNode }) {
   return (
     <section className="rounded-lg border border-border bg-card p-4 space-y-2">
-      <h3 className="text-sm font-medium flex items-center gap-2 text-foreground">
+      <h3 className="text-base font-semibold flex items-center gap-2 text-foreground">
         <span className="text-accent">{icon}</span> {title}
       </h3>
-      <div className="space-y-1.5">{children}</div>
+      <div className="space-y-2">{children}</div>
     </section>
   );
 }
 
 function Kv({ label, value }: { label: string; value?: string | number | null }) {
   return (
-    <div className="flex justify-between gap-3 text-xs">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="text-foreground text-right truncate max-w-[65%]">{value == null || value === "" ? "—" : String(value)}</span>
+    <div className="flex justify-between gap-3 text-sm">
+      <span className="text-foreground/70">{label}</span>
+      <span className="text-foreground font-medium text-right truncate max-w-[65%]">{value == null || value === "" ? "—" : String(value)}</span>
     </div>
   );
 }
