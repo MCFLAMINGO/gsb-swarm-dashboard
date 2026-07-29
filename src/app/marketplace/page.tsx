@@ -104,6 +104,8 @@ const AGENTS = [
       { id: "daily_brief",        name: "Daily Intelligence Brief", price: "$0.50", sla: "~3min", desc: "All 4 workers run in parallel — CEO synthesizes a full morning brief" },
       { id: "token_deep_dive",    name: "Token Deep Dive",          price: "$0.35", sla: "~2min", desc: "Token Analyst + Wallet Profiler in parallel, CEO synthesizes" },
       { id: "elite_deep_dive",    name: "Elite Deep Dive",          price: "$0.55", sla: "~1–2min", desc: "Technicals + micro/macro fundamentals + Reddit/news/Substack/employee intel + industry/adjacent" },
+      { id: "execute_trade_plan", name: "Robinhood Execute Plan",   price: "$0.25", sla: "~30s",  desc: "Review/place elite trade plan in Robinhood Agentic account via MCP (dry-run default)" },
+      { id: "robinhood_portfolio",name: "Robinhood Portfolio",      price: "$0.05", sla: "~15s",  desc: "Snapshot Agentic portfolio / buying power via Trading MCP" },
       { id: "social_blast",       name: "Social Blast",             price: "$0.35", sla: "~2min", desc: "Scan alpha → write thread → coordinate X post via CEO" },
       { id: "swarm_task",         name: "Natural Language Task",    price: "$0.35", sla: "~2min", desc: "Describe what you need — CEO routes it to the right agent automatically" },
       { id: "financial_triage",   name: "Restaurant Triage",        price: "$24.95", sla: "~60s", desc: "Bank statements + POS export → burn rate report + vendor + loan letters" },

@@ -28,6 +28,12 @@ export default function EliteDeepDivePage() {
   const [error, setError] = useState<string | null>(null);
   const [durationMs, setDurationMs] = useState<number | null>(null);
   const [pending, startTransition] = useTransition();
+  const [rhStatus, setRhStatus] = useState<any>(null);
+  const [rhHorizon, setRhHorizon] = useState<"day" | "week" | "month" | "year">("week");
+  const [rhNotional, setRhNotional] = useState("50");
+  const [rhBusy, setRhBusy] = useState(false);
+  const [rhResult, setRhResult] = useState<any>(null);
+  const [rhError, setRhError] = useState<string | null>(null);
 
   async function loadSources() {
     try {
@@ -40,9 +46,70 @@ export default function EliteDeepDivePage() {
     }
   }
 
+  async function loadRhStatus() {
+    try {
+      const res = await fetch("/api/robinhood?action=status", { cache: "no-store" });
+      setRhStatus(await res.json());
+    } catch (e) {
+      setRhStatus({ configured: false, error: (e as Error).message });
+    }
+  }
+
   useEffect(() => {
     loadSources();
+    loadRhStatus();
   }, []);
+
+  async function connectRobinhood() {
+    setRhError(null);
+    setRhBusy(true);
+    try {
+      const res = await fetch("/api/robinhood?action=connect", { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      if (data.authorize_url) {
+        window.open(data.authorize_url, "_blank", "noopener,noreferrer");
+      } else {
+        throw new Error("No authorize_url returned — deploy gsb-swarm Robinhood routes first");
+      }
+    } catch (e) {
+      setRhError((e as Error).message);
+    } finally {
+      setRhBusy(false);
+    }
+  }
+
+  async function executeOnRobinhood(live: boolean) {
+    if (!report?.resolved_symbol && !query.trim()) return;
+    setRhError(null);
+    setRhResult(null);
+    setRhBusy(true);
+    try {
+      const res = await fetch("/api/robinhood", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          symbol: report?.resolved_symbol || query.trim(),
+          trade_plan: report?.trade_plan || undefined,
+          horizon: rhHorizon,
+          notionalUsd: Number(rhNotional) || 50,
+          dryRun: !live,
+          confirm: live,
+          orderType: "market",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok && !data.order && !data.order_preview) {
+        throw new Error(data.error || data.message || `HTTP ${res.status}`);
+      }
+      setRhResult(data);
+      await loadRhStatus();
+    } catch (e) {
+      setRhError((e as Error).message);
+    } finally {
+      setRhBusy(false);
+    }
+  }
 
   function run() {
     const q = query.trim();
@@ -246,6 +313,97 @@ export default function EliteDeepDivePage() {
                   {report.trade_plan.execution.max_book_risk_pct}%
                 </p>
               )}
+
+              {/* Robinhood Agentic execution */}
+              <div className="rounded-md border border-border bg-card/70 p-3 space-y-3">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div>
+                    <div className="text-sm font-medium text-foreground">Robinhood Agentic</div>
+                    <div className="text-[11px] text-muted-foreground">
+                      MCP https://agent.robinhood.com/mcp/trading · sandbox account only
+                    </div>
+                  </div>
+                  <div className="text-[11px]">
+                    {rhStatus?.configured ? (
+                      <span className="text-emerald-400">Connected</span>
+                    ) : (
+                      <span className="text-amber-400">Not connected</span>
+                    )}
+                    {rhStatus?.live_trading_enabled ? (
+                      <span className="text-red-400 ml-2">LIVE ON</span>
+                    ) : (
+                      <span className="text-muted-foreground ml-2">live off</span>
+                    )}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 items-end">
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-muted-foreground">Horizon</label>
+                    <select
+                      value={rhHorizon}
+                      onChange={(e) => setRhHorizon(e.target.value as typeof rhHorizon)}
+                      className="w-full rounded-md border border-border bg-secondary px-2 py-2 text-xs"
+                    >
+                      <option value="day">Day</option>
+                      <option value="week">Week</option>
+                      <option value="month">Month</option>
+                      <option value="year">Year</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-muted-foreground">Notional USD</label>
+                    <input
+                      value={rhNotional}
+                      onChange={(e) => setRhNotional(e.target.value)}
+                      className="w-full rounded-md border border-border bg-secondary px-2 py-2 text-xs"
+                    />
+                  </div>
+                  <button
+                    disabled={rhBusy}
+                    onClick={connectRobinhood}
+                    className="rounded-md border border-border bg-secondary px-3 py-2 text-xs hover:bg-secondary/80 disabled:opacity-50"
+                  >
+                    Connect Robinhood
+                  </button>
+                  <button
+                    disabled={rhBusy || report.trade_plan?.bias === "NEUTRAL"}
+                    onClick={() => executeOnRobinhood(false)}
+                    className="rounded-md border border-accent/40 bg-accent/10 text-accent px-3 py-2 text-xs font-medium hover:bg-accent/20 disabled:opacity-50"
+                  >
+                    {rhBusy ? "Working…" : "Review order"}
+                  </button>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[10px] text-muted-foreground">
+                    Review uses <code>review_equity_order</code>. Live place needs Railway{" "}
+                    <code>ROBINHOOD_LIVE_TRADING=1</code> + confirm.
+                  </p>
+                  <button
+                    disabled={rhBusy || !rhStatus?.live_trading_enabled || report.trade_plan?.bias === "NEUTRAL"}
+                    onClick={() => {
+                      if (window.confirm(`Place LIVE Robinhood buy for ${report.resolved_symbol} ($${rhNotional})?`)) {
+                        executeOnRobinhood(true);
+                      }
+                    }}
+                    className="rounded-md border border-red-500/40 bg-red-500/10 text-red-300 px-3 py-1.5 text-[11px] disabled:opacity-40"
+                  >
+                    Place live
+                  </button>
+                </div>
+                {rhError && <p className="text-xs text-red-400">{rhError}</p>}
+                {rhResult && (
+                  <pre className="text-[10px] text-foreground/80 whitespace-pre-wrap max-h-48 overflow-auto rounded border border-border bg-secondary/40 p-2">
+                    {JSON.stringify({
+                      mode: rhResult.mode,
+                      message: rhResult.message,
+                      order: rhResult.order || rhResult.order_preview,
+                      meta: rhResult.meta,
+                      review: rhResult.review?.parsed || rhResult.review?.text || rhResult.review,
+                      placed: rhResult.placed?.parsed || rhResult.placed?.text || rhResult.placed,
+                    }, null, 2)}
+                  </pre>
+                )}
+              </div>
             </section>
           )}
 
