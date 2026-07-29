@@ -24,7 +24,8 @@
   --color-secondary-foreground: hsl(30 10% 75%);
 
   --color-muted:            hsl(0 0% 10%);
-  --color-muted-foreground: hsl(0 0% 45%);
+  /* Brighter secondary text for readability (was ~45% — too dim) */
+  --color-muted-foreground: hsl(30 8% 68%);
 
   --color-accent:            hsl(32 95% 52%);   /* #f28c28 — molten orange */
   --color-accent-foreground: hsl(0 0% 4%);
@@ -67,7 +68,7 @@
   --secondary: 0 0% 12%;
   --secondary-foreground: 30 10% 75%;
   --muted: 0 0% 10%;
-  --muted-foreground: 0 0% 45%;
+  --muted-foreground: 30 8% 68%;
   --accent: 32 95% 52%;
   --accent-foreground: 0 0% 4%;
   --destructive: 0 80% 50%;

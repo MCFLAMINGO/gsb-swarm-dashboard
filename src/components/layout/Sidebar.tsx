@@ -79,16 +79,16 @@ function NavLink({
   const inner = (
     <span
       className={cn(
-        "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all cursor-pointer group relative",
+        "flex items-center gap-3 px-3 py-2.5 rounded-md text-[15px] font-medium transition-all cursor-pointer group relative",
         active
-          ? "bg-primary/10 text-primary border border-primary/25"
-          : "text-muted-foreground hover:bg-secondary hover:text-foreground border border-transparent"
+          ? "bg-primary/15 text-primary border border-primary/35"
+          : "text-foreground/80 hover:bg-secondary hover:text-foreground border border-transparent"
       )}
     >
-      <Icon size={17} className="shrink-0" />
+      <Icon size={18} className="shrink-0" />
       {!collapsed && <span className="truncate">{label}</span>}
       {collapsed && (
-        <span className="absolute left-full ml-2.5 px-2 py-1 text-xs bg-secondary border border-border rounded whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-50 shadow-lg">
+        <span className="absolute left-full ml-2.5 px-2 py-1 text-sm bg-secondary border border-border rounded whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-50 shadow-lg">
           {label}
         </span>
       )}
@@ -112,27 +112,27 @@ export default function Sidebar() {
     <aside
       className={cn(
         "flex flex-col h-screen bg-card border-r border-border transition-all duration-300 shrink-0",
-        collapsed ? "w-[60px]" : "w-[220px]"
+        collapsed ? "w-[64px]" : "w-[240px]"
       )}
     >
       <div className={cn(
-        "flex items-center gap-3 px-4 py-5 border-b border-border",
+        "flex items-center gap-3 px-4 py-4 border-b border-border",
         collapsed && "justify-center px-2"
       )}>
-        <Logo size={30} />
+        <Logo size={32} />
         {!collapsed && (
           <div>
-            <div className="text-sm font-bold tracking-wide" style={{ color: "hsl(4 85% 44%)" }}>
+            <div className="text-base font-bold tracking-wide" style={{ color: "hsl(4 75% 58%)" }}>
               GSB Swarm
             </div>
-            <div className="text-[10px] text-muted-foreground uppercase tracking-widest">Trading Desk</div>
+            <div className="text-xs font-medium text-foreground/75 uppercase tracking-wider">Trading Desk</div>
           </div>
         )}
       </div>
 
-      <nav className="flex-1 py-3 px-2 space-y-0.5 overflow-y-auto">
+      <nav className="flex-1 py-2 px-2 space-y-1 overflow-y-auto">
         {!collapsed && (
-          <div className="px-3 py-1 text-[10px] uppercase tracking-widest text-muted-foreground">Core</div>
+          <div className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-foreground/65">Core</div>
         )}
         {PRIMARY.map((item) => (
           <NavLink key={item.href} item={item} pathname={pathname} collapsed={collapsed} />
@@ -142,10 +142,10 @@ export default function Sidebar() {
           <button
             type="button"
             onClick={() => setOpsOpen((o) => !o)}
-            className="w-full flex items-center justify-between px-3 py-2 mt-2 text-[10px] uppercase tracking-widest text-muted-foreground hover:text-foreground"
+            className="w-full flex items-center justify-between px-3 py-2.5 mt-1 text-xs font-semibold uppercase tracking-wider text-foreground/65 hover:text-foreground"
           >
             <span>LocalIntel Ops</span>
-            <ChevronDown size={12} className={cn("transition-transform", opsOpen && "rotate-180")} />
+            <ChevronDown size={14} className={cn("transition-transform", opsOpen && "rotate-180")} />
           </button>
         )}
         {(opsOpen || collapsed) && LOCALINTEL_OPS.map((item) => (
@@ -153,52 +153,52 @@ export default function Sidebar() {
         ))}
 
         {!collapsed && (
-          <div className="px-3 py-1 mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">System</div>
+          <div className="px-3 py-1.5 mt-1 text-xs font-semibold uppercase tracking-wider text-foreground/65">System</div>
         )}
         {SECONDARY.map((item) => (
           <NavLink key={item.href} item={item} pathname={pathname} collapsed={collapsed} />
         ))}
       </nav>
 
-      <div className="p-2 border-t border-border space-y-1">
+      <div className="p-2 border-t border-border space-y-0.5">
         {!collapsed && (
-          <div className="px-3 py-1 text-[10px] uppercase tracking-widest text-muted-foreground">Properties</div>
+          <div className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-foreground/65">Properties</div>
         )}
         <a href="https://www.bleeding.cash" target="_blank" rel="noopener noreferrer"
-          className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+          className="flex items-center gap-3 px-3 py-2 rounded-md text-[15px] text-foreground/80 hover:bg-secondary hover:text-foreground transition-colors"
           title="bleeding.cash">
-          <Activity size={17} className="shrink-0" />
-          {!collapsed && <span className="text-xs">bleeding.cash</span>}
+          <Activity size={18} className="shrink-0" />
+          {!collapsed && <span>bleeding.cash</span>}
         </a>
         <a href="https://www.throw5onit.com" target="_blank" rel="noopener noreferrer"
-          className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+          className="flex items-center gap-3 px-3 py-2 rounded-md text-[15px] text-foreground/80 hover:bg-secondary hover:text-foreground transition-colors"
           title="THROW">
-          <Zap size={17} className="shrink-0" style={{ color: "#00e5a0" }} />
-          {!collapsed && <span className="text-xs" style={{ color: "#00e5a0" }}>throw5onit.com</span>}
+          <Zap size={18} className="shrink-0" style={{ color: "#00e5a0" }} />
+          {!collapsed && <span style={{ color: "#00e5a0" }}>throw5onit.com</span>}
         </a>
         <a href="https://www.raidersofthechain.com" target="_blank" rel="noopener noreferrer"
-          className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+          className="flex items-center gap-3 px-3 py-2 rounded-md text-[15px] text-foreground/80 hover:bg-secondary hover:text-foreground transition-colors"
           title="Raiders of the Chain">
-          <Swords size={17} className="shrink-0" />
-          {!collapsed && <span className="text-xs">Raiders of the Chain</span>}
+          <Swords size={18} className="shrink-0" />
+          {!collapsed && <span>Raiders of the Chain</span>}
         </a>
         <a href="https://localintel-landing-deploy.vercel.app" target="_blank" rel="noopener noreferrer"
-          className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+          className="flex items-center gap-3 px-3 py-2 rounded-md text-[15px] text-foreground/80 hover:bg-secondary hover:text-foreground transition-colors"
           title="The Local Intel">
-          <MapPin size={17} className="shrink-0" style={{ color: "#00e5a0" }} />
-          {!collapsed && <span className="text-xs" style={{ color: "#00e5a0" }}>thelocalintel.com</span>}
+          <MapPin size={18} className="shrink-0" style={{ color: "#00e5a0" }} />
+          {!collapsed && <span style={{ color: "#00e5a0" }}>thelocalintel.com</span>}
         </a>
         {!collapsed && (
-          <div className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] text-muted-foreground">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-foreground/75">
             <span className="status-dot active" />
             <span>ACP · Robinhood · Tempo</span>
           </div>
         )}
         <button
           onClick={() => setCollapsed((c) => !c)}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+          className="w-full flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium text-foreground/80 hover:bg-secondary hover:text-foreground transition-colors"
         >
-          {collapsed ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}
+          {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
           {!collapsed && "Collapse"}
         </button>
       </div>
