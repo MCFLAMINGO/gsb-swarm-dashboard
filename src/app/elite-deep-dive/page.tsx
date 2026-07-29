@@ -128,6 +128,9 @@ export default function EliteDeepDivePage() {
         setReport(data.report);
         setDurationMs(data.duration_ms ?? null);
         if (data.sources) setSources((prev) => ({ ...(prev || {}), ...data.sources }));
+        setTimeout(() => {
+          document.getElementById("elite-summation")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 50);
       } catch (e) {
         setError((e as Error).message);
       }
@@ -156,18 +159,65 @@ export default function EliteDeepDivePage() {
         </div>
       </header>
 
-      {/* Source readiness — keys live on Railway gsb-swarm */}
-      <section className="rounded-lg border border-border bg-card/60 p-4 space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-medium text-foreground">Enrichment keys (Railway gsb-swarm)</h2>
+      {/* Query form first — summation appears after Run */}
+      <section className="rounded-lg border border-primary/35 bg-primary/10 p-5 space-y-4">
+        <h2 className="text-lg font-semibold text-foreground">Run research (summation + positions appear below)</h2>
+        <div className="grid md:grid-cols-[1fr_160px_auto] gap-3 items-end">
+          <div className="space-y-1.5">
+            <label className="text-sm text-foreground/70">Ticker / company / token</label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-foreground/50" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && run()}
+                placeholder="NVDA, AAPL, $VIRTUAL, 0x..."
+                className="w-full rounded-md border border-border bg-secondary pl-11 pr-3 py-3 text-base text-foreground outline-none focus:border-primary/50"
+              />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm text-foreground/70">Asset type</label>
+            <select
+              value={assetType}
+              onChange={(e) => setAssetType(e.target.value as AssetType)}
+              className="w-full rounded-md border border-border bg-secondary px-3 py-3 text-base text-foreground"
+            >
+              <option value="auto">Auto</option>
+              <option value="equity">Equity</option>
+              <option value="crypto">Crypto</option>
+            </select>
+          </div>
           <button
+            onClick={run}
+            disabled={pending || !query.trim()}
+            className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-6 py-3 text-base font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          >
+            {pending ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
+            {pending ? "Researching… (~15–45s)" : "Run Elite Dive"}
+          </button>
+        </div>
+        {!report && !pending && (
+          <p className="text-base text-foreground/80">
+            Click Run — then scroll for Research summation, Thesis, Positions, and Execute.
+          </p>
+        )}
+      </section>
+
+      <details className="rounded-lg border border-border bg-card/60 p-4">
+        <summary className="text-base font-medium text-foreground cursor-pointer">
+          Enrichment keys (Railway) — optional check
+        </summary>
+        <div className="flex justify-end mt-2">
+          <button
+            type="button"
             onClick={loadSources}
-            className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+            className="text-sm text-foreground/70 hover:text-foreground inline-flex items-center gap-1"
           >
             <RefreshCw className="h-3.5 w-3.5" /> Refresh
           </button>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2">
           {[
             { key: "nvidia_nim", label: "NVIDIA_API_KEY (memo)" },
             { key: "fred", label: "FRED_API_KEY (macro)" },
@@ -188,56 +238,13 @@ export default function EliteDeepDivePage() {
                 ) : (
                   <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
                 )}
-                <span className="text-xs text-muted-foreground">{label}</span>
+                <span className="text-sm text-foreground/80">{label}</span>
               </div>
             );
           })}
         </div>
-        {sourceNote && <p className="text-[11px] text-muted-foreground">{sourceNote}</p>}
-      </section>
-
-      {/* Query form */}
-      <section className="rounded-lg border border-border bg-card p-4 space-y-4">
-        <div className="grid md:grid-cols-[1fr_160px_auto] gap-3 items-end">
-          <div className="space-y-1.5">
-            <label className="text-xs text-muted-foreground">Ticker / company / token</label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && run()}
-                placeholder="NVDA, AAPL, $VIRTUAL, 0x..."
-                className="w-full rounded-md border border-border bg-secondary pl-9 pr-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50"
-              />
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-xs text-muted-foreground">Asset type</label>
-            <select
-              value={assetType}
-              onChange={(e) => setAssetType(e.target.value as AssetType)}
-              className="w-full rounded-md border border-border bg-secondary px-3 py-2.5 text-sm text-foreground"
-            >
-              <option value="auto">Auto</option>
-              <option value="equity">Equity</option>
-              <option value="crypto">Crypto</option>
-            </select>
-          </div>
-          <button
-            onClick={run}
-            disabled={pending || !query.trim()}
-            className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          >
-            {pending ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
-            {pending ? "Researching…" : "Run Elite Dive"}
-          </button>
-        </div>
-        <p className="text-[11px] text-muted-foreground">
-          Front-end: <span className="text-foreground/80">gsb-swarm-dashboard</span> (Vercel) → Railway{" "}
-          <span className="text-foreground/80">gsb-swarm</span> elite engine. Keys stay on Railway.
-        </p>
-      </section>
+        {sourceNote && <p className="text-sm text-foreground/70 mt-2">{sourceNote}</p>}
+      </details>
 
       {error && (
         <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300 flex gap-2">
@@ -274,7 +281,7 @@ export default function EliteDeepDivePage() {
           </div>
 
           {/* 2. Summation */}
-          <section className="rounded-lg border border-primary/35 bg-primary/5 p-5 md:p-6 space-y-3">
+          <section id="elite-summation" className="rounded-lg border border-primary/35 bg-primary/5 p-5 md:p-6 space-y-3 scroll-mt-4">
             <h2 className="text-xl font-semibold flex items-center gap-2 text-foreground">
               <Newspaper className="h-5 w-5 text-accent" /> Research summation
             </h2>
