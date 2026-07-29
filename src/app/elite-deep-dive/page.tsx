@@ -465,6 +465,37 @@ export default function EliteDeepDivePage() {
               <Kv label="Employee signals" value={String(report.online_intel?.journals_employees?.employee_social_and_complaint_signals?.length ?? 0)} />
             </Panel>
 
+            <Panel icon={<Building2 className="h-4 w-4" />} title="Desk voice (public BR / JPM / GS)">
+              <Kv label="Mentions" value={String(report.online_intel?.desk_voice?.count ?? 0)} />
+              <Kv label="Mid-level hits" value={String(report.online_intel?.desk_voice?.midlevel_hits ?? 0)} />
+              <Kv label="Tone" value={report.online_intel?.desk_voice?.sentiment?.label || "n/a"} />
+              {(report.online_intel?.desk_voice?.by_firm || []).map((f: any) => (
+                <Kv
+                  key={f.firm}
+                  label={f.firm}
+                  value={`${f.mentions} · ${f.sentiment?.label || "n/a"}`}
+                />
+              ))}
+              <p className="text-[10px] text-muted-foreground pt-1">
+                Public news / transcripts / Substack / Reddit / X only — no LinkedIn scrape.
+              </p>
+              {(report.online_intel?.desk_voice?.voices || [])
+                .filter((v: any) => v.midlevel_signal)
+                .slice(0, 4)
+                .map((v: any, i: number) => (
+                  <a
+                    key={i}
+                    href={v.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block text-[11px] text-accent hover:underline truncate"
+                    title={v.title}
+                  >
+                    [{v.firm}] {v.title}
+                  </a>
+                ))}
+            </Panel>
+
             <Panel icon={<TrendingUp className="h-4 w-4" />} title="Performance & industry">
               <Kv label="1y return" value={fmtPct(report.past_performance?.return_1y_pct)} />
               <Kv label="3y return" value={fmtPct(report.past_performance?.return_3y_pct)} />
