@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   Brain, Search, RefreshCw, AlertTriangle, CheckCircle2,
   TrendingUp, Newspaper, Users, Building2, LineChart, Globe2, GitBranch
@@ -20,14 +20,15 @@ interface Sources {
 }
 
 export default function EliteDeepDivePage() {
-  const [query, setQuery] = useState("NVDA");
+  const [query, setQuery] = useState("");
   const [assetType, setAssetType] = useState<AssetType>("auto");
   const [sources, setSources] = useState<Sources | null>(null);
   const [sourceNote, setSourceNote] = useState<string | null>(null);
   const [report, setReport] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [durationMs, setDurationMs] = useState<number | null>(null);
-  const [pending, startTransition] = useTransition();
+  const [pending, setPending] = useState(false);
+  const [elapsedSec, setElapsedSec] = useState(0);
   const [rhStatus, setRhStatus] = useState<any>(null);
   const [rhHorizon, setRhHorizon] = useState<"day" | "week" | "month" | "year">("week");
   const [rhNotional, setRhNotional] = useState("50");
@@ -59,6 +60,13 @@ export default function EliteDeepDivePage() {
     loadSources();
     loadRhStatus();
   }, []);
+
+  useEffect(() => {
+    if (!pending) return;
+    setElapsedSec(0);
+    const t = setInterval(() => setElapsedSec((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [pending]);
 
   async function connectRobinhood() {
     setRhError(null);
@@ -110,31 +118,47 @@ export default function EliteDeepDivePage() {
     }
   }
 
-  function run() {
-    const q = query.trim();
-    if (!q) return;
+  async function run() {
+    const q = query.trim().toUpperCase();
+    if (!q) {
+      setError("Enter a ticker first (e.g. AAPL, TSLA, META)");
+      return;
+    }
     setError(null);
     setReport(null);
     setDurationMs(null);
-    startTransition(async () => {
-      try {
-        const res = await fetch("/api/elite-analysis", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: q, assetType, includeSynthesis: true }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-        setReport(data.report);
-        setDurationMs(data.duration_ms ?? null);
-        if (data.sources) setSources((prev) => ({ ...(prev || {}), ...data.sources }));
-        setTimeout(() => {
-          document.getElementById("elite-summation")?.scrollIntoView({ behavior: "smooth", block: "start" });
-        }, 50);
-      } catch (e) {
-        setError((e as Error).message);
+    setPending(true);
+    try {
+      const res = await fetch("/api/elite-analysis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: q, assetType, includeSynthesis: true }),
+        signal: AbortSignal.timeout(280_000),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          data.error ||
+            (res.status === 504
+              ? "Research timed out on the server — try again (often 45–90s)"
+              : `HTTP ${res.status}`)
+        );
       }
-    });
+      if (!data.report) throw new Error("No report returned — Railway elite-analysis may have failed");
+      setReport(data.report);
+      setDurationMs(data.duration_ms ?? null);
+      if (data.sources) setSources((prev) => ({ ...(prev || {}), ...data.sources }));
+      setTimeout(() => {
+        document.getElementById("elite-summation")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 80);
+    } catch (e) {
+      const msg = (e as Error).name === "TimeoutError"
+        ? "Research timed out after ~4.5 minutes — try again"
+        : (e as Error).message;
+      setError(msg);
+    } finally {
+      setPending(false);
+    }
   }
 
   const verdict = report?.verdict?.verdict || report?.gsb_verdict || null;
@@ -171,7 +195,7 @@ export default function EliteDeepDivePage() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && run()}
-                placeholder="NVDA, AAPL, $VIRTUAL, 0x..."
+                placeholder="Type any ticker — AAPL, TSLA, META…"
                 className="w-full rounded-md border border-border bg-secondary pl-11 pr-3 py-3 text-base text-foreground outline-none focus:border-primary/50"
               />
             </div>
@@ -194,12 +218,17 @@ export default function EliteDeepDivePage() {
             className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-6 py-3 text-base font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
             {pending ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
-            {pending ? "Researching… (~15–45s)" : "Run Elite Dive"}
+            {pending ? `Researching… ${elapsedSec}s` : "Run Elite Dive"}
           </button>
         </div>
-        {!report && !pending && (
+        {pending && (
+          <p className="text-base text-amber-200">
+            Still working — usually 45–90 seconds. Keep this tab open. Results scroll into view when ready.
+          </p>
+        )}
+        {!report && !pending && !error && (
           <p className="text-base text-foreground/80">
-            Click Run — then scroll for Research summation, Thesis, Positions, and Execute.
+            Enter a ticker and run — summation, thesis, positions, and execute appear below when finished.
           </p>
         )}
       </section>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Brain, Crosshair, Network, Bot, Search, RefreshCw,
@@ -18,8 +18,9 @@ const TEAM = [
 ];
 
 export default function DeskHomePage() {
-  const [query, setQuery] = useState("NVDA");
-  const [pending, startTransition] = useTransition();
+  const [query, setQuery] = useState("");
+  const [pending, setPending] = useState(false);
+  const [elapsedSec, setElapsedSec] = useState(0);
   const [report, setReport] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [rhStatus, setRhStatus] = useState<any>(null);
@@ -41,32 +42,54 @@ export default function DeskHomePage() {
       .catch(() => setRhStatus({ configured: false }));
   }, []);
 
-  function runDesk() {
-    const q = query.trim();
-    if (!q) return;
+  useEffect(() => {
+    if (!pending) return;
+    setElapsedSec(0);
+    const t = setInterval(() => setElapsedSec((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [pending]);
+
+  async function runDesk() {
+    const q = query.trim().toUpperCase();
+    if (!q) {
+      setError("Enter a ticker first (e.g. AAPL, TSLA, META)");
+      return;
+    }
     setError(null);
     setReport(null);
     setRhResult(null);
     setRhError(null);
-    startTransition(async () => {
-      try {
-        const res = await fetch("/api/elite-analysis", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: q, assetType: "auto", includeSynthesis: true }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-        setReport(data.report);
-        if (data.sources) setSources((prev: any) => ({ ...(prev || {}), ...data.sources }));
-        // Scroll results into view after paint
-        setTimeout(() => {
-          document.getElementById("desk-summation")?.scrollIntoView({ behavior: "smooth", block: "start" });
-        }, 50);
-      } catch (e) {
-        setError((e as Error).message);
+    setPending(true);
+    try {
+      const res = await fetch("/api/elite-analysis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: q, assetType: "auto", includeSynthesis: true }),
+        signal: AbortSignal.timeout(280_000),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          data.error ||
+            (res.status === 504
+              ? "Research timed out on the server — try again (often 45–90s)"
+              : `HTTP ${res.status}`)
+        );
       }
-    });
+      if (!data.report) throw new Error("No report returned — Railway elite-analysis may have failed");
+      setReport(data.report);
+      if (data.sources) setSources((prev: any) => ({ ...(prev || {}), ...data.sources }));
+      setTimeout(() => {
+        document.getElementById("desk-summation")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 80);
+    } catch (e) {
+      const msg = (e as Error).name === "TimeoutError"
+        ? "Research timed out after ~4.5 minutes — try again"
+        : (e as Error).message;
+      setError(msg);
+    } finally {
+      setPending(false);
+    }
   }
 
   async function executeOnRobinhood(live: boolean) {
@@ -155,23 +178,28 @@ export default function DeskHomePage() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && runDesk()}
-                placeholder="NVDA, AAPL, $VIRTUAL…"
+                placeholder="Type any ticker — AAPL, TSLA, META…"
                 className="w-full rounded-md border border-border bg-secondary pl-11 pr-3 py-3 text-base outline-none focus:border-primary/50"
               />
             </div>
             <button
               onClick={runDesk}
-              disabled={pending}
+              disabled={pending || !query.trim()}
               className="rounded-md bg-primary text-primary-foreground px-6 py-3 text-base font-semibold disabled:opacity-50 inline-flex items-center justify-center gap-2"
             >
               {pending ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
-              {pending ? "Researching… (~15–45s)" : "Run Elite Desk"}
+              {pending ? `Researching… ${elapsedSec}s` : "Run Elite Desk"}
             </button>
           </div>
+          {pending && (
+            <p className="text-base text-amber-200">
+              Still working — usually 45–90 seconds. Keep this tab open. Summation appears below when done.
+            </p>
+          )}
           {error && <p className="text-base text-red-300">{error}</p>}
-          {!report && !pending && (
+          {!report && !pending && !error && (
             <p className="text-base text-foreground/75">
-              After the run finishes, summation + thesis + positions appear here — then engage strategies.
+              Enter a ticker and run. Summation, thesis, positions, and trade buttons appear after research finishes.
             </p>
           )}
         </section>

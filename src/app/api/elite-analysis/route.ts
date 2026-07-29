@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+// Elite runs often 45–90s (parallel feeds + NIM memo). 60s Vercel default
+// cut the response → UI looked empty / "nothing shows up".
+export const maxDuration = 300;
 
 const RAILWAY_BASE = "https://gsb-swarm-production.up.railway.app";
 
