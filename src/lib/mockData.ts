@@ -94,6 +94,29 @@ export const RAILWAY_AGENTS: Agent[] = [
     acpDescription: "Multi-company thread writer. Creates and posts viral X threads for any brand — crypto, restaurants, or custom clients.",
     acpCapabilities: ["thread-writing", "content-creation", "x-posting", "multi-brand", "ecosystem-updates"],
   },
+  {
+    id: "equity_analyst",
+    name: "Equity Analyst",
+    shortName: "Equity Analyst",
+    description: "Elite multi-factor research — technicals, SEC/micro fundamentals, macro, Reddit/news/Substack/employee signals, past performance, industry & adjacent industries.",
+    role: "Elite Research",
+    icon: "🧠",
+    color: "text-emerald-400",
+    enabled: true,
+    status: "active",
+    pricePerJob: 0.45,
+    subscriptionPrice: 0,
+    jobsCompleted: 0,
+    totalEarned: 0,
+    lastActiveAt: new Date().toISOString(),
+    acpAgentId: "",
+    acpJobUrl: "https://gsb-swarm-dashboard.vercel.app/elite-deep-dive",
+    x402Endpoint: "https://gsb-swarm-production.up.railway.app/api/elite-analysis",
+    webhookUrl: "/api/webhook",
+    acpCategory: "Analysis / Research",
+    acpDescription: "Elite financial analyst covering technicals, fundamentals, online intel mining, and industry context.",
+    acpCapabilities: ["elite-deep-dive", "sec-filings", "macro", "online-intel", "industry-adjacent"],
+  },
 ];
 
 // ── CEO Agent (pending graduation) ──────────────────────────────────────────
@@ -101,7 +124,7 @@ export const CEO_AGENT: Agent = {
   id: "ceo",
   name: "GSB CEO",
   shortName: "CEO",
-  description: "Orchestration hub of the GSB Intelligence Swarm — dispatches Token Analyst, Wallet Profiler, Alpha Scanner, and Thread Writer.",
+  description: "Orchestration hub of the GSB Intelligence Swarm — dispatches Token Analyst, Equity Analyst, Wallet Profiler, Alpha Scanner, and Thread Writer.",
   role: "Executive",
   icon: "👔",
   color: "text-amber-400",
@@ -118,7 +141,7 @@ export const CEO_AGENT: Agent = {
   webhookUrl: "/api/webhook",
   acpCategory: "Executive",
   acpDescription: "GSB CEO agent — swarm orchestration hub on Virtuals Protocol ACP.",
-  acpCapabilities: ["daily_brief", "token_deep_dive", "social_blast", "swarm_task", "financial_triage"],
+  acpCapabilities: ["daily_brief", "token_deep_dive", "elite_deep_dive", "social_blast", "swarm_task", "financial_triage"],
 };
 
 // ── Vercel-hosted agents (oracle, preacher, onboarding, alert) ──────────────

@@ -10,6 +10,7 @@ const RAILWAY_WORKER_IDS = new Set([
   "token_analyst",
   "wallet_profiler",
   "alpha_scanner",
+  "equity_analyst",
 ]);
 
 // Map Vercel agent ID → Railway worker name (must match Railway /api/agent-status names)
@@ -17,6 +18,7 @@ const RAILWAY_WORKER_MAP: Record<string, string> = {
   token_analyst: "GSB Token Analyst",
   wallet_profiler: "GSB Wallet Profiler & DCA Engine",
   alpha_scanner: "GSB Alpha Scanner",
+  equity_analyst: "GSB Equity Analyst",
 };
 
 export type AgentId =
@@ -28,7 +30,8 @@ export type AgentId =
   | "thread_writer"
   | "token_analyst"
   | "wallet_profiler"
-  | "alpha_scanner";
+  | "alpha_scanner"
+  | "equity_analyst";
 
 interface AgentInput {
   mission: string;
@@ -112,6 +115,7 @@ async function runRailwayWorker(
     token_analyst: 0.25,
     wallet_profiler: 0.5,
     alpha_scanner: 0.1,
+    equity_analyst: 0.45,
   };
 
   return {

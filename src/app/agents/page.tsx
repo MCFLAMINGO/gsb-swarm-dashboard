@@ -195,6 +195,7 @@ function DispatchModal({
     wallet_profiler: "Wallet Profiler",
     alpha_scanner: "Alpha Scanner",
     thread_writer: "Thread Writer",
+    equity_analyst: "Equity Analyst",
     ceo: "GSB CEO",
   };
 
@@ -266,6 +267,7 @@ function DispatchModal({
                 agentId === "onboarding" ? "Write a cold email to a DeFi protocol founder about GSB..." :
                 agentId === "alert" ? "Generate a $GSB price alert for Telegram and X..." :
                 agentId === "token_analyst" ? "Analyze token 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 on Base (USDC)..." :
+                agentId === "equity_analyst" ? "Run elite deep dive on NVDA — technicals, fundamentals, online intel, industry..." :
                 agentId === "wallet_profiler" ? "Profile wallet 0x6dA1A9793Ebe96975c240501A633ab8B3c83D14A on Base..." :
                 agentId === "alpha_scanner" ? "Scan Base chain for alpha signals — new launches, whale moves..." :
                 agentId === "thread_writer" ? "Write a thread about $GSB tokenized agents on Virtuals Protocol..." :
@@ -445,6 +447,7 @@ export default function AgentsPage() {
       wallet_profile: "wallet_profiler",
       alpha_signals: "alpha_scanner",
       thread: "thread_writer",
+      elite_fundamental_analysis: "equity_analyst",
     };
 
     const sync = async () => {
