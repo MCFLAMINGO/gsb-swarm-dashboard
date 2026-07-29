@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Header from "@/components/layout/Header";
 import { useStore } from "@/store/useStore";
 import { Input } from "@/components/ui/input";
@@ -8,8 +8,9 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Save, CheckCircle2, Circle, ExternalLink, Info } from "lucide-react";
+import { Save, CheckCircle2, Circle, ExternalLink, Info, Link2 } from "lucide-react";
 import { toast } from "sonner";
+import Link from "next/link";
 import type { ApiConnection } from "@/types";
 
 const CATEGORY_META: Record<string, { label: string; color: string; description: string }> = {
@@ -80,6 +81,165 @@ function ConnectionField({ conn, onSave }: { conn: ApiConnection & { hasValue: b
   );
 }
 
+function RobinhoodConnectCard() {
+  const [status, setStatus] = useState<any>(null);
+  const [portfolio, setPortfolio] = useState<any>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function refresh() {
+    try {
+      const res = await fetch("/api/robinhood?action=status", { cache: "no-store" });
+      setStatus(await res.json());
+    } catch (e) {
+      setStatus({ configured: false, error: (e as Error).message });
+    }
+  }
+
+  async function loadPortfolio() {
+    try {
+      const res = await fetch("/api/robinhood?action=portfolio", { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || data.message || `HTTP ${res.status}`);
+      setPortfolio(data);
+      setError(null);
+    } catch (e) {
+      setPortfolio(null);
+      setError((e as Error).message);
+    }
+  }
+
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  useEffect(() => {
+    if (status?.configured) loadPortfolio();
+  }, [status?.configured]);
+
+  async function connect() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/robinhood?action=connect", { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      if (!data.authorize_url) throw new Error("No authorize_url — check Railway Robinhood routes");
+      window.open(data.authorize_url, "_blank", "noopener,noreferrer");
+      toast.message("Complete Robinhood login in the new tab", {
+        description: "Then return here and click Refresh status.",
+      });
+    } catch (e) {
+      setError((e as Error).message);
+      toast.error("Connect failed", { description: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const connected = Boolean(status?.configured);
+
+  return (
+    <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-emerald-500/20 bg-emerald-500/10">
+        <div className="flex items-center gap-2 min-w-0">
+          <Badge className="text-[10px] bg-emerald-500/15 text-emerald-300 border-emerald-500/30">Robinhood Agentic</Badge>
+          <p className="text-xs text-muted-foreground truncate">
+            Wire your Agentic trading account to the Elite desk via MCP
+          </p>
+        </div>
+        <Badge className={`text-[10px] shrink-0 ${connected ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" : "bg-amber-500/15 text-amber-300 border-amber-500/30"}`}>
+          {connected ? "Connected" : "Not connected"}
+        </Badge>
+      </div>
+      <div className="p-4 space-y-3">
+        <p className="text-xs text-foreground/85 leading-relaxed">
+          Uses Robinhood&apos;s Agentic Trading MCP (<code className="text-[10px]">agent.robinhood.com/mcp/trading</code>).
+          Agents trade a <span className="text-foreground font-medium">separate funded Agentic account</span> — not your primary brokerage portfolio.
+          Default mode is dry-run review; live place needs Railway <code className="text-[10px]">ROBINHOOD_LIVE_TRADING=1</code>.
+        </p>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+          <div className="rounded-md border border-border bg-card/70 px-2 py-1.5">
+            <div className="text-[10px] text-muted-foreground">OAuth</div>
+            <div className={connected ? "text-emerald-300" : "text-amber-300"}>{connected ? "tokens stored" : "required"}</div>
+          </div>
+          <div className="rounded-md border border-border bg-card/70 px-2 py-1.5">
+            <div className="text-[10px] text-muted-foreground">Live trading</div>
+            <div className={status?.live_trading_enabled ? "text-red-300" : "text-muted-foreground"}>
+              {status?.live_trading_enabled ? "ON" : "off (safe)"}
+            </div>
+          </div>
+          <div className="rounded-md border border-border bg-card/70 px-2 py-1.5">
+            <div className="text-[10px] text-muted-foreground">Max notional</div>
+            <div className="text-foreground">${status?.max_notional_usd ?? 250}</div>
+          </div>
+          <div className="rounded-md border border-border bg-card/70 px-2 py-1.5">
+            <div className="text-[10px] text-muted-foreground">Default size</div>
+            <div className="text-foreground">${status?.default_notional_usd ?? 50}</div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            className="h-8 gap-1.5 text-xs"
+            disabled={busy}
+            onClick={connect}
+            data-testid="btn-connect-robinhood"
+          >
+            <Link2 size={12} />
+            {busy ? "Opening…" : connected ? "Reconnect Robinhood" : "Connect Robinhood"}
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="h-8 text-xs"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                const res = await fetch("/api/robinhood?action=status", { cache: "no-store" });
+                const next = await res.json();
+                setStatus(next);
+                if (next?.configured) await loadPortfolio();
+                toast.success("Status refreshed");
+              } catch (e) {
+                toast.error("Refresh failed", { description: (e as Error).message });
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            Refresh status
+          </Button>
+          <Link
+            href="/elite-deep-dive"
+            className="inline-flex items-center justify-center h-8 px-3 rounded-md border border-border bg-background text-xs hover:bg-secondary"
+          >
+            Open Elite Desk →
+          </Link>
+        </div>
+
+        {error && <p className="text-xs text-red-400">{error}</p>}
+
+        {connected && portfolio && (
+          <pre className="text-[10px] text-foreground/80 whitespace-pre-wrap max-h-40 overflow-auto rounded border border-border bg-secondary/40 p-2">
+            {JSON.stringify(portfolio.parsed || portfolio.text || portfolio, null, 2)}
+          </pre>
+        )}
+
+        <ol className="text-[11px] text-muted-foreground space-y-1 list-decimal pl-4">
+          <li>Robinhood primary account in good standing + Agentic beta access</li>
+          <li>Click Connect → complete OAuth on desktop</li>
+          <li>Fund the Agentic account (separate from primary)</li>
+          <li>Elite Deep Dive → Review order (dry-run) before enabling live</li>
+        </ol>
+      </div>
+    </div>
+  );
+}
+
 export default function ConnectionsPage() {
   const { connections, updateConnection } = useStore();
 
@@ -101,9 +261,11 @@ export default function ConnectionsPage() {
     <div className="flex-1 overflow-y-auto">
       <Header
         title="API Connections"
-        subtitle="Paste your keys and endpoints here. Stored in local storage — use env vars for production."
+        subtitle="Robinhood Agentic OAuth + keys for the swarm. Robinhood tokens live on Railway; other keys stay in local storage."
       />
       <main className="p-5 space-y-5 max-w-3xl mx-auto">
+        <RobinhoodConnectCard />
+
         {/* Progress header */}
         <div className="flex items-center justify-between">
           <p className="text-xs text-muted-foreground">

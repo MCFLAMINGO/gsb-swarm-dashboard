@@ -149,9 +149,9 @@ export default function EliteDeepDivePage() {
             <Brain className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground">Elite Deep Dive</h1>
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">Elite Research</h1>
             <p className="text-sm text-muted-foreground">
-              Multi-factor research from Railway gsb-swarm — technicals, micro/macro fundamentals, online intel, industry & adjacent.
+              Chief Analyst for the Trading Desk — technicals, micro/macro, online intel, desk voice, contrarian, multi-horizon ROI.
             </p>
           </div>
         </div>

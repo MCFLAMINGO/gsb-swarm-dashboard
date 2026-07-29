@@ -1,0 +1,149 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import Header from "@/components/layout/Header";
+import { Crosshair, Activity, Zap, Brain, Link2 } from "lucide-react";
+import { toast } from "sonner";
+
+export default function ExecutePage() {
+  const [rhStatus, setRhStatus] = useState<any>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function refresh() {
+    try {
+      const res = await fetch("/api/robinhood?action=status", { cache: "no-store" });
+      setRhStatus(await res.json());
+    } catch (e) {
+      setRhStatus({ configured: false, error: (e as Error).message });
+    }
+  }
+
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  async function connect() {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/robinhood?action=connect", { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      if (data.authorize_url) {
+        window.open(data.authorize_url, "_blank", "noopener,noreferrer");
+        toast.message("Complete Robinhood Allow in the new tab, then Refresh.");
+      }
+    } catch (e) {
+      toast.error("Connect failed", { description: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const connected = Boolean(rhStatus?.configured);
+
+  return (
+    <div className="flex-1 overflow-y-auto">
+      <Header
+        title="Execute"
+        subtitle="One rail: Robinhood Agentic → Copy strategies → THROW / Tempo tape."
+      />
+      <main className="p-5 max-w-3xl mx-auto space-y-4">
+        <section className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-sm font-medium flex items-center gap-2">
+              <Crosshair className="h-4 w-4 text-emerald-400" /> Robinhood Agentic
+            </h2>
+            <span className={`text-[11px] ${connected ? "text-emerald-300" : "text-amber-300"}`}>
+              {connected ? "Connected" : "Not connected"}
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            MCP <code className="text-[10px]">https://agent.robinhood.com/mcp/trading</code> ·
+            trades hit your funded Agentic account only. Live place needs Railway{" "}
+            <code className="text-[10px]">ROBINHOOD_LIVE_TRADING=1</code>.
+          </p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+            <div className="rounded border border-border bg-card/70 px-2 py-1.5">
+              <div className="text-[10px] text-muted-foreground">Live</div>
+              <div>{rhStatus?.live_trading_enabled ? "ON" : "off"}</div>
+            </div>
+            <div className="rounded border border-border bg-card/70 px-2 py-1.5">
+              <div className="text-[10px] text-muted-foreground">Max notional</div>
+              <div>${rhStatus?.max_notional_usd ?? 250}</div>
+            </div>
+            <div className="rounded border border-border bg-card/70 px-2 py-1.5">
+              <div className="text-[10px] text-muted-foreground">Default size</div>
+              <div>${rhStatus?.default_notional_usd ?? 50}</div>
+            </div>
+            <div className="rounded border border-border bg-card/70 px-2 py-1.5">
+              <div className="text-[10px] text-muted-foreground">Token source</div>
+              <div>{rhStatus?.token_source || "none"}</div>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              disabled={busy}
+              onClick={connect}
+              className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 px-3 py-1.5 text-xs disabled:opacity-50"
+            >
+              <Link2 className="h-3 w-3" />
+              {connected ? "Reconnect" : "Connect Robinhood"}
+            </button>
+            <button
+              onClick={async () => {
+                await refresh();
+                toast.success("Status refreshed");
+              }}
+              className="rounded-md border border-border bg-card px-3 py-1.5 text-xs"
+            >
+              Refresh
+            </button>
+            <Link
+              href="/elite-deep-dive"
+              className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-3 py-1.5 text-xs"
+            >
+              <Brain className="h-3 w-3" /> Review from Elite plan →
+            </Link>
+            <Link
+              href="/connections"
+              className="rounded-md border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground"
+            >
+              Connections
+            </Link>
+          </div>
+        </section>
+
+        <Link
+          href="/copy-trader"
+          className="rounded-lg border border-border bg-card p-4 flex gap-3 hover:border-primary/40 transition-colors block"
+        >
+          <Activity className="h-4 w-4 text-accent mt-0.5" />
+          <div>
+            <div className="text-sm font-medium">Copy Trader</div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Yield / signal copy strategies — fold into this rail (backend consolidation still open).
+            </p>
+          </div>
+        </Link>
+
+        <Link
+          href="/throw"
+          className="rounded-lg border border-border bg-card p-4 flex gap-3 hover:border-primary/40 transition-colors block"
+        >
+          <Zap className="h-4 w-4 mt-0.5" style={{ color: "#00e5a0" }} />
+          <div>
+            <div className="text-sm font-medium">THROW / Tempo</div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              On-chain tape + Tempo rails — ops strip under Execute, not a peer product.
+            </p>
+          </div>
+        </Link>
+
+        <Link href="/" className="text-xs text-muted-foreground hover:text-foreground inline-block">
+          ← Back to Desk
+        </Link>
+      </main>
+    </div>
+  );
+}
