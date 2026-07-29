@@ -125,10 +125,8 @@ function RobinhoodConnectCard() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
       if (!data.authorize_url) throw new Error("No authorize_url — check Railway Robinhood routes");
-      window.open(data.authorize_url, "_blank", "noopener,noreferrer");
-      toast.message("Complete Robinhood login in the new tab", {
-        description: "Then return here and click Refresh status.",
-      });
+      toast.message("Redirecting to Robinhood — tap Allow for GSB Swarm");
+      window.location.assign(data.authorize_url);
     } catch (e) {
       setError((e as Error).message);
       toast.error("Connect failed", { description: (e as Error).message });

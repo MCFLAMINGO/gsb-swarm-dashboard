@@ -9,6 +9,8 @@ import { toast } from "sonner";
 export default function ExecutePage() {
   const [rhStatus, setRhStatus] = useState<any>(null);
   const [busy, setBusy] = useState(false);
+  const [pasteToken, setPasteToken] = useState("");
+  const [pasteRefresh, setPasteRefresh] = useState("");
 
   async function refresh() {
     try {
@@ -29,14 +31,13 @@ export default function ExecutePage() {
       const res = await fetch("/api/robinhood?action=connect", { cache: "no-store" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-      if (data.authorize_url) {
-        window.open(data.authorize_url, "_blank", "noopener,noreferrer");
-        toast.message("Complete Robinhood Allow in the new tab, then Refresh.");
-      }
+      if (!data.authorize_url) throw new Error("No authorize_url from Swarm");
+      toast.message("Redirecting to Robinhood — tap Allow for GSB Swarm");
+      // Same-tab — avoids popup blockers that look like a failed connect
+      window.location.assign(data.authorize_url);
     } catch (e) {
-      toast.error("Connect failed", { description: (e as Error).message });
-    } finally {
       setBusy(false);
+      toast.error("Connect failed", { description: (e as Error).message });
     }
   }
 
@@ -112,6 +113,58 @@ export default function ExecutePage() {
               Connections
             </Link>
           </div>
+
+          {!connected && (
+            <div className="rounded-md border border-border bg-card/60 p-3 space-y-2">
+              <div className="text-xs font-medium text-foreground">Fallback: paste Swarm tokens</div>
+              <p className="text-[11px] text-muted-foreground">
+                If Robinhood shows “Uh oh” after Allow, OAuth is failing on their side for our redirect.
+                One-time: paste an access token into Railway via this form (does not use Cursor chat tokens afterward).
+              </p>
+              <input
+                value={pasteToken}
+                onChange={(e) => setPasteToken(e.target.value)}
+                placeholder="access_token"
+                className="w-full rounded-md border border-border bg-secondary px-2 py-1.5 text-xs mono"
+              />
+              <input
+                value={pasteRefresh}
+                onChange={(e) => setPasteRefresh(e.target.value)}
+                placeholder="refresh_token (optional)"
+                className="w-full rounded-md border border-border bg-secondary px-2 py-1.5 text-xs mono"
+              />
+              <button
+                disabled={busy || !pasteToken.trim()}
+                onClick={async () => {
+                  setBusy(true);
+                  try {
+                    const res = await fetch("/api/robinhood", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        action: "import-tokens",
+                        access_token: pasteToken.trim(),
+                        refresh_token: pasteRefresh.trim() || undefined,
+                      }),
+                    });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+                    toast.success("Tokens imported to Swarm");
+                    setPasteToken("");
+                    setPasteRefresh("");
+                    await refresh();
+                  } catch (e) {
+                    toast.error("Import failed", { description: (e as Error).message });
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+                className="rounded-md border border-border bg-secondary px-3 py-1.5 text-xs disabled:opacity-50"
+              >
+                Import to Swarm
+              </button>
+            </div>
+          )}
         </section>
 
         <Link
