@@ -53,12 +53,13 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(data, { status: res.status });
     }
 
-    if (action === "portfolio") {
-      let res = await railwayFetch("/api/robinhood/portfolio", {}, token);
+    if (action === "portfolio" || action === "accounts") {
+      const path = action === "accounts" ? "/api/robinhood/accounts" : "/api/robinhood/portfolio";
+      let res = await railwayFetch(path, {}, token);
       if (res.status === 401) {
         _railwayToken = null;
         const fresh = await getRailwayToken();
-        res = await railwayFetch("/api/robinhood/portfolio", {}, fresh);
+        res = await railwayFetch(path, {}, fresh);
       }
       const data = await res.json().catch(() => ({}));
       return NextResponse.json(data, { status: res.status });
