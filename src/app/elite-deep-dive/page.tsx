@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition, type ReactNode } from "react";
+import Link from "next/link";
 import {
   Brain, Search, RefreshCw, AlertTriangle, CheckCircle2,
   TrendingUp, Newspaper, Users, Building2, LineChart, Globe2, GitBranch
@@ -366,13 +367,12 @@ export default function EliteDeepDivePage() {
                       className="w-full rounded-md border border-border bg-secondary px-2 py-2 text-xs"
                     />
                   </div>
-                  <button
-                    disabled={rhBusy}
-                    onClick={connectRobinhood}
-                    className="rounded-md border border-border bg-secondary px-3 py-2 text-xs hover:bg-secondary/80 disabled:opacity-50"
+                  <Link
+                    href="/execute"
+                    className="rounded-md border border-border bg-secondary px-3 py-2 text-xs hover:bg-secondary/80 text-center"
                   >
-                    Connect Robinhood
-                  </button>
+                    Connect via Execute →
+                  </Link>
                   <button
                     disabled={rhBusy || report.trade_plan?.bias === "NEUTRAL"}
                     onClick={() => executeOnRobinhood(false)}

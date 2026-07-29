@@ -204,15 +204,19 @@ export default function DeskHomePage() {
               Robinhood Agentic {rhStatus?.configured ? "connected" : "not connected"}
               {rhStatus?.live_trading_enabled ? " · LIVE ON" : " · live off"}
             </p>
+            {!rhStatus?.configured && (
+              <p className="text-[11px] text-amber-200/90">
+                Web “Connect” often hits Robinhood’s Uh oh. On your Mac:{" "}
+                <code className="text-[10px] mono">node scripts/robinhood-connect-local.js</code>
+                {" "}in gsb-swarm, then open Execute → Refresh.
+              </p>
+            )}
             <div className="flex flex-wrap gap-2">
-              <button
-                onClick={connectRobinhood}
+              <Link
+                href="/execute"
                 className="rounded-md border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 px-3 py-1.5 text-xs"
               >
-                {rhStatus?.configured ? "Reconnect Robinhood" : "Connect Robinhood"}
-              </button>
-              <Link href="/execute" className="rounded-md border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground">
-                Execute rail →
+                {rhStatus?.configured ? "Execute rail →" : "How to connect →"}
               </Link>
               <Link href="/copy-trader" className="rounded-md border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
                 <Activity className="h-3 w-3" /> Copy
@@ -220,6 +224,15 @@ export default function DeskHomePage() {
               <Link href="/throw" className="rounded-md border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
                 <Zap className="h-3 w-3" /> THROW
               </Link>
+              {rhStatus?.configured && (
+                <button
+                  onClick={connectRobinhood}
+                  title="Legacy HTTPS — often fails with Uh oh"
+                  className="rounded-md border border-border bg-card px-3 py-1.5 text-[11px] text-muted-foreground"
+                >
+                  Reconnect (HTTPS)
+                </button>
+              )}
             </div>
           </section>
 

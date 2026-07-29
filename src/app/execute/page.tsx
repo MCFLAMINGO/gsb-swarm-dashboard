@@ -82,23 +82,36 @@ export default function ExecutePage() {
               <div>{rhStatus?.token_source || "none"}</div>
             </div>
           </div>
+
+          {!connected && (
+            <div className="rounded-md border border-amber-500/35 bg-amber-500/10 p-3 space-y-2">
+              <div className="text-xs font-medium text-amber-200">
+                Robinhood “Uh oh” after Allow? Use the Mac localhost bridge
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Custom HTTPS redirects (Railway / this Connect button) often fail on Robinhood’s side.
+                Official clients use localhost — run this once on your Mac, then the Desk uses Railway only
+                (no Cursor chat tokens).
+              </p>
+              <pre className="text-[11px] mono rounded border border-border bg-background/80 px-2 py-2 overflow-x-auto whitespace-pre-wrap">
+{`cd gsb-swarm
+node scripts/robinhood-connect-local.js`}
+              </pre>
+              <p className="text-[11px] text-muted-foreground">
+                Browser opens → tap Allow → script imports tokens to Swarm. Then hit Refresh below.
+              </p>
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-2">
-            <button
-              disabled={busy}
-              onClick={connect}
-              className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 px-3 py-1.5 text-xs disabled:opacity-50"
-            >
-              <Link2 className="h-3 w-3" />
-              {connected ? "Reconnect" : "Connect Robinhood"}
-            </button>
             <button
               onClick={async () => {
                 await refresh();
-                toast.success("Status refreshed");
+                toast.success(connected ? "Still connected" : "Status refreshed");
               }}
-              className="rounded-md border border-border bg-card px-3 py-1.5 text-xs"
+              className="rounded-md border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 px-3 py-1.5 text-xs"
             >
-              Refresh
+              Refresh status
             </button>
             <Link
               href="/elite-deep-dive"
@@ -112,14 +125,23 @@ export default function ExecutePage() {
             >
               Connections
             </Link>
+            <button
+              disabled={busy}
+              onClick={connect}
+              title="Often fails with Robinhood Uh oh — prefer localhost bridge"
+              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-[11px] text-muted-foreground disabled:opacity-50"
+            >
+              <Link2 className="h-3 w-3" />
+              Legacy HTTPS connect
+            </button>
           </div>
 
           {!connected && (
             <div className="rounded-md border border-border bg-card/60 p-3 space-y-2">
               <div className="text-xs font-medium text-foreground">Fallback: paste Swarm tokens</div>
               <p className="text-[11px] text-muted-foreground">
-                If Robinhood shows “Uh oh” after Allow, OAuth is failing on their side for our redirect.
-                One-time: paste an access token into Railway via this form (does not use Cursor chat tokens afterward).
+                If the localhost script already printed tokens, paste the access token here to import
+                into Railway (does not use Cursor chat tokens afterward).
               </p>
               <input
                 value={pasteToken}

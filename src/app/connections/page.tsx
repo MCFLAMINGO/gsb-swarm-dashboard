@@ -157,6 +157,16 @@ function RobinhoodConnectCard() {
           Default mode is dry-run review; live place needs Railway <code className="text-[10px]">ROBINHOOD_LIVE_TRADING=1</code>.
         </p>
 
+        {!connected && (
+          <div className="rounded-md border border-amber-500/35 bg-amber-500/10 px-3 py-2 space-y-1">
+            <p className="text-xs text-amber-200">
+              HTTPS Connect often fails with Robinhood&apos;s &quot;Uh oh&quot;. Preferred path: Mac localhost bridge
+              (<code className="text-[10px] mono ml-1">node scripts/robinhood-connect-local.js</code>
+              {" "}in gsb-swarm — see Execute for full steps.
+            </p>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
           <div className="rounded-md border border-border bg-card/70 px-2 py-1.5">
             <div className="text-[10px] text-muted-foreground">OAuth</div>
@@ -179,15 +189,20 @@ function RobinhoodConnectCard() {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          <Button size="sm" className="h-8 text-xs" asChild>
+            <a href="/execute">Open Execute (connect guide)</a>
+          </Button>
           <Button
             size="sm"
+            variant="secondary"
             className="h-8 gap-1.5 text-xs"
             disabled={busy}
             onClick={connect}
             data-testid="btn-connect-robinhood"
+            title="Often fails with Robinhood Uh oh"
           >
             <Link2 size={12} />
-            {busy ? "Opening…" : connected ? "Reconnect Robinhood" : "Connect Robinhood"}
+            {busy ? "Opening…" : "Legacy HTTPS connect"}
           </Button>
           <Button
             size="sm"
