@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition, type ReactNode } from "react";
 import {
   Brain, Search, RefreshCw, AlertTriangle, CheckCircle2,
-  TrendingUp, Newspaper, Users, Building2, LineChart, Globe2
+  TrendingUp, Newspaper, Users, Building2, LineChart, Globe2, GitBranch
 } from "lucide-react";
 
 type AssetType = "auto" | "equity" | "crypto";
@@ -314,6 +314,15 @@ export default function EliteDeepDivePage() {
                 </p>
               )}
 
+              {/* Contrarian play — always illustrated */}
+              {(report.trade_plan.contrarian_play || report.institutional?.contrarian_play) && (
+                <ContrarianPlayPanel
+                  play={report.trade_plan.contrarian_play || report.institutional.contrarian_play}
+                  fmt={fmt}
+                  fmtPct={fmtPct}
+                />
+              )}
+
               {/* Robinhood Agentic execution */}
               <div className="rounded-md border border-border bg-card/70 p-3 space-y-3">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -524,6 +533,130 @@ export default function EliteDeepDivePage() {
           </details>
         </div>
       )}
+    </div>
+  );
+}
+
+function ContrarianPlayPanel({
+  play,
+  fmt,
+  fmtPct,
+}: {
+  play: any;
+  fmt: (n: unknown) => string | null;
+  fmtPct: (n: unknown) => string | null;
+}) {
+  const setup = play?.setup || {};
+  const ill = play?.illustration || {};
+  const bars: any[] = ill.bars || [];
+  const maxAbs = Math.max(
+    1,
+    ...bars.flatMap((b) => [Math.abs(b.target_pct || 0), Math.abs(b.stop_pct || 0)])
+  );
+
+  return (
+    <div className="rounded-md border border-amber-500/35 bg-amber-500/5 p-3 space-y-3">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <div className="text-sm font-medium text-foreground flex items-center gap-2">
+            <GitBranch className="h-4 w-4 text-amber-400" />
+            Contrarian play
+            <span className="text-[10px] uppercase tracking-wider text-amber-400/90 font-normal">
+              always illustrated
+            </span>
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            Fade primary <span className="text-foreground">{play.vs_primary_bias}</span>
+            {" → "}
+            <span className="text-foreground font-medium">{play.action}</span>
+          </p>
+        </div>
+        <div className="text-right">
+          <div className="text-lg font-semibold text-amber-300">
+            {setup.target_roi_pct > 0 ? "+" : ""}
+            {setup.target_roi_pct}%
+          </div>
+          <div className="text-[10px] text-muted-foreground">week fade target ROI</div>
+        </div>
+      </div>
+
+      <p className="text-xs text-foreground/90 leading-relaxed">{play.thesis}</p>
+
+      {/* Dual ROI path illustration */}
+      <div className="space-y-2">
+        <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          {ill.caption || "Primary vs contrarian path"}
+        </div>
+        {bars.map((b) => {
+          const tPct = Number(b.target_pct) || 0;
+          const sPct = Number(b.stop_pct) || 0;
+          const tW = `${Math.max(8, (Math.abs(tPct) / maxAbs) * 100)}%`;
+          const sW = `${Math.max(8, (Math.abs(sPct) / maxAbs) * 100)}%`;
+          const isContra = b.side === "contrarian";
+          const targetTone =
+            b.color_hint === "long"
+              ? "bg-emerald-500/70"
+              : b.color_hint === "short"
+                ? "bg-red-500/70"
+                : "bg-muted-foreground/50";
+          return (
+            <div key={b.side} className="space-y-1">
+              <div className="flex justify-between text-[11px]">
+                <span className={isContra ? "text-amber-300 font-medium" : "text-foreground/80"}>
+                  {isContra ? "Contrarian" : "Primary"} · {b.label}
+                </span>
+                <span className="text-muted-foreground">
+                  tgt {fmtPct(tPct)} · stop {fmtPct(sPct)}
+                </span>
+              </div>
+              <div className="relative h-6 rounded bg-secondary/60 overflow-hidden">
+                <div className="absolute inset-y-0 left-1/2 w-px bg-border z-10" />
+                <div
+                  className={`absolute top-1 h-2 rounded-sm ${targetTone}`}
+                  style={{
+                    left: tPct >= 0 ? "50%" : `calc(50% - ${tW})`,
+                    width: tW,
+                  }}
+                  title={`Target ${fmtPct(tPct)}`}
+                />
+                <div
+                  className="absolute bottom-1 h-2 rounded-sm bg-muted-foreground/35"
+                  style={{
+                    left: sPct >= 0 ? "50%" : `calc(50% - ${sW})`,
+                    width: sW,
+                  }}
+                  title={`Stop ${fmtPct(sPct)}`}
+                />
+              </div>
+            </div>
+          );
+        })}
+        <div className="flex justify-between text-[10px] text-muted-foreground">
+          <span>← downside</span>
+          <span>Mark {fmt(ill.mark_price) || "—"}</span>
+          <span>upside →</span>
+        </div>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <div className="text-[10px] uppercase text-muted-foreground">Why crowded may be wrong</div>
+          {(play.why_crowded_may_be_wrong || []).slice(0, 4).map((x: string, i: number) => (
+            <div key={i} className="text-[11px] text-foreground/85">• {x}</div>
+          ))}
+        </div>
+        <div className="space-y-1.5">
+          <Kv label="Trigger" value={setup.entry_trigger} />
+          <Kv label="Entry" value={fmt(setup.entry_price)} />
+          <Kv label="Target px" value={fmt(setup.target_price)} />
+          <Kv label="Stop px" value={fmt(setup.stop_price)} />
+          <Kv label="R:R" value={setup.risk_reward != null ? `${setup.risk_reward}x` : null} />
+          <Kv label="Conf" value={setup.confidence != null ? `${Math.round(setup.confidence * 100)}%` : null} />
+        </div>
+      </div>
+      <p className="text-[10px] text-muted-foreground">
+        {play.invalidation} · {play.sizing_note}
+      </p>
     </div>
   );
 }
