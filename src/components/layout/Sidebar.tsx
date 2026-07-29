@@ -4,62 +4,109 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
-  LayoutDashboard, Bot, DollarSign, Plug, Settings, ChevronLeft, ChevronRight, Gauge, Activity, Swords, Zap, FlaskConical, ShoppingBag, Globe, Radio, TrendingUp, Eye, Search, MapPin, Coins, Brain, Network, Phone, Ban, MessageSquare, Cpu, GitBranch
+  LayoutDashboard, Bot, Plug, Settings, ChevronLeft, ChevronRight,
+  Activity, Swords, Zap, FlaskConical, Globe, Radio,
+  TrendingUp, Eye, Search, MapPin, Coins, Brain, Network, Phone, Ban,
+  MessageSquare, Cpu, GitBranch, ChevronDown, Crosshair, Briefcase
 } from "lucide-react";
 import { useState } from "react";
 
-const NAV = [
-  { href: "/",            label: "Swarm Overview", icon: LayoutDashboard, tip: "Live status of all 4 broker agents" },
-  { href: "/elite-deep-dive", label: "Elite Deep Dive", icon: Brain, tip: "Multi-factor research — technicals, fundamentals, online intel, industry" },
-  { href: "/drivers-seat",label: "Driver's Seat",  icon: Gauge,           tip: "Multi-property TV control room — $GSB + bleeding.cash" },
-  { href: "/agents",      label: "Agents",         icon: Bot,             tip: "Individual agent config & simulate" },
-  { href: "/earnings",    label: "Earnings",       icon: DollarSign,      tip: "USDC earned, payouts, withdraw" },
-  { href: "/war-room",   label: "War Room",      icon: Swords,          tip: "Game theory strategy engine — all agents, all chains" },
-  { href: "/copy-trader", label: "Copy Trader",    icon: Activity,        tip: "Compute signal copy trader — AKT/RNDR/IO signals" },
-  { href: "/throw",        label: "THROW Watcher",  icon: Zap,             tip: "THROW Watcher — live on-chain transfer surveillance + Web Push agent" },
-  { href: "/marketplace",  label: "Marketplace",    icon: ShoppingBag,     tip: "Hire any agent — skill catalogue, live confidence scores, ACP hire links" },
-  { href: "/testing",     label: "App Tests",      icon: FlaskConical,    tip: "5-agent UI testing — THROW, VolunTrack, PassItHere" },
-  { href: "/local-intel", label: "Local Intel",     icon: Globe,           tip: "32081/32082 business intelligence — agentic Google Maps" },
-  { href: "/local-intel/live",    label: "↳ Live Feed",      icon: Radio,     tip: "Real-time ZIP coverage, enrichment pipeline, broadcast log" },
-  { href: "/local-intel/revenue", label: "↳ Revenue",        icon: TrendingUp, tip: "Revenue stats, top tools, budget gate, agentic visibility" },
-  { href: "/local-intel/oracle",  label: "↳ Oracle Signals", icon: Eye,        tip: "Live signal layer — opportunities, gaps, growth anomalies across all ZIPs" },
-  { href: "/local-intel/search",  label: "↳ Search",          icon: Search,     tip: "Search businesses by query and ZIP across the LocalIntel dataset" },
-  { href: "/local-intel/fees",      label: "↳ Fee Control",    icon: Coins,      tip: "RFQ match fees, order fee %, routing toggle, fee event log" },
-  { href: "/local-intel/rails",     label: "↳ Rail Router",    icon: GitBranch,  tip: "OpenRouter-style rail selector — surge/tempo/rfq routing stats, weights, Surge audit" },
-  { href: "/local-intel/zip-intel", label: "↳ ZIP Intel",      icon: Brain,      tip: "Hive intelligence — census, income, permits, LLM query per ZIP" },
-  { href: "/local-intel/nodes",     label: "↳ Node Map",       icon: Network,    tip: "LocalIntel intelligence nodes — capabilities, signals, live demo" },
-  { href: "/local-intel/ceo",         label: "↳ CEO",          icon: Cpu,        tip: "CEO Intelligence — ZIP-level business assessment from government data (zero hallucination)" },
-  { href: "/local-intel/transcripts", label: "↳ Transcripts",  icon: Phone,      tip: "Call transcripts — LocalIntel voice line inbound recordings & transcriptions" },
-  { href: "/local-intel/dead-ends",   label: "↳ Dead Ends",    icon: Ban,        tip: "Intent dead ends — queries that failed to convert by fail reason" },
-  { href: "/local-intel/sms-log",     label: "↳ SMS Log",      icon: MessageSquare, tip: "Inbound SMS query log — what was asked, how it routed, what was sent back" },
-  { href: "/local-intel/market-intel", label: "↳ Market Intel",  icon: TrendingUp,    tip: "FL-concentrated equity signals scored weekly against LocalIntel data" },
-  { href: "https://www.thelocalintel.com/admin", label: "↳ Biz Admin", icon: MapPin, tip: "Business Admin Portal — manage profiles, claim businesses, view RFQ/fee history", external: true },
-  { href: "/connections", label: "API Connections",icon: Plug,            tip: "Telegram, X, x402, wallet keys" },
-  { href: "/settings",    label: "Settings",       icon: Settings,        tip: "Dashboard & agent preferences" },
+type NavItem = {
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ size?: number; className?: string; style?: React.CSSProperties }>;
+  tip: string;
+  external?: boolean;
+};
+
+const PRIMARY: NavItem[] = [
+  { href: "/", label: "Desk", icon: Briefcase, tip: "Trading desk — Elite analyst at the heart" },
+  { href: "/elite-deep-dive", label: "Elite Research", icon: Brain, tip: "Full multi-factor dive — thesis, desk voice, contrarian, ROI plan" },
+  { href: "/team", label: "Team", icon: Bot, tip: "ACP agents — cook, dispatch, marketplace" },
+  { href: "/macro", label: "Macro", icon: Network, tip: "LocalIntel node model + ZIP / market intel feeding the desk" },
+  { href: "/execute", label: "Execute", icon: Crosshair, tip: "Robinhood Agentic · Copy · THROW / Tempo" },
 ];
 
-// Inline GSB logo SVG
+const LOCALINTEL_OPS: NavItem[] = [
+  { href: "/local-intel", label: "Directory", icon: Globe, tip: "LocalIntel home / search shell" },
+  { href: "/local-intel/live", label: "Live Feed", icon: Radio, tip: "ZIP coverage & enrichment pipeline" },
+  { href: "/local-intel/revenue", label: "Revenue", icon: TrendingUp, tip: "Revenue stats & budget gate" },
+  { href: "/local-intel/oracle", label: "Oracle Signals", icon: Eye, tip: "ZIP opportunity / gap signals" },
+  { href: "/local-intel/search", label: "Search", icon: Search, tip: "Business search by query + ZIP" },
+  { href: "/local-intel/fees", label: "Fee Control", icon: Coins, tip: "RFQ / order fee controls" },
+  { href: "/local-intel/rails", label: "Rail Router", icon: GitBranch, tip: "Surge / Tempo / RFQ routing" },
+  { href: "/local-intel/zip-intel", label: "ZIP Intel", icon: Brain, tip: "Census / income / permits per ZIP" },
+  { href: "/local-intel/ceo", label: "Gov Macro CEO", icon: Cpu, tip: "ZIP assessment from government data" },
+  { href: "/local-intel/transcripts", label: "Transcripts", icon: Phone, tip: "Voice line transcripts" },
+  { href: "/local-intel/dead-ends", label: "Dead Ends", icon: Ban, tip: "Failed intent queries" },
+  { href: "/local-intel/sms-log", label: "SMS Log", icon: MessageSquare, tip: "Inbound SMS routing log" },
+  { href: "https://www.thelocalintel.com/admin", label: "Biz Admin", icon: MapPin, tip: "Business admin portal", external: true },
+];
+
+const SECONDARY: NavItem[] = [
+  { href: "/connections", label: "Connections", icon: Plug, tip: "Robinhood Agentic OAuth + API keys" },
+  { href: "/settings", label: "Settings", icon: Settings, tip: "Dashboard preferences" },
+  { href: "/overview", label: "Legacy Overview", icon: LayoutDashboard, tip: "Old swarm overview KPIs" },
+  { href: "/testing", label: "App Tests", icon: FlaskConical, tip: "Playwright UI test suites" },
+];
+
 function Logo({ size = 30 }: { size?: number }) {
   return (
     <svg viewBox="0 0 40 40" width={size} height={size} fill="none" aria-label="GSB Swarm">
-      {/* Hexagon */}
       <polygon
         points="20,2 35,10.5 35,29.5 20,38 5,29.5 5,10.5"
         stroke="hsl(4 85% 44%)"
         strokeWidth="2"
         fill="hsl(4 85% 44% / 0.08)"
       />
-      {/* G arc */}
       <path d="M13 15 A8 8 0 1 1 27 23 H20" stroke="hsl(4 85% 44%)" strokeWidth="2.2" strokeLinecap="round" />
-      {/* G crossbar */}
       <path d="M20 23 H27 V27" stroke="hsl(4 85% 44%)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
+  );
+}
+
+function NavLink({
+  item,
+  pathname,
+  collapsed,
+}: {
+  item: NavItem;
+  pathname: string;
+  collapsed: boolean;
+}) {
+  const { href, label, icon: Icon, tip, external } = item;
+  const active = !external && (pathname === href || (href !== "/" && pathname.startsWith(href)));
+  const inner = (
+    <span
+      className={cn(
+        "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all cursor-pointer group relative",
+        active
+          ? "bg-primary/10 text-primary border border-primary/25"
+          : "text-muted-foreground hover:bg-secondary hover:text-foreground border border-transparent"
+      )}
+    >
+      <Icon size={17} className="shrink-0" />
+      {!collapsed && <span className="truncate">{label}</span>}
+      {collapsed && (
+        <span className="absolute left-full ml-2.5 px-2 py-1 text-xs bg-secondary border border-border rounded whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-50 shadow-lg">
+          {label}
+        </span>
+      )}
+    </span>
+  );
+  return external ? (
+    <a href={href} target="_blank" rel="noopener noreferrer" title={tip}>{inner}</a>
+  ) : (
+    <Link href={href} title={tip}>{inner}</Link>
   );
 }
 
 export default function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const [opsOpen, setOpsOpen] = useState(
+    () => pathname.startsWith("/local-intel")
+  );
 
   return (
     <aside
@@ -68,7 +115,6 @@ export default function Sidebar() {
         collapsed ? "w-[60px]" : "w-[220px]"
       )}
     >
-      {/* Brand */}
       <div className={cn(
         "flex items-center gap-3 px-4 py-5 border-b border-border",
         collapsed && "justify-center px-2"
@@ -76,103 +122,80 @@ export default function Sidebar() {
         <Logo size={30} />
         {!collapsed && (
           <div>
-            <div className="text-sm font-bold tracking-wide text-glow-red" style={{ color: "hsl(4 85% 44%)" }}>
+            <div className="text-sm font-bold tracking-wide" style={{ color: "hsl(4 85% 44%)" }}>
               GSB Swarm
             </div>
-            <div className="text-[10px] text-muted-foreground uppercase tracking-widest">Broker Control</div>
+            <div className="text-[10px] text-muted-foreground uppercase tracking-widest">Trading Desk</div>
           </div>
         )}
       </div>
 
-      {/* Nav */}
       <nav className="flex-1 py-3 px-2 space-y-0.5 overflow-y-auto">
-        {NAV.map(({ href, label, icon: Icon, tip, external }: { href: string; label: string; icon: any; tip: string; external?: boolean }) => {
-          const active = !external && (pathname === href || (href !== "/" && pathname.startsWith(href)));
-          const inner = (
-            <span className={cn(
-              "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-all cursor-pointer group relative",
-              active
-                ? "bg-primary/10 text-primary border border-primary/25"
-                : "text-muted-foreground hover:bg-secondary hover:text-foreground border border-transparent"
-            )}>
-              <Icon size={17} className="shrink-0" />
-              {!collapsed && <span>{label}</span>}
-              {collapsed && (
-                <span className="absolute left-full ml-2.5 px-2 py-1 text-xs bg-secondary border border-border rounded whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-50 shadow-lg">
-                  {label}
-                </span>
-              )}
-            </span>
-          );
-          return external
-            ? <a key={href} href={href} target="_blank" rel="noopener noreferrer" title={tip}>{inner}</a>
-            : <Link key={href} href={href} title={tip}>{inner}</Link>;
-        })}
+        {!collapsed && (
+          <div className="px-3 py-1 text-[10px] uppercase tracking-widest text-muted-foreground">Core</div>
+        )}
+        {PRIMARY.map((item) => (
+          <NavLink key={item.href} item={item} pathname={pathname} collapsed={collapsed} />
+        ))}
+
+        {!collapsed && (
+          <button
+            type="button"
+            onClick={() => setOpsOpen((o) => !o)}
+            className="w-full flex items-center justify-between px-3 py-2 mt-2 text-[10px] uppercase tracking-widest text-muted-foreground hover:text-foreground"
+          >
+            <span>LocalIntel Ops</span>
+            <ChevronDown size={12} className={cn("transition-transform", opsOpen && "rotate-180")} />
+          </button>
+        )}
+        {(opsOpen || collapsed) && LOCALINTEL_OPS.map((item) => (
+          <NavLink key={item.href} item={item} pathname={pathname} collapsed={collapsed} />
+        ))}
+
+        {!collapsed && (
+          <div className="px-3 py-1 mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">System</div>
+        )}
+        {SECONDARY.map((item) => (
+          <NavLink key={item.href} item={item} pathname={pathname} collapsed={collapsed} />
+        ))}
       </nav>
 
-      {/* Bottom */}
       <div className="p-2 border-t border-border space-y-1">
-        {/* Properties */}
         {!collapsed && (
           <div className="px-3 py-1 text-[10px] uppercase tracking-widest text-muted-foreground">Properties</div>
         )}
         <a href="https://www.bleeding.cash" target="_blank" rel="noopener noreferrer"
-          className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors group relative"
-          title="bleeding.cash — AI financial triage"
-        >
+          className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+          title="bleeding.cash">
           <Activity size={17} className="shrink-0" />
-          {!collapsed && <span className="text-xs">💊 bleeding.cash</span>}
-          {collapsed && (
-            <span className="absolute left-full ml-2.5 px-2 py-1 text-xs bg-secondary border border-border rounded whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-50 shadow-lg">
-              bleeding.cash
-            </span>
-          )}
+          {!collapsed && <span className="text-xs">bleeding.cash</span>}
         </a>
         <a href="https://www.throw5onit.com" target="_blank" rel="noopener noreferrer"
-          className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors group relative"
-          title="THROW — phone-to-phone cash on Tempo"
-        >
-          <Zap size={17} className="shrink-0" style={{color:"#00e5a0"}} />
-          {!collapsed && <span className="text-xs" style={{color:"#00e5a0"}}>⚡ throw5onit.com</span>}
-          {collapsed && (
-            <span className="absolute left-full ml-2.5 px-2 py-1 text-xs bg-secondary border border-border rounded whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-50 shadow-lg">
-              THROW App
-            </span>
-          )}
+          className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+          title="THROW">
+          <Zap size={17} className="shrink-0" style={{ color: "#00e5a0" }} />
+          {!collapsed && <span className="text-xs" style={{ color: "#00e5a0" }}>throw5onit.com</span>}
         </a>
         <a href="https://www.raidersofthechain.com" target="_blank" rel="noopener noreferrer"
-          className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors group relative"
-          title="Raiders of the Chain"
-        >
-          <Activity size={17} className="shrink-0" />
-          {!collapsed && <span className="text-xs">⚔️ Raiders of the Chain</span>}
-          {collapsed && (
-            <span className="absolute left-full ml-2.5 px-2 py-1 text-xs bg-secondary border border-border rounded whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-50 shadow-lg">
-              Raiders of the Chain
-            </span>
-          )}
+          className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+          title="Raiders of the Chain">
+          <Swords size={17} className="shrink-0" />
+          {!collapsed && <span className="text-xs">Raiders of the Chain</span>}
         </a>
         <a href="https://localintel-landing-deploy.vercel.app" target="_blank" rel="noopener noreferrer"
-          className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors group relative"
-          title="The Local Intel — agentic business intelligence"
-        >
-          <MapPin size={17} className="shrink-0" style={{color:"#00e5a0"}} />
-          {!collapsed && <span className="text-xs" style={{color:"#00e5a0"}}>📍 thelocalintel.com</span>}
-          {collapsed && (
-            <span className="absolute left-full ml-2.5 px-2 py-1 text-xs bg-secondary border border-border rounded whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-50 shadow-lg">
-              The Local Intel
-            </span>
-          )}
+          className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+          title="The Local Intel">
+          <MapPin size={17} className="shrink-0" style={{ color: "#00e5a0" }} />
+          {!collapsed && <span className="text-xs" style={{ color: "#00e5a0" }}>thelocalintel.com</span>}
         </a>
-        {/* Base network badge */}
         {!collapsed && (
           <div className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] text-muted-foreground">
             <span className="status-dot active" />
-            <span>Base Network · x402</span>
+            <span>ACP · Robinhood · Tempo</span>
           </div>
         )}
         <button
-          onClick={() => setCollapsed(c => !c)}
+          onClick={() => setCollapsed((c) => !c)}
           className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
         >
           {collapsed ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}

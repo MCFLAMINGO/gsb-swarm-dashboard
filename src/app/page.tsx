@@ -1,256 +1,266 @@
 "use client";
 
-import Header from "@/components/layout/Header";
-import KpiTile from "@/components/dashboard/KpiTile";
-import AgentCard from "@/components/agents/AgentCard";
-import JobsTable from "@/components/dashboard/JobsTable";
-import ActivityFeed from "@/components/dashboard/ActivityFeed";
-import { useStore } from "@/store/useStore";
-import { useSummary } from "@/hooks/useSummary";
-import { useRailway } from "@/hooks/useRailway";
-import {
-  DollarSign, Users, Flame, TrendingUp, Zap, Eye, FlaskConical,
-  Coins, ShieldCheck, TrendingDown, Globe, BarChart3, ExternalLink
-} from "lucide-react";
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
+import {
+  Brain, Crosshair, Network, Bot, Search, RefreshCw,
+  CheckCircle2, AlertTriangle, GitBranch, Zap, Activity
+} from "lucide-react";
 
-// ── Workforce skill catalogue — what you can sell to any business ─────────────
-const WORKFORCE_SKILLS = [
-  {
-    icon: Coins,
-    color: "text-yellow-400",
-    border: "border-yellow-400/20",
-    bg: "bg-yellow-400/5",
-    name: "Ad Revenue Automation",
-    desc: "Agent learns your traffic patterns and places Coinzilla ad units autonomously. Turns dead page space into clickable revenue with zero manual setup.",
-    agent: "GSB Alpha Scanner + CEO",
-    price: "$0.35/task",
-  },
-  {
-    icon: Eye,
-    color: "text-blue-400",
-    border: "border-blue-400/20",
-    bg: "bg-blue-400/5",
-    name: "Sales Pattern Watcher",
-    desc: "Watches your on-chain or app transactions for anomalies, volume spikes, churn signals, and emerging customer patterns. Alerts you before problems become losses.",
-    agent: "THROW Watcher + Token Analyst",
-    price: "Feed subscription",
-  },
-  {
-    icon: BarChart3,
-    color: "text-green-400",
-    border: "border-green-400/20",
-    bg: "bg-green-400/5",
-    name: "Token & Market Intel",
-    desc: "Full token analysis: price, liquidity, whale wallets, rug risk, and buy/hold/avoid verdict. Runs on Base, Ethereum, Arbitrum, Solana, and 5 other chains.",
-    agent: "GSB Token Analyst",
-    price: "$0.10–$0.25/job",
-  },
-  {
-    icon: Globe,
-    color: "text-purple-400",
-    border: "border-purple-400/20",
-    bg: "bg-purple-400/5",
-    name: "Alpha Signal Content",
-    desc: "Scan trending tokens, detect pre-liquidity launches, write market update threads, and publish to X. From data to live post in one agent command.",
-    agent: "Alpha Scanner + Thread Writer",
-    price: "$0.15–$0.35/job",
-  },
-  {
-    icon: TrendingDown,
-    color: "text-orange-400",
-    border: "border-orange-400/20",
-    bg: "bg-orange-400/5",
-    name: "Wallet Intelligence",
-    desc: "Profile any wallet across EVM + Solana: holdings, tx history, smart money detection, DCA strategy execution. Hire it to watch a competitor or track whale moves.",
-    agent: "GSB Wallet Profiler & DCA Engine",
-    price: "$0.10–$0.25/job",
-  },
-  {
-    icon: FlaskConical,
-    color: "text-red-400",
-    border: "border-red-400/20",
-    bg: "bg-red-400/5",
-    name: "UI Quality Agents",
-    desc: "5 Playwright browser agents that test your web app like real users: auth flows, navigation, every button, form validation, and live signal checks. Test → fail → fix loop.",
-    agent: "Playwright Worker (W1–W5)",
-    price: "Per test suite",
-  },
-  {
-    icon: ShieldCheck,
-    color: "text-teal-400",
-    border: "border-teal-400/20",
-    bg: "bg-teal-400/5",
-    name: "Restaurant Financial Triage",
-    desc: "Upload bank statements + POS exports. Get a full burn rate analysis, vendor credit letter, and bank loan request letter — all in under 60 seconds.",
-    agent: "GSB Financial Analyst",
-    price: "$24.95/triage",
-  },
+const TEAM = [
+  { role: "Chief Analyst", name: "Elite / Equity Analyst", href: "/elite-deep-dive", note: "Thesis · desk voice · contrarian · ROI plan" },
+  { role: "Token / On-chain", name: "Token Analyst + Alpha", href: "/team", note: "Liquidity, whales, early signals" },
+  { role: "Wallet / Flow", name: "Wallet Profiler", href: "/team", note: "Holdings, smart money, DCA" },
+  { role: "Macro / Nodes", name: "LocalIntel Node Model", href: "/macro", note: "FRED · ZIP · market intel → desk" },
+  { role: "CEO Orchestrator", name: "ACP CEO", href: "/team", note: "Cook swarm · Virtuals hire" },
+  { role: "Execution", name: "Robinhood · Copy · THROW", href: "/execute", note: "Review → place · copy · Tempo tape" },
 ];
 
-export default function SwarmOverview() {
-  const agents = useStore(s => s.agents);
-  const railwayStatus = useStore(s => s.railwayStatus);
-  const railwayJobsFired = useStore(s => s.railwayJobsFired);
-  const summary = useSummary();
-  const { fireJobOnRailway, firing } = useRailway();
+export default function DeskHomePage() {
+  const [query, setQuery] = useState("NVDA");
+  const [pending, startTransition] = useTransition();
+  const [report, setReport] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [rhStatus, setRhStatus] = useState<any>(null);
+  const [sources, setSources] = useState<any>(null);
 
-  const acpAgents = agents.filter(a => a.id !== "ceo");
-  const ceoAgent = agents.find(a => a.id === "ceo");
+  useEffect(() => {
+    fetch("/api/elite-analysis", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => setSources(d.sources || null))
+      .catch(() => undefined);
+    fetch("/api/robinhood?action=status", { cache: "no-store" })
+      .then((r) => r.json())
+      .then(setRhStatus)
+      .catch(() => setRhStatus({ configured: false }));
+  }, []);
 
-  const KPIs = [
-    {
-      label: "Total Earned",
-      value: `$${summary.totalEarned.toFixed(4)}`,
-      sub: "USDC all time",
-      icon: DollarSign,
-      colorClass: "text-primary",
-      glowClass: "glow-red",
-    },
-    {
-      label: "Active Agents",
-      value: `${agents.filter(a => a.enabled && a.status === "active").length} / ${agents.filter(a => a.id !== "ceo").length}`,
-      sub: railwayStatus ? `Railway: ${railwayStatus.status}` : "connecting...",
-      icon: Users,
-      colorClass: "text-orange-400",
-    },
-    {
-      label: "Jobs Served",
-      value: String(railwayJobsFired || summary.jobCount),
-      sub: "ACP jobs completed",
-      icon: Flame,
-      colorClass: "text-yellow-400",
-      glowClass: railwayJobsFired > 0 ? "glow-yellow" : undefined,
-    },
-    {
-      label: "Monthly Revenue",
-      value: `$${summary.monthlyRevenue.toFixed(4)}`,
-      sub: "USDC last 30 days",
-      icon: TrendingUp,
-      colorClass: "text-green-400",
-    },
-  ];
+  function runDesk() {
+    const q = query.trim();
+    if (!q) return;
+    setError(null);
+    setReport(null);
+    startTransition(async () => {
+      try {
+        const res = await fetch("/api/elite-analysis", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: q, assetType: "auto", includeSynthesis: true }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        setReport(data.report);
+        if (data.sources) setSources((prev: any) => ({ ...(prev || {}), ...data.sources }));
+      } catch (e) {
+        setError((e as Error).message);
+      }
+    });
+  }
+
+  async function connectRobinhood() {
+    try {
+      const res = await fetch("/api/robinhood?action=connect", { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      if (data.authorize_url) window.open(data.authorize_url, "_blank", "noopener,noreferrer");
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
+  const verdict = report?.verdict?.verdict;
+  const contra = report?.trade_plan?.contrarian_play || report?.institutional?.contrarian_play;
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <Header
-        title="MCFLAMINGO Agentic Workforce"
-        subtitle={
-          railwayStatus
-            ? `${agents.filter(a => a.enabled).length} agents live on Railway · ${railwayStatus.status}`
-            : "Connecting to Railway backend..."
-        }
-      />
-      <main className="p-5 space-y-8 max-w-6xl mx-auto">
+      <div className="p-6 md:p-8 space-y-6 max-w-5xl">
+        <header className="space-y-2">
+          <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">GSB Trading Desk</p>
+          <h1 className="text-3xl font-semibold tracking-tight text-foreground">
+            Your team. One loop.
+          </h1>
+          <p className="text-sm text-muted-foreground max-w-2xl">
+            Macro in → Elite decides → ACP team debates → Execute on Robinhood / Copy / THROW.
+            LocalIntel nodes feed the desk — they are not a second product.
+          </p>
+        </header>
 
-        {/* Hero pitch — for when you show this to a client */}
-        <div className="rounded-xl border border-primary/20 bg-primary/5 px-6 py-5">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <h2 className="text-base font-bold text-foreground mb-1">
-                Autonomous agents. Real skills. Hire them like contractors.
-              </h2>
-              <p className="text-sm text-muted-foreground max-w-xl">
-                Every agent in this swarm earns USDC on the{" "}
-                <a href="https://app.virtuals.io" target="_blank" rel="noopener noreferrer"
-                  className="text-primary hover:underline">Virtuals ACP marketplace</a>.
-                {" "}They run 24/7, take jobs from other AI agents, learn from every outcome,
-                and get cheaper to run as their skill confidence grows.
-              </p>
-            </div>
-            <div className="flex gap-2 shrink-0">
-              <Link href="/marketplace"
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-primary bg-primary/10 text-primary text-xs font-semibold hover:bg-primary/20 transition-all">
-                <ExternalLink className="w-3.5 h-3.5" />
-                Hire an Agent
-              </Link>
-              <Link href="/agents"
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border bg-secondary text-xs font-medium hover:bg-secondary/80 transition-all">
-                View Skills
-              </Link>
+        {/* Desk run */}
+        <section className="rounded-lg border border-primary/25 bg-primary/5 p-4 space-y-3">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <h2 className="text-sm font-medium flex items-center gap-2">
+              <Brain className="h-4 w-4 text-primary" /> Chief Analyst — Run desk
+            </h2>
+            <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+              <span className="inline-flex items-center gap-1">
+                {sources?.fred ? <CheckCircle2 className="h-3 w-3 text-emerald-400" /> : <AlertTriangle className="h-3 w-3 text-amber-400" />}
+                FRED
+              </span>
+              <span className="inline-flex items-center gap-1">
+                {sources?.nvidia_nim ? <CheckCircle2 className="h-3 w-3 text-emerald-400" /> : <AlertTriangle className="h-3 w-3 text-amber-400" />}
+                NIM
+              </span>
+              <span className="inline-flex items-center gap-1">
+                {rhStatus?.configured ? <CheckCircle2 className="h-3 w-3 text-emerald-400" /> : <AlertTriangle className="h-3 w-3 text-amber-400" />}
+                Robinhood
+              </span>
             </div>
           </div>
-        </div>
-
-        {/* KPI row */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {KPIs.map(kpi => <KpiTile key={kpi.label} {...kpi} />)}
-        </div>
-
-        {/* Workforce skill catalogue */}
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-              What This Workforce Can Do For Your Business
-            </h2>
-            <Link href="/marketplace" className="text-xs text-primary hover:underline">
-              See all offerings →
+          <div className="flex flex-col sm:flex-row gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && runDesk()}
+                placeholder="NVDA, AAPL, $VIRTUAL…"
+                className="w-full rounded-md border border-border bg-secondary pl-9 pr-3 py-2.5 text-sm outline-none focus:border-primary/50"
+              />
+            </div>
+            <button
+              onClick={runDesk}
+              disabled={pending}
+              className="rounded-md bg-primary text-primary-foreground px-4 py-2.5 text-sm font-medium disabled:opacity-50"
+            >
+              {pending ? "Running…" : "Run Elite Desk"}
+            </button>
+            <Link
+              href={`/elite-deep-dive`}
+              className="rounded-md border border-border bg-card px-4 py-2.5 text-sm text-muted-foreground hover:text-foreground text-center"
+            >
+              Full research →
             </Link>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {WORKFORCE_SKILLS.map(skill => (
-              <div key={skill.name}
-                className={`rounded-xl border ${skill.border} ${skill.bg} p-4 flex flex-col gap-2`}>
-                <div className="flex items-start justify-between gap-2">
-                  <skill.icon className={`w-4 h-4 mt-0.5 shrink-0 ${skill.color}`} />
-                  <span className="text-[10px] font-mono text-muted-foreground border border-border rounded px-1.5 py-0.5 shrink-0">
-                    {skill.price}
-                  </span>
+          {error && <p className="text-xs text-red-400">{error}</p>}
+          {report && (
+            <div className="grid md:grid-cols-2 gap-3 pt-1">
+              <div className="rounded-md border border-border bg-card/80 p-3 space-y-1.5">
+                <div className="text-[10px] uppercase text-muted-foreground">Primary</div>
+                <div className="text-lg font-semibold text-foreground">
+                  {report.resolved_symbol} · {verdict || "—"}
                 </div>
-                <div>
-                  <div className="text-sm font-semibold mb-1">{skill.name}</div>
-                  <p className="text-xs text-muted-foreground leading-relaxed">{skill.desc}</p>
-                </div>
-                <div className="text-[10px] text-muted-foreground/60 mt-auto pt-1 border-t border-border/50">
-                  Powered by: {skill.agent}
+                <p className="text-xs text-muted-foreground line-clamp-3">
+                  {report.institutional?.investment_thesis || report.analyst_memo?.slice(0, 220)}
+                </p>
+                <div className="text-[11px] text-accent">
+                  Bias {report.trade_plan?.bias || "—"}
+                  {report.trade_plan?.horizons?.week && (
+                    <> · Week target +{report.trade_plan.horizons.week.target_roi_pct}%</>
+                  )}
                 </div>
               </div>
+              <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 space-y-1.5">
+                <div className="text-[10px] uppercase text-amber-400/90">Contrarian (always on)</div>
+                <div className="text-sm font-medium text-foreground">
+                  {contra?.action || "—"}
+                </div>
+                <p className="text-xs text-muted-foreground line-clamp-3">
+                  {contra?.thesis || "Contrarian play loads with every desk run."}
+                </p>
+                {contra?.setup && (
+                  <div className="text-[11px] text-amber-300">
+                    Week fade target +{contra.setup.target_roi_pct}% · stop {contra.setup.stop_loss_pct}%
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* Team roster */}
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-medium flex items-center gap-2">
+              <Bot className="h-4 w-4 text-accent" /> Trading team
+            </h2>
+            <Link href="/team" className="text-xs text-muted-foreground hover:text-foreground">
+              Open team console →
+            </Link>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {TEAM.map((t) => (
+              <Link
+                key={t.role}
+                href={t.href}
+                className="rounded-md border border-border bg-card p-3 hover:border-primary/40 transition-colors space-y-1"
+              >
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{t.role}</div>
+                <div className="text-sm font-medium text-foreground">{t.name}</div>
+                <div className="text-[11px] text-muted-foreground">{t.note}</div>
+              </Link>
             ))}
           </div>
+        </section>
+
+        {/* Execute + Macro strips */}
+        <div className="grid md:grid-cols-2 gap-4">
+          <section className="rounded-lg border border-emerald-500/25 bg-emerald-500/5 p-4 space-y-3">
+            <h2 className="text-sm font-medium flex items-center gap-2">
+              <Crosshair className="h-4 w-4 text-emerald-400" /> Execute
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Robinhood Agentic {rhStatus?.configured ? "connected" : "not connected"}
+              {rhStatus?.live_trading_enabled ? " · LIVE ON" : " · live off"}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={connectRobinhood}
+                className="rounded-md border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 px-3 py-1.5 text-xs"
+              >
+                {rhStatus?.configured ? "Reconnect Robinhood" : "Connect Robinhood"}
+              </button>
+              <Link href="/execute" className="rounded-md border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground">
+                Execute rail →
+              </Link>
+              <Link href="/copy-trader" className="rounded-md border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
+                <Activity className="h-3 w-3" /> Copy
+              </Link>
+              <Link href="/throw" className="rounded-md border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
+                <Zap className="h-3 w-3" /> THROW
+              </Link>
+            </div>
+          </section>
+
+          <section className="rounded-lg border border-border bg-card p-4 space-y-3">
+            <h2 className="text-sm font-medium flex items-center gap-2">
+              <Network className="h-4 w-4 text-accent" /> Macro nodes
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              LocalIntel node model supplies the macro/ZIP tape the Elite desk prices in.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Link href="/macro" className="rounded-md border border-border bg-secondary px-3 py-1.5 text-xs hover:text-foreground">
+                Node map →
+              </Link>
+              <Link href="/local-intel/market-intel" className="rounded-md border border-border bg-secondary px-3 py-1.5 text-xs">
+                Market intel
+              </Link>
+              <Link href="/local-intel/zip-intel" className="rounded-md border border-border bg-secondary px-3 py-1.5 text-xs">
+                ZIP intel
+              </Link>
+            </div>
+          </section>
         </div>
 
-        {/* Active agents + live jobs */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-          <div className="lg:col-span-3 space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                Live Worker Agents
-              </h2>
-              <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                <Zap size={10} className="text-yellow-400" />
-                ACP marketplace · Railway runtime
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {acpAgents.map(agent => (
-                <AgentCard
-                  key={agent.id}
-                  agent={agent}
-                  onFireJob={fireJobOnRailway}
-                  isFiring={firing === agent.id}
-                />
-              ))}
-            </div>
-            {ceoAgent && (
-              <div className="mt-2">
-                <AgentCard agent={ceoAgent} />
-              </div>
-            )}
-          </div>
-
-          <div className="lg:col-span-2 space-y-4">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Recent Jobs</h2>
-                <Link href="/earnings" className="text-xs text-primary hover:underline">View all →</Link>
-              </div>
-              <JobsTable limit={5} />
-            </div>
-            <ActivityFeed limit={6} />
-          </div>
-        </div>
-
-      </main>
+        <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+          <GitBranch className="h-3 w-3" />
+          ACP wire: Dashboard → Railway elite-analysis / fire-job → optional Virtuals offering.
+          <button
+            type="button"
+            onClick={() => {
+              fetch("/api/elite-analysis", { cache: "no-store" })
+                .then((r) => r.json())
+                .then((d) => setSources(d.sources || null));
+              fetch("/api/robinhood?action=status", { cache: "no-store" })
+                .then((r) => r.json())
+                .then(setRhStatus);
+            }}
+            className="inline-flex items-center gap-1 hover:text-foreground ml-1"
+          >
+            <RefreshCw className="h-3 w-3" /> Refresh status
+          </button>
+        </p>
+      </div>
     </div>
   );
 }

@@ -7,8 +7,8 @@ import { Toaster } from "sonner";
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
-  title: "GSB Swarm — Broker Control Dashboard",
-  description: "Agent Gas Bible $GSB tokenized compute bank broker swarm management platform",
+  title: "GSB Swarm — Trading Desk",
+  description: "Elite analyst + ACP trading team — research, macro nodes, Robinhood / Copy / THROW execution",
   keywords: ["GSB", "Virtuals Protocol", "ACP", "compute bank", "broker agents", "x402"],
   metadataBase: new URL("https://gsb-swarm-dashboard.vercel.app"),
   openGraph: {
