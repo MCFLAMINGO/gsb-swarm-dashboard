@@ -208,19 +208,26 @@ export function buildExecutionIdeas(report: any): ExecutionIdea[] {
     });
   }
 
-  // Unconventional angles — lower conviction satellite ideas
+  // Unconventional angles — lower conviction satellite ideas (evidence-built, not canned)
   for (const a of playbook.unconventional_angles || []) {
+    const evidenceBits = a.evidence
+      ? Object.entries(a.evidence)
+          .filter(([, v]) => v != null && v !== "" && !(Array.isArray(v) && !v.length))
+          .slice(0, 4)
+          .map(([k, v]) => `${k}=${Array.isArray(v) ? v.join("|") : v}`)
+          .join(" · ")
+      : "";
     ideas.push({
       id: a.id || a.headline,
       kind: "unconventional",
       title: a.headline || a.id || "Unconventional angle",
-      subtitle: a.schedule?.due_label || "Satellite idea",
+      subtitle: a.schedule?.due_label || evidenceBits || "Evidence-built satellite",
       side: "hedge",
       conviction: clamp01(primaryConv * 0.45),
       convictionPct: Math.round(clamp01(primaryConv * 0.45) * 100),
       actionable: false,
       executeMode: "review_only",
-      concept: a.thesis || "",
+      concept: [a.thesis, evidenceBits ? `Evidence: ${evidenceBits}` : ""].filter(Boolean).join("\n\n"),
       instruction: a.agent_instruction_plain || "",
       method: Array.isArray(a.method) ? a.method.join(" · ") : a.method,
       schedule: a.schedule,
