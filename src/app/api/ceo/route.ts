@@ -39,17 +39,39 @@ async function railwayAuthed(path: string, init: RequestInit = {}) {
   return res;
 }
 
-/** Proxy CEO Lead Trader endpoints: trade-book | execute */
+/** Proxy CEO endpoints: trade-book | execute | arm-plan | tick-plan */
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
     const action = String(body.action || "trade-book");
-    const path = action === "execute" ? "/api/ceo/execute" : "/api/ceo/trade-book";
+    const path =
+      action === "execute"
+        ? "/api/ceo/execute"
+        : action === "arm-plan"
+          ? "/api/ceo/arm-plan"
+          : action === "tick-plan"
+            ? "/api/ceo/tick-plan"
+            : "/api/ceo/trade-book";
     const res = await railwayAuthed(path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
+    const data = await res.json().catch(() => ({}));
+    return NextResponse.json(data, { status: res.status });
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Unknown error" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function GET(req: NextRequest) {
+  try {
+    const id = req.nextUrl.searchParams.get("id");
+    const path = id ? `/api/ceo/plans?id=${encodeURIComponent(id)}` : "/api/ceo/plans";
+    const res = await railwayAuthed(path);
     const data = await res.json().catch(() => ({}));
     return NextResponse.json(data, { status: res.status });
   } catch (err) {

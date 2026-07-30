@@ -143,49 +143,78 @@ export default function DeskHomePage() {
     const resultKey = `${session.id}:${idea.id}`;
     setRhBusyIdeaId(idea.id);
     try {
-      let res: Response;
-      if (idea.executeMode === "options") {
-        res = await fetch("/api/robinhood", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "options",
-            overlay: idea.overlay,
-            dryRun: !live,
-            confirm: live,
-          }),
-        });
-      } else if (idea.executeMode === "equity") {
-        const notional =
-          idea.notionalHint ??
-          report?.ceo_trade_book?.kelly?.recommended_notional_usd ??
-          50;
-        res = await fetch("/api/robinhood", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            symbol: report?.resolved_symbol || session.symbol,
-            trade_plan: report?.trade_plan || undefined,
-            horizon: rhHorizon,
-            notionalUsd: Number(notional) || 50,
-            dryRun: !live,
-            confirm: live,
-            orderType: "market",
-          }),
-        });
-      } else {
-        toast.message("Concept only", {
-          description: "This idea has no live MCP place path — open a put/primary card to execute.",
-        });
-        return;
-      }
-
+      // Multistep Execute: arm wait/open → monitor → add → close
+      const res = await fetch("/api/ceo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "arm-plan",
+          idea: {
+            ...idea,
+            symbol: session.symbol,
+            layman_directive: idea.laymanDirective,
+            execution_plan: idea.executionPlan,
+            notionalHint: idea.notionalHint,
+            schedule: idea.schedule,
+            levels: idea.levels,
+          },
+          report,
+          symbol: session.symbol,
+          dryRun: !live,
+          confirm: live,
+        }),
+      });
       const data = await res.json();
-      if (!res.ok && !data.order && !data.order_preview && !data.review) {
+      if (!res.ok && !data.plan) {
         throw new Error(data.error || data.message || `HTTP ${res.status}`);
       }
       setIdeaResults((prev) => ({ ...prev, [resultKey]: data }));
-      toast.success(live ? "Live order submitted" : "Agent reviewed (dry-run)");
+      const waiting = data.plan?.status === "waiting_trigger";
+      toast.success(
+        waiting
+          ? "Waiting for trigger — no order yet"
+          : live
+            ? "Live plan armed"
+            : "Agent plan armed (dry-run)",
+        {
+          description: waiting
+            ? data.plan?.steps?.find((s: any) => s.phase === "wait")?.detail ||
+              "Agent will place only when the trigger prints"
+            : data.plan?.id
+              ? `Plan ${data.plan.id} · ${data.plan.status}`
+              : data.message,
+        }
+      );
+
+      // Keep ticking while waiting / monitoring so trigger→place runs
+      const planId = data.plan?.id;
+      if (planId && (waiting || data.plan?.status === "monitoring")) {
+        const poll = async () => {
+          try {
+            const tr = await fetch("/api/ceo", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: "tick-plan", planId }),
+            });
+            const td = await tr.json();
+            if (td?.plan) {
+              setIdeaResults((prev) => ({
+                ...prev,
+                [resultKey]: { ...data, ...td, plan: td.plan, actions: td.actions },
+              }));
+              if (td.actions?.some((a: any) => a.type === "trigger_hit")) {
+                toast.success("Trigger hit — placing / reviewing order");
+              }
+            }
+          } catch {
+            /* ignore poll errors */
+          }
+        };
+        await poll();
+        const iv = window.setInterval(poll, 45_000);
+        window.setTimeout(() => window.clearInterval(iv), 45 * 60_000);
+      }
+
       const st = await fetch("/api/robinhood?action=status", { cache: "no-store" });
       setRhStatus(await st.json());
     } catch (e) {
@@ -347,7 +376,7 @@ export default function DeskHomePage() {
                     ))}
                   </div>
                   <p className="text-sm text-foreground/70">
-                    Execute = agent dry-run review. Place live needs Robinhood live trading on.
+                    Execute arms the full multistep plan (wait/open → monitor → add → close). Place live needs Robinhood live trading on.
                     <Link href="/execute" className="text-accent ml-1 hover:underline">Execute rail →</Link>
                   </p>
                 </section>
