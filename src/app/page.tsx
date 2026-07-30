@@ -7,6 +7,7 @@ import {
   CheckCircle2, AlertTriangle, GitBranch, Zap, Activity
 } from "lucide-react";
 import { toast } from "sonner";
+import AgentPlaybook from "@/components/AgentPlaybook";
 
 const TEAM = [
   { role: "Chief Analyst", name: "Elite / Equity Analyst", href: "/elite-deep-dive", note: "Thesis · desk voice · contrarian · ROI plan" },
@@ -273,60 +274,42 @@ export default function DeskHomePage() {
               </div>
             </section>
 
-            {/* Engage strategies */}
-            <section id="engage-strategies" className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-5 md:p-6 space-y-4 scroll-mt-4">
-              <h2 className="text-xl font-semibold flex items-center gap-2">
-                <Crosshair className="h-5 w-5 text-emerald-400" /> 5. Engage trading strategies
-              </h2>
-              <p className="text-base text-foreground/85">
-                Robinhood Agentic is {rhStatus?.configured ? "connected" : "not connected"}
-                {rhStatus?.live_trading_enabled ? " · LIVE ON" : " · dry-run only until LIVE is on"}.
-                Do not click Connect in the browser — use the Mac bridge if tokens drop.
-              </p>
-
-              <div className="grid sm:grid-cols-3 gap-3">
-                <div className="space-y-1">
-                  <label className="text-sm text-foreground/70">Horizon</label>
+            {/* 5. Agent playbook + engage */}
+            <div id="engage-strategies" className="scroll-mt-4 space-y-4">
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <h2 className="text-xl font-semibold">5. Engage — agent directions</h2>
+                <div className="flex gap-2 items-center">
                   <select
                     value={rhHorizon}
                     onChange={(e) => setRhHorizon(e.target.value as typeof rhHorizon)}
-                    className="w-full rounded-md border border-border bg-secondary px-3 py-2.5 text-base"
+                    className="rounded-md border border-border bg-secondary px-3 py-2 text-sm"
                   >
                     <option value="day">Day</option>
                     <option value="week">Week</option>
                     <option value="month">Month</option>
                     <option value="year">Year</option>
                   </select>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-sm text-foreground/70">Notional USD</label>
                   <input
                     value={rhNotional}
                     onChange={(e) => setRhNotional(e.target.value)}
-                    className="w-full rounded-md border border-border bg-secondary px-3 py-2.5 text-base"
+                    className="w-24 rounded-md border border-border bg-secondary px-3 py-2 text-sm"
+                    title="Notional USD"
                   />
                 </div>
-                <div className="flex flex-col justify-end gap-2">
-                  <button
-                    disabled={rhBusy || report.trade_plan?.bias === "NEUTRAL"}
-                    onClick={() => executeOnRobinhood(false)}
-                    className="rounded-md border border-accent/50 bg-accent/15 text-accent px-4 py-2.5 text-base font-semibold disabled:opacity-50"
-                  >
-                    {rhBusy ? "Working…" : "Review order (dry-run)"}
-                  </button>
-                  <button
-                    disabled={rhBusy || !rhStatus?.live_trading_enabled || report.trade_plan?.bias === "NEUTRAL"}
-                    onClick={() => {
-                      if (window.confirm(`Place LIVE buy ${report.resolved_symbol} for $${rhNotional}?`)) {
-                        executeOnRobinhood(true);
-                      }
-                    }}
-                    className="rounded-md border border-red-500/50 bg-red-500/15 text-red-200 px-4 py-2.5 text-base font-semibold disabled:opacity-40"
-                  >
-                    Place live on Robinhood
-                  </button>
-                </div>
               </div>
+
+              <AgentPlaybook
+                playbook={report.agent_playbook}
+                rhBusy={rhBusy}
+                liveEnabled={Boolean(rhStatus?.live_trading_enabled)}
+                biasNeutral={report.trade_plan?.bias === "NEUTRAL"}
+                onReview={() => executeOnRobinhood(false)}
+                onLive={() => {
+                  if (window.confirm(`Place LIVE buy ${report.resolved_symbol} for $${rhNotional}?`)) {
+                    executeOnRobinhood(true);
+                  }
+                }}
+              />
 
               {rhError && <p className="text-base text-red-300">{rhError}</p>}
               {rhResult && (
@@ -341,18 +324,11 @@ export default function DeskHomePage() {
                 </pre>
               )}
 
-              <div className="flex flex-wrap gap-3 pt-2 border-t border-border/60">
-                <Link href="/copy-trader" className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-4 py-2.5 text-base font-medium hover:border-primary/50">
-                  <Activity className="h-4 w-4 text-accent" /> Copy Trader strategies
-                </Link>
-                <Link href="/throw" className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-4 py-2.5 text-base font-medium hover:border-primary/50">
-                  <Zap className="h-4 w-4" style={{ color: "#00e5a0" }} /> THROW / Tempo tape
-                </Link>
-                <Link href="/execute" className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-4 py-2.5 text-base font-medium hover:border-primary/50">
-                  <Crosshair className="h-4 w-4 text-emerald-400" /> Full Execute rail
-                </Link>
-              </div>
-            </section>
+              <p className="text-sm text-foreground/70">
+                Copy Trader / THROW are separate rails (yield & Tempo tape) — not part of this Robinhood equity directive.
+                <Link href="/execute" className="text-accent ml-1 hover:underline">Execute rail →</Link>
+              </p>
+            </div>
           </>
         )}
 
