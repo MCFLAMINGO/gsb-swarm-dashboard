@@ -7,6 +7,7 @@ import {
   Crosshair,
   Loader2,
   Play,
+  ListOrdered,
 } from "lucide-react";
 import type { ExecutionIdea } from "@/lib/deskIdeas";
 
@@ -28,6 +29,7 @@ export default function ExecutionIdeaCard({
   result?: any;
 }) {
   const [open, setOpen] = useState(rank === 1);
+  const steps = idea.executionPlan?.steps || [];
 
   const sideTone =
     idea.side === "long"
@@ -37,9 +39,6 @@ export default function ExecutionIdeaCard({
         : idea.side === "income"
           ? "border-amber-500/40 bg-amber-500/10"
           : "border-border bg-card";
-
-  const canExecute = idea.executeMode !== "review_only" || idea.actionable;
-  const executeDisabled = busy || (idea.executeMode === "review_only" && !idea.actionable);
 
   return (
     <article className={`rounded-lg border ${sideTone} overflow-hidden`}>
@@ -60,6 +59,11 @@ export default function ExecutionIdeaCard({
                 {idea.badge}
               </span>
             )}
+            {steps.length > 0 && (
+              <span className="text-[10px] font-semibold text-sky-200/90 border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 rounded">
+                {steps.length}-step plan
+              </span>
+            )}
           </div>
           <p className="text-sm text-foreground/75">{idea.subtitle}</p>
           <div className="flex flex-wrap gap-3 text-xs text-foreground/65 pt-0.5">
@@ -68,9 +72,6 @@ export default function ExecutionIdeaCard({
             </span>
             <span className="capitalize">{idea.side}</span>
             {idea.notionalHint != null && <span>~${idea.notionalHint}</span>}
-            {!idea.actionable && idea.executeMode === "review_only" && (
-              <span className="text-amber-200">Concept / staged</span>
-            )}
           </div>
         </div>
       </button>
@@ -81,7 +82,7 @@ export default function ExecutionIdeaCard({
             <div className="text-xs font-semibold uppercase tracking-wider text-foreground/60">
               Full concept
             </div>
-            <p className="text-base text-foreground/90 leading-relaxed">{idea.concept}</p>
+            <p className="text-base text-foreground/90 leading-relaxed whitespace-pre-wrap">{idea.concept}</p>
             {idea.method && (
               <p className="text-sm text-foreground/80">
                 <span className="font-semibold">Method:</span> {idea.method}
@@ -110,68 +111,99 @@ export default function ExecutionIdeaCard({
             </div>
           )}
 
-          {idea.asymmetry && (
-            <p className="text-sm text-foreground/80">
-              <span className="font-semibold">Asymmetry:</span>{" "}
-              {(idea.asymmetry as any).why_asymmetric ||
-                (idea.asymmetry as any).payoff ||
-                (idea.asymmetry as any).style ||
-                "—"}
-            </p>
+          {steps.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-xs font-semibold uppercase tracking-wider text-foreground/60 flex items-center gap-1.5">
+                <ListOrdered className="h-3.5 w-3.5" /> Agent steps (Execute covers all)
+              </div>
+              <ol className="space-y-1.5">
+                {steps.map((s, i) => (
+                  <li
+                    key={s.id || i}
+                    className="text-sm text-foreground/85 rounded border border-border/50 bg-background/40 px-3 py-2"
+                  >
+                    <span className="font-semibold text-foreground">
+                      {i + 1}. {s.title || s.phase || s.id}
+                    </span>
+                    {s.detail && <p className="text-foreground/75 mt-0.5">{s.detail}</p>}
+                  </li>
+                ))}
+              </ol>
+            </div>
           )}
 
           {idea.schedule && (
             <p className="text-sm text-amber-100/90 flex items-center gap-1.5">
               <Crosshair className="h-3.5 w-3.5" />
-              {(idea.schedule as any).due_label ||
-                (idea.schedule as any).due_friday ||
-                (idea.schedule as any).expiration ||
-                "See schedule"}
+              {(idea.schedule as any).trigger
+                ? `Trigger: ${(idea.schedule as any).trigger}`
+                : (idea.schedule as any).due_label ||
+                  (idea.schedule as any).due_friday ||
+                  (idea.schedule as any).expiration ||
+                  "See schedule"}
             </p>
+          )}
+
+          {(idea.laymanDirective || idea.executionPlan) && (
+            <div className="rounded-md border border-sky-500/35 bg-sky-500/10 px-3 py-3 space-y-1">
+              <div className="text-xs font-bold uppercase tracking-wider text-sky-200">
+                Layman&apos;s directive
+              </div>
+              <p className="text-base text-foreground leading-relaxed">
+                {idea.laymanDirective ||
+                  "In plain English: Execute arms this idea’s full plan — wait/open, watch levels, add only on a planned pullback, and close at stop, target, or time."}
+              </p>
+            </div>
           )}
 
           <div className="flex flex-wrap gap-2 pt-1">
             <button
               type="button"
-              disabled={executeDisabled}
+              disabled={busy}
               onClick={() => onExecute(idea)}
               className="inline-flex items-center gap-2 rounded-md border border-accent/50 bg-accent/15 text-accent px-4 py-2.5 text-sm font-semibold disabled:opacity-40"
             >
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-              {busy ? "Working…" : idea.executeMode === "review_only" && !idea.actionable ? "Not executable" : "Execute agent"}
+              {busy
+                ? "Working…"
+                : idea.executionPlan?.wait_for_trigger || (idea.schedule as any)?.trigger
+                  ? "Execute (wait for trigger)"
+                  : "Execute agent"}
             </button>
-            {onPlaceLive && idea.actionable && idea.executeMode !== "review_only" && (
+            {onPlaceLive && (
               <button
                 type="button"
                 disabled={busy || !liveEnabled}
                 onClick={() => onPlaceLive(idea)}
                 className="inline-flex items-center gap-2 rounded-md border border-red-500/50 bg-red-500/15 text-red-200 px-4 py-2.5 text-sm font-semibold disabled:opacity-40"
               >
-                Place live
+                Place live (full plan)
               </button>
             )}
-            {!canExecute && (
-              <span className="text-xs text-foreground/60 self-center">
-                Staged idea — no MCP place path yet
-              </span>
-            )}
-            {idea.executeMode === "review_only" && idea.side === "short" && (
-              <span className="text-xs text-amber-200/90 self-center">
-                Equity short not bridged — use a put card when available
-              </span>
-            )}
+            <span className="text-xs text-foreground/60 self-center">
+              {idea.executionPlan?.wait_for_trigger || (idea.schedule as any)?.trigger
+                ? "Wait → place → monitor → add → close"
+                : "Open/wait · monitor · add · close"}
+            </span>
           </div>
 
           {result && (
-            <pre className="text-xs text-foreground/85 whitespace-pre-wrap max-h-40 overflow-auto rounded border border-border bg-background/60 p-2">
+            <pre className="text-xs text-foreground/85 whitespace-pre-wrap max-h-48 overflow-auto rounded border border-border bg-background/60 p-2">
               {JSON.stringify(
                 {
                   mode: result.mode,
                   message: result.message,
                   error: result.error,
+                  plan_id: result.plan?.id,
+                  plan_status: result.plan?.status,
+                  steps: result.plan?.steps?.map((s: any) => ({
+                    id: s.id,
+                    status: s.status,
+                    title: s.title,
+                  })),
+                  actions: result.actions,
                   order: result.order || result.order_preview,
                   review: result.review?.parsed || result.review?.text || result.review,
-                  placed: result.placed?.parsed || result.placed?.text || result.placed,
                 },
                 null,
                 2

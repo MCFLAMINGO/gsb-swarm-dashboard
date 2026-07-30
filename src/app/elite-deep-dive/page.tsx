@@ -35,6 +35,7 @@ export default function EliteDeepDivePage() {
   const [rhHorizon, setRhHorizon] = useState<"day" | "week" | "month" | "year">("week");
   const [rhNotional, setRhNotional] = useState("50");
   const [rhBusy, setRhBusy] = useState(false);
+  const [rhBusyIdeaId, setRhBusyIdeaId] = useState<string | null>(null);
   const [rhResult, setRhResult] = useState<any>(null);
   const [rhError, setRhError] = useState<string | null>(null);
 
@@ -146,6 +147,78 @@ export default function EliteDeepDivePage() {
       setRhError((e as Error).message);
     } finally {
       setRhBusy(false);
+    }
+  }
+
+  /** Multistep Execute for any playbook idea — wait→place when trigger exists */
+  async function executePlaybookIdea(idea: any, live: boolean) {
+    if (!idea) return;
+    setRhError(null);
+    setRhResult(null);
+    setRhBusy(true);
+    setRhBusyIdeaId(idea.id || idea.title || "idea");
+    try {
+      const res = await fetch("/api/ceo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "arm-plan",
+          idea: {
+            ...idea,
+            symbol: report?.resolved_symbol || query.trim(),
+            layman_directive: idea.layman_directive,
+            execution_plan: idea.execution_plan,
+            notionalHint:
+              idea.what_flows_to_robinhood?.order_preview?.amount ??
+              idea.levels?.kelly_notional_usd ??
+              (Number(rhNotional) || 50),
+            schedule: idea.schedule,
+            levels: idea.levels,
+            overlay: /option|put|call|covered/i.test(idea.id || "") ? idea : idea.overlay,
+            flow: idea.what_flows_to_robinhood,
+            side:
+              idea.execution_plan?.side ||
+              idea.side ||
+              (idea.what_flows_to_robinhood?.order_preview?.side === "sell" ? "short" : "long"),
+          },
+          report,
+          symbol: report?.resolved_symbol || query.trim(),
+          dryRun: !live,
+          confirm: live,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok && !data.plan) {
+        throw new Error(data.error || data.message || `HTTP ${res.status}`);
+      }
+      setRhResult(data);
+      const waiting = data.plan?.status === "waiting_trigger";
+      if (waiting) {
+        // Poll so trigger→place advances without another click
+        const planId = data.plan.id;
+        const poll = async () => {
+          try {
+            const tr = await fetch("/api/ceo", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: "tick-plan", planId }),
+            });
+            const td = await tr.json();
+            if (td?.plan) setRhResult((prev: any) => ({ ...prev, ...td }));
+          } catch {
+            /* ignore */
+          }
+        };
+        await poll();
+        const iv = window.setInterval(poll, 45_000);
+        window.setTimeout(() => window.clearInterval(iv), 45 * 60_000);
+      }
+      await loadRhStatus();
+    } catch (e) {
+      setRhError((e as Error).message);
+    } finally {
+      setRhBusy(false);
+      setRhBusyIdeaId(null);
     }
   }
 
@@ -418,24 +491,21 @@ export default function EliteDeepDivePage() {
             <AgentPlaybook
               playbook={report.agent_playbook}
               rhBusy={rhBusy}
+              busyIdeaId={rhBusyIdeaId}
               liveEnabled={Boolean(rhStatus?.live_trading_enabled)}
               optionsEnabled={rhStatus?.options_trading_enabled !== false}
-              biasNeutral={report.trade_plan?.bias === "NEUTRAL"}
-              onReview={() => executeOnRobinhood(false)}
-              onLive={() => {
-                if (window.confirm(`Place LIVE Robinhood buy for ${report.resolved_symbol}?`)) {
-                  executeOnRobinhood(true);
-                }
-              }}
-              onOptionReview={(overlay) => executeOptionOverlay(overlay, false)}
-              onOptionLive={(overlay) => {
-                const preview = overlay?.what_flows_to_robinhood?.order_preview;
-                const leg = preview?.legs?.[0];
-                const label = leg
-                  ? `${preview.strategy || overlay.id}: ${leg.side} ${leg.right} ${leg.strike} ${leg.expiration}`
-                  : overlay?.title || overlay?.id;
-                if (window.confirm(`Place LIVE options order?\n${label}`)) {
-                  executeOptionOverlay(overlay, true);
+              onExecuteIdea={(idea) => executePlaybookIdea(idea, false)}
+              onLiveIdea={(idea) => {
+                const hasTrigger = Boolean(idea?.schedule?.trigger);
+                const label = idea?.title || idea?.id || report.resolved_symbol;
+                if (
+                  window.confirm(
+                    hasTrigger
+                      ? `Arm LIVE plan for ${label}?\nWill WAIT for trigger, then place — not immediate.`
+                      : `Place LIVE full plan for ${label}?`
+                  )
+                ) {
+                  executePlaybookIdea(idea, true);
                 }
               }}
             />
