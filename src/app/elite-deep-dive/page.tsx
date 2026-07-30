@@ -5,6 +5,7 @@ import {
   Brain, Search, RefreshCw, AlertTriangle, CheckCircle2,
   TrendingUp, Newspaper, Users, Building2, LineChart, Globe2, GitBranch
 } from "lucide-react";
+import AgentPlaybook from "@/components/AgentPlaybook";
 
 type AssetType = "auto" | "equity" | "crypto";
 
@@ -377,6 +378,22 @@ export default function EliteDeepDivePage() {
               </div>
             )}
           </section>
+
+          {/* 3b. Agent playbook — exact Robinhood directions */}
+          {report.agent_playbook && (
+            <AgentPlaybook
+              playbook={report.agent_playbook}
+              rhBusy={rhBusy}
+              liveEnabled={Boolean(rhStatus?.live_trading_enabled)}
+              biasNeutral={report.trade_plan?.bias === "NEUTRAL"}
+              onReview={() => executeOnRobinhood(false)}
+              onLive={() => {
+                if (window.confirm(`Place LIVE Robinhood buy for ${report.resolved_symbol}?`)) {
+                  executeOnRobinhood(true);
+                }
+              }}
+            />
+          )}
 
           {/* 4. Positions laid out */}
           <section className="space-y-4">
