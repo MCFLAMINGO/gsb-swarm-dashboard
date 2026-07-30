@@ -7,33 +7,51 @@ import {
   CheckCircle2, AlertTriangle, GitBranch
 } from "lucide-react";
 import { toast } from "sonner";
-import AgentPlaybook from "@/components/AgentPlaybook";
-import CeoTradeBook from "@/components/CeoTradeBook";
+import ResearchSessionCard from "@/components/ResearchSessionCard";
+import ExecutionIdeaCard from "@/components/ExecutionIdeaCard";
+import {
+  buildDeskSession,
+  type DeskSession,
+  type ExecutionIdea,
+} from "@/lib/deskIdeas";
 
 const TEAM = [
   { role: "Chief Analyst", name: "Elite / Equity Analyst", href: "/elite-deep-dive", note: "Thesis · desk voice · contrarian · ROI plan" },
   { role: "Token / On-chain", name: "Token Analyst + Alpha", href: "/team", note: "Liquidity, whales, early signals" },
   { role: "Wallet / Flow", name: "Wallet Profiler", href: "/team", note: "Holdings, smart money, DCA" },
   { role: "Macro / Nodes", name: "LocalIntel Node Model", href: "/macro", note: "FRED · ZIP · market intel → desk" },
-  { role: "Lead Trader", name: "CEO · Kelly size", href: "/#engage-strategies", note: "Edge ÷ odds · fractional Kelly · Review→Place" },
+  { role: "Lead Trader", name: "CEO · Kelly size", href: "/#desk-sessions", note: "Edge ÷ odds · fractional Kelly · Execute cards" },
   { role: "Execution", name: "Robinhood · Copy · THROW", href: "/execute", note: "Review → place · copy · Tempo tape" },
 ];
+
+const STORAGE_KEY = "gsb-desk-sessions-v1";
 
 export default function DeskHomePage() {
   const [query, setQuery] = useState("");
   const [pending, setPending] = useState(false);
   const [elapsedSec, setElapsedSec] = useState(0);
-  const [report, setReport] = useState<any>(null);
+  const [sessions, setSessions] = useState<DeskSession[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [rhStatus, setRhStatus] = useState<any>(null);
   const [sources, setSources] = useState<any>(null);
   const [rhHorizon, setRhHorizon] = useState<"day" | "week" | "month" | "year">("week");
-  const [rhNotional, setRhNotional] = useState("50");
-  const [rhBusy, setRhBusy] = useState(false);
-  const [rhResult, setRhResult] = useState<any>(null);
-  const [rhError, setRhError] = useState<string | null>(null);
+  const [rhBusyIdeaId, setRhBusyIdeaId] = useState<string | null>(null);
+  const [ideaResults, setIdeaResults] = useState<Record<string, any>>({});
 
   useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as DeskSession[];
+        if (Array.isArray(parsed) && parsed.length) {
+          setSessions(parsed.slice(0, 8));
+          setActiveId(parsed[0]?.id || null);
+        }
+      }
+    } catch {
+      /* ignore */
+    }
     fetch("/api/elite-analysis", { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => setSources(d.sources || null))
@@ -45,11 +63,21 @@ export default function DeskHomePage() {
   }, []);
 
   useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions.slice(0, 8)));
+    } catch {
+      /* ignore */
+    }
+  }, [sessions]);
+
+  useEffect(() => {
     if (!pending) return;
     setElapsedSec(0);
     const t = setInterval(() => setElapsedSec((s) => s + 1), 1000);
     return () => clearInterval(t);
   }, [pending]);
+
+  const active = sessions.find((s) => s.id === activeId) || sessions[0] || null;
 
   async function runDesk() {
     const q = query.trim().toUpperCase();
@@ -58,9 +86,6 @@ export default function DeskHomePage() {
       return;
     }
     setError(null);
-    setReport(null);
-    setRhResult(null);
-    setRhError(null);
     setPending(true);
     try {
       const res = await fetch("/api/elite-analysis", {
@@ -79,13 +104,29 @@ export default function DeskHomePage() {
         );
       }
       if (!data.report) throw new Error("No report returned — Railway elite-analysis may have failed");
-      setReport(data.report);
-      const kellyAmt = data.report?.ceo_trade_book?.kelly?.recommended_notional_usd
-        ?? data.report?.trade_plan?.kelly?.recommended_notional_usd;
-      if (kellyAmt != null && Number(kellyAmt) >= 0) setRhNotional(String(kellyAmt));
+      const session = buildDeskSession(data.report);
+      // Best-effort friendly name (AAPL → Apple) for the collapsible card title
+      try {
+        const nr = await fetch(`/api/ticker-name?symbol=${encodeURIComponent(session.symbol)}`, {
+          cache: "no-store",
+          signal: AbortSignal.timeout(8000),
+        });
+        const nd = await nr.json().catch(() => ({}));
+        if (nd?.name) session.name = String(nd.name);
+      } catch {
+        /* keep industry/symbol fallback */
+      }
+      setSessions((prev) => {
+        const withoutDup = prev.filter((s) => s.symbol !== session.symbol);
+        return [session, ...withoutDup].slice(0, 8);
+      });
+      setActiveId(session.id);
       if (data.sources) setSources((prev: any) => ({ ...(prev || {}), ...data.sources }));
+      toast.success(`${session.symbol} research ready`, {
+        description: `${session.ideas.length} execution ideas ranked by conviction`,
+      });
       setTimeout(() => {
-        document.getElementById("desk-summation")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        document.getElementById("desk-sessions")?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 80);
     } catch (e) {
       const msg = (e as Error).name === "TimeoutError"
@@ -97,81 +138,66 @@ export default function DeskHomePage() {
     }
   }
 
-  async function executeOnRobinhood(live: boolean) {
-    if (!report?.resolved_symbol && !query.trim()) return;
-    setRhError(null);
-    setRhResult(null);
-    setRhBusy(true);
+  async function executeIdea(idea: ExecutionIdea, live: boolean, session: DeskSession) {
+    const report = session.report;
+    const resultKey = `${session.id}:${idea.id}`;
+    setRhBusyIdeaId(idea.id);
     try {
-      const res = await fetch("/api/robinhood", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          symbol: report?.resolved_symbol || query.trim(),
-          trade_plan: report?.trade_plan || undefined,
-          horizon: rhHorizon,
-          notionalUsd: Number(rhNotional) || 50,
-          dryRun: !live,
-          confirm: live,
-          orderType: "market",
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok && !data.order && !data.order_preview) {
-        throw new Error(data.error || data.message || `HTTP ${res.status}`);
+      let res: Response;
+      if (idea.executeMode === "options") {
+        res = await fetch("/api/robinhood", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "options",
+            overlay: idea.overlay,
+            dryRun: !live,
+            confirm: live,
+          }),
+        });
+      } else if (idea.executeMode === "equity") {
+        const notional =
+          idea.notionalHint ??
+          report?.ceo_trade_book?.kelly?.recommended_notional_usd ??
+          50;
+        res = await fetch("/api/robinhood", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            symbol: report?.resolved_symbol || session.symbol,
+            trade_plan: report?.trade_plan || undefined,
+            horizon: rhHorizon,
+            notionalUsd: Number(notional) || 50,
+            dryRun: !live,
+            confirm: live,
+            orderType: "market",
+          }),
+        });
+      } else {
+        toast.message("Concept only", {
+          description: "This idea has no live MCP place path — open a put/primary card to execute.",
+        });
+        return;
       }
-      setRhResult(data);
-      toast.success(live ? "Live order submitted" : "Order reviewed (dry-run)");
-      const st = await fetch("/api/robinhood?action=status", { cache: "no-store" });
-      setRhStatus(await st.json());
-    } catch (e) {
-      setRhError((e as Error).message);
-      toast.error("Robinhood action failed", { description: (e as Error).message });
-    } finally {
-      setRhBusy(false);
-    }
-  }
 
-  async function executeOptionOverlay(overlay: any, live: boolean) {
-    if (!overlay) return;
-    setRhError(null);
-    setRhResult(null);
-    setRhBusy(true);
-    try {
-      const res = await fetch("/api/robinhood", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "options",
-          overlay,
-          dryRun: !live,
-          confirm: live,
-        }),
-      });
       const data = await res.json();
       if (!res.ok && !data.order && !data.order_preview && !data.review) {
         throw new Error(data.error || data.message || `HTTP ${res.status}`);
       }
-      setRhResult(data);
-      toast.success(live ? "Options order submitted" : "Options order reviewed (dry-run)");
+      setIdeaResults((prev) => ({ ...prev, [resultKey]: data }));
+      toast.success(live ? "Live order submitted" : "Agent reviewed (dry-run)");
       const st = await fetch("/api/robinhood?action=status", { cache: "no-store" });
       setRhStatus(await st.json());
     } catch (e) {
-      setRhError((e as Error).message);
-      toast.error("Options action failed", { description: (e as Error).message });
+      toast.error("Execute failed", { description: (e as Error).message });
+      setIdeaResults((prev) => ({
+        ...prev,
+        [resultKey]: { error: (e as Error).message },
+      }));
     } finally {
-      setRhBusy(false);
+      setRhBusyIdeaId(null);
     }
   }
-
-  const verdict = report?.verdict?.verdict;
-  const contra = report?.trade_plan?.contrarian_play || report?.institutional?.contrarian_play;
-  const week = report?.trade_plan?.horizons?.week;
-  const sleeve = report?.institutional?.portfolio_fit?.suggested_sleeve_pct;
-  const verdictColor =
-    String(verdict).includes("BUY") ? "text-emerald-300 border-emerald-500/40 bg-emerald-500/15"
-      : String(verdict).includes("AVOID") || String(verdict).includes("RISKY") ? "text-red-300 border-red-500/40 bg-red-500/15"
-        : "text-amber-200 border-amber-500/40 bg-amber-500/15";
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -179,19 +205,18 @@ export default function DeskHomePage() {
         <header className="space-y-2">
           <p className="text-xs uppercase tracking-[0.2em] text-foreground/70">GSB Trading Desk</p>
           <h1 className="text-3xl font-semibold tracking-tight text-foreground">
-            Research → thesis → trade
+            Research → ranked ideas → execute
           </h1>
           <p className="text-base text-foreground/85 max-w-2xl">
-            Type a ticker, run the desk, read the summation, then engage a strategy below
-            (Robinhood review/live, Copy, or THROW).
+            Run a ticker. Research stays in a collapsible card. Investment ideas become execution
+            cards — highest conviction first, including shorts — expand for the full concept, then Execute.
           </p>
         </header>
 
-        {/* Run */}
         <section className="rounded-lg border border-primary/35 bg-primary/10 p-5 space-y-4">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <h2 className="text-lg font-semibold flex items-center gap-2">
-              <Brain className="h-5 w-5 text-primary" /> 1. Run research
+              <Brain className="h-5 w-5 text-primary" /> Run research
             </h2>
             <div className="flex items-center gap-3 text-sm text-foreground/80">
               <span className="inline-flex items-center gap-1">
@@ -228,161 +253,109 @@ export default function DeskHomePage() {
               {pending ? `Researching… ${elapsedSec}s` : "Run Elite Desk"}
             </button>
           </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="text-sm text-foreground/75 flex items-center gap-2">
+              Horizon
+              <select
+                value={rhHorizon}
+                onChange={(e) => setRhHorizon(e.target.value as typeof rhHorizon)}
+                className="rounded-md border border-border bg-secondary px-2 py-1.5 text-sm"
+              >
+                <option value="day">Day</option>
+                <option value="week">Week</option>
+                <option value="month">Month</option>
+                <option value="year">Year</option>
+              </select>
+            </label>
+          </div>
           {pending && (
             <p className="text-base text-amber-200">
-              Still working — usually 45–90 seconds. Keep this tab open. Summation appears below when done.
+              Still working — usually 45–90 seconds. Keep this tab open. Cards appear below when done.
             </p>
           )}
           {error && <p className="text-base text-red-300">{error}</p>}
-          {!report && !pending && !error && (
+          {!sessions.length && !pending && !error && (
             <p className="text-base text-foreground/75">
-              Enter a ticker and run. Summation, thesis, positions, and trade buttons appear after research finishes.
+              Enter a ticker and run. Finished research stays here as collapsible cards with ranked execution ideas.
             </p>
           )}
         </section>
 
-        {report && (
-          <>
-            {/* Summation */}
-            <section id="desk-summation" className="rounded-lg border border-primary/35 bg-card p-5 md:p-6 space-y-3 scroll-mt-4">
-              <div className="flex flex-wrap items-center gap-3">
-                <div className={`rounded-md border px-4 py-2 text-lg font-bold ${verdictColor}`}>
-                  {verdict || "NO VERDICT"}
-                </div>
-                <div className="text-base text-foreground/90">
-                  <span className="font-semibold">{report.resolved_symbol}</span>
-                  {" · "}Bias <span className="font-semibold">{report.trade_plan?.bias || "—"}</span>
-                  {week && <> · Week target {week.target_roi_pct > 0 ? "+" : ""}{week.target_roi_pct}%</>}
-                </div>
-              </div>
-              <h2 className="text-xl font-semibold">2. Research summation</h2>
-              <div className="text-base leading-relaxed text-foreground whitespace-pre-wrap max-h-[420px] overflow-y-auto rounded-md border border-border bg-secondary/30 p-4">
-                {report.analyst_memo || report.institutional?.investment_thesis || "No memo returned."}
-              </div>
-              <Link href="/elite-deep-dive" className="inline-block text-base text-accent hover:underline font-medium">
-                Open full Elite Research (all evidence) →
-              </Link>
-            </section>
-
-            {/* Thesis */}
-            <section className="rounded-lg border border-border bg-card p-5 space-y-3">
-              <h2 className="text-xl font-semibold">3. Thesis — why we think this</h2>
-              <p className="text-base leading-relaxed text-foreground">
-                {report.institutional?.investment_thesis || "Thesis not available."}
-              </p>
-              {(report.verdict?.reasons || []).length > 0 && (
-                <ol className="list-decimal pl-5 space-y-2">
-                  {(report.verdict.reasons as string[]).map((r, i) => (
-                    <li key={i} className="text-base text-foreground/90">{r}</li>
-                  ))}
-                </ol>
-              )}
-            </section>
-
-            {/* Positions */}
-            <section className="space-y-3">
-              <h2 className="text-xl font-semibold">4. Positions laid out</h2>
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-5 space-y-2">
-                  <div className="flex justify-between gap-2">
-                    <h3 className="text-lg font-semibold">Primary</h3>
-                    <span className="text-sm font-bold text-emerald-200">{week?.action || report.trade_plan?.bias}</span>
-                  </div>
-                  <p className="text-base text-foreground/90">{week?.thesis}</p>
-                  <Row label="Entry" value={fmt(week?.entry_price ?? report.trade_plan?.mark_price)} />
-                  <Row label="Target" value={fmt(week?.target_price)} />
-                  <Row label="Stop" value={fmt(week?.stop_price)} />
-                  <Row label="Target ROI" value={fmtPct(week?.target_roi_pct)} />
-                  <Row label="Sleeve" value={sleeve != null ? `${sleeve}% of book` : null} />
-                </div>
-                <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-5 space-y-2">
-                  <div className="flex justify-between gap-2">
-                    <h3 className="text-lg font-semibold">Contrarian</h3>
-                    <span className="text-sm font-bold text-amber-100">{contra?.action || "FADE"}</span>
-                  </div>
-                  <p className="text-base text-foreground/90">{contra?.thesis}</p>
-                  <Row label="Trigger" value={contra?.setup?.entry_trigger} />
-                  <Row label="Entry" value={fmt(contra?.setup?.entry_price)} />
-                  <Row label="Target" value={fmt(contra?.setup?.target_price)} />
-                  <Row label="Stop" value={fmt(contra?.setup?.stop_price)} />
-                  <Row label="Target ROI" value={fmtPct(contra?.setup?.target_roi_pct)} />
-                </div>
-              </div>
-            </section>
-
-            {/* 5. Agent playbook + engage */}
-            <div id="engage-strategies" className="scroll-mt-4 space-y-4">
-              <div className="flex flex-wrap items-end justify-between gap-3">
-                <h2 className="text-xl font-semibold">5. Engage — CEO Kelly → agent directions</h2>
-                <div className="flex gap-2 items-center">
-                  <select
-                    value={rhHorizon}
-                    onChange={(e) => setRhHorizon(e.target.value as typeof rhHorizon)}
-                    className="rounded-md border border-border bg-secondary px-3 py-2 text-sm"
+        {sessions.length > 0 && (
+          <div id="desk-sessions" className="scroll-mt-4 space-y-6">
+            {sessions.length > 1 && (
+              <div className="flex flex-wrap gap-2">
+                {sessions.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => setActiveId(s.id)}
+                    className={`rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${
+                      (active?.id === s.id)
+                        ? "border-primary/50 bg-primary/15 text-foreground"
+                        : "border-border bg-secondary text-foreground/80 hover:border-primary/30"
+                    }`}
                   >
-                    <option value="day">Day</option>
-                    <option value="week">Week</option>
-                    <option value="month">Month</option>
-                    <option value="year">Year</option>
-                  </select>
-                  <input
-                    value={rhNotional}
-                    onChange={(e) => setRhNotional(e.target.value)}
-                    className="w-24 rounded-md border border-border bg-secondary px-3 py-2 text-sm"
-                    title="Notional USD (prefilled from CEO Kelly)"
-                  />
-                </div>
+                    {s.symbol}
+                    {s.name && s.name !== s.symbol ? ` · ${s.name}` : ""}
+                  </button>
+                ))}
               </div>
+            )}
 
-              <CeoTradeBook book={report.ceo_trade_book} />
+            {active && (
+              <>
+                <ResearchSessionCard
+                  session={active}
+                  defaultOpen
+                  onRemove={() => {
+                    setSessions((prev) => {
+                      const next = prev.filter((s) => s.id !== active.id);
+                      setActiveId(next[0]?.id || null);
+                      return next;
+                    });
+                  }}
+                />
 
-              <AgentPlaybook
-                playbook={report.agent_playbook}
-                rhBusy={rhBusy}
-                liveEnabled={Boolean(rhStatus?.live_trading_enabled)}
-                optionsEnabled={rhStatus?.options_trading_enabled !== false}
-                biasNeutral={report.trade_plan?.bias === "NEUTRAL"}
-                onReview={() => executeOnRobinhood(false)}
-                onLive={() => {
-                  if (window.confirm(`Place LIVE buy ${report.resolved_symbol} for $${rhNotional}?`)) {
-                    executeOnRobinhood(true);
-                  }
-                }}
-                onOptionReview={(overlay) => executeOptionOverlay(overlay, false)}
-                onOptionLive={(overlay) => {
-                  const preview = overlay?.what_flows_to_robinhood?.order_preview;
-                  const leg = preview?.legs?.[0];
-                  const label = leg
-                    ? `${preview.strategy || overlay.id}: ${leg.side} ${leg.right} ${leg.strike} ${leg.expiration}`
-                    : overlay?.title || overlay?.id;
-                  if (window.confirm(`Place LIVE options order?\n${label}`)) {
-                    executeOptionOverlay(overlay, true);
-                  }
-                }}
-              />
-
-              {rhError && <p className="text-base text-red-300">{rhError}</p>}
-              {rhResult && (
-                <pre className="text-sm text-foreground/90 whitespace-pre-wrap max-h-48 overflow-auto rounded border border-border bg-background/60 p-3">
-                  {JSON.stringify({
-                    mode: rhResult.mode,
-                    message: rhResult.message,
-                    order: rhResult.order || rhResult.order_preview,
-                    review: rhResult.review?.parsed || rhResult.review?.text || rhResult.review,
-                    placed: rhResult.placed?.parsed || rhResult.placed?.text || rhResult.placed,
-                  }, null, 2)}
-                </pre>
-              )}
-
-              <p className="text-sm text-foreground/70">
-                Copy Trader / THROW are separate rails (yield & Tempo tape) — not part of this Robinhood equity directive.
-                <Link href="/execute" className="text-accent ml-1 hover:underline">Execute rail →</Link>
-              </p>
-            </div>
-          </>
+                <section className="space-y-3">
+                  <div className="flex flex-wrap items-end justify-between gap-2">
+                    <div>
+                      <h2 className="text-xl font-semibold">Execution ideas</h2>
+                      <p className="text-sm text-foreground/75">
+                        Highest conviction → lowest. Includes long, income overlays, hedges, and short/contrarian.
+                        Click a card for the full concept, then Execute agent.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    {active.ideas.map((idea, idx) => (
+                      <ExecutionIdeaCard
+                        key={`${active.id}-${idea.id}`}
+                        idea={idea}
+                        rank={idx + 1}
+                        busy={rhBusyIdeaId === idea.id}
+                        liveEnabled={Boolean(rhStatus?.live_trading_enabled)}
+                        result={ideaResults[`${active.id}:${idea.id}`]}
+                        onExecute={(idea) => executeIdea(idea, false, active)}
+                        onPlaceLive={(idea) => {
+                          const label = `${idea.title} (${idea.side})`;
+                          if (window.confirm(`Place LIVE via Robinhood Agentic?\n${label}`)) {
+                            executeIdea(idea, true, active);
+                          }
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <p className="text-sm text-foreground/70">
+                    Execute = agent dry-run review. Place live needs Robinhood live trading on.
+                    <Link href="/execute" className="text-accent ml-1 hover:underline">Execute rail →</Link>
+                  </p>
+                </section>
+              </>
+            )}
+          </div>
         )}
 
-        {/* Team / macro — secondary */}
         <section className="space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-base font-semibold flex items-center gap-2">
@@ -420,29 +393,9 @@ export default function DeskHomePage() {
 
         <p className="text-sm text-foreground/70 flex items-center gap-1.5">
           <GitBranch className="h-3.5 w-3.5" />
-          Desk → Railway elite-analysis → Robinhood Agentic / Copy / THROW
+          Desk → Railway elite-analysis → ranked execution cards → Robinhood Agentic
         </p>
       </div>
     </div>
   );
-}
-
-function Row({ label, value }: { label: string; value?: string | number | null }) {
-  return (
-    <div className="flex justify-between gap-3 text-base border-b border-border/40 pb-1">
-      <span className="text-foreground/70">{label}</span>
-      <span className="font-medium text-foreground text-right">{value == null || value === "" ? "—" : String(value)}</span>
-    </div>
-  );
-}
-
-function fmt(n: unknown) {
-  if (typeof n !== "number" || Number.isNaN(n)) return null;
-  if (Math.abs(n) >= 1e3) return `$${n.toFixed(2)}`;
-  return n < 2 ? `$${n.toFixed(4)}` : `$${n.toFixed(2)}`;
-}
-
-function fmtPct(n: unknown) {
-  if (typeof n !== "number" || Number.isNaN(n)) return null;
-  return `${n > 0 ? "+" : ""}${n.toFixed(2)}%`;
 }
