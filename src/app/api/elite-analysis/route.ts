@@ -24,7 +24,7 @@ async function getRailwayToken(): Promise<string> {
   return _railwayToken;
 }
 
-async function railwayPost(path: string, body: unknown, token: string) {
+async function railwayPost(path: string, body: unknown, token: string, timeoutMs = 95_000) {
   return fetch(`${RAILWAY_BASE}${path}`, {
     method: "POST",
     headers: {
@@ -32,7 +32,14 @@ async function railwayPost(path: string, body: unknown, token: string) {
       "x-gsb-token": token,
     },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(timeoutMs),
+    cache: "no-store",
   });
+}
+
+function isGatewayTimeout(status: number, text: string) {
+  if (status === 502 || status === 503 || status === 504) return true;
+  return /Application failed to respond|gateway|timed? ?out/i.test(text || "");
 }
 
 export async function GET() {
@@ -62,7 +69,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const query = String(body.query || body.ticker || body.symbol || "").trim();
     const assetType = ["auto", "equity", "crypto"].includes(body.assetType) ? body.assetType : "auto";
-    const includeSynthesis = body.includeSynthesis !== false;
+    let includeSynthesis = body.includeSynthesis !== false;
 
     if (!query) {
       return NextResponse.json({ error: "query is required (ticker, company, or token address)" }, { status: 400 });
@@ -71,16 +78,59 @@ export async function POST(req: NextRequest) {
     let token = await getRailwayToken();
 
     // Prefer dedicated elite-analysis endpoint; fall back to fire-job Equity Analyst
-    let res = await railwayPost(
-      "/api/elite-analysis",
-      { query, assetType, includeSynthesis },
-      token
-    );
+    let res: Response;
+    try {
+      res = await railwayPost(
+        "/api/elite-analysis",
+        { query, assetType, includeSynthesis },
+        token
+      );
+    } catch (err) {
+      // AbortError / network — retry fast pack without NIM
+      if (includeSynthesis) {
+        includeSynthesis = false;
+        res = await railwayPost(
+          "/api/elite-analysis",
+          { query, assetType, includeSynthesis: false },
+          token,
+          60_000
+        );
+      } else {
+        throw err;
+      }
+    }
 
     if (res.status === 401) {
       _railwayToken = null;
       token = await getRailwayToken();
       res = await railwayPost("/api/elite-analysis", { query, assetType, includeSynthesis }, token);
+    }
+
+    // Railway edge 502 "Application failed to respond" = NIM/synthesis hung past ~100s.
+    // Retry once with includeSynthesis:false (research pack only, ~4–15s).
+    if (includeSynthesis) {
+      const peek = !res.ok ? await res.clone().text().catch(() => "") : "";
+      if (isGatewayTimeout(res.status, peek)) {
+        console.warn(`[elite-analysis] ${res.status} with synthesis — retrying without NIM`);
+        res = await railwayPost(
+          "/api/elite-analysis",
+          { query, assetType, includeSynthesis: false },
+          token,
+          60_000
+        );
+        if (res.ok) {
+          const data = await res.json();
+          return NextResponse.json({
+            ...data,
+            via: "elite-analysis",
+            synthesis_note:
+              data.synthesis_note ||
+              "Full NIM memo timed out on Railway — returned fast desk pack (fallback memo).",
+          });
+        }
+      } else if (!res.ok && peek) {
+        // Restore body for error path below by re-wrapping — we consumed clone only
+      }
     }
 
     if (res.status === 404) {
@@ -115,15 +165,28 @@ export async function POST(req: NextRequest) {
 
     if (!res.ok) {
       const err = await res.text().catch(() => `HTTP ${res.status}`);
-      return NextResponse.json({ error: `Railway elite-analysis failed: ${err}` }, { status: 502 });
+      return NextResponse.json(
+        {
+          error: `Railway elite-analysis failed: ${err}`,
+          hint:
+            "If you see Application failed to respond, NIM synthesis hung — retry; dashboard auto-retries without synthesis.",
+        },
+        { status: res.status === 504 ? 504 : 502 }
+      );
     }
 
     const data = await res.json();
     return NextResponse.json({ ...data, via: "elite-analysis" });
   } catch (err) {
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    const timedOut = /timeout|aborted|TimeoutError/i.test(msg);
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Unknown error" },
-      { status: 500 }
+      {
+        error: timedOut
+          ? "Elite timed out waiting for Railway (often NVIDIA NIM). Retry — or wait for the NIM timeout hotfix deploy."
+          : msg,
+      },
+      { status: timedOut ? 504 : 500 }
     );
   }
 }
