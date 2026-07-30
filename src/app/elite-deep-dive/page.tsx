@@ -6,6 +6,7 @@ import {
   TrendingUp, Newspaper, Users, Building2, LineChart, Globe2, GitBranch
 } from "lucide-react";
 import AgentPlaybook from "@/components/AgentPlaybook";
+import CeoTradeBook from "@/components/CeoTradeBook";
 
 type AssetType = "auto" | "equity" | "crypto";
 
@@ -176,6 +177,9 @@ export default function EliteDeepDivePage() {
       }
       if (!data.report) throw new Error("No report returned — Railway elite-analysis may have failed");
       setReport(data.report);
+      const kellyAmt = data.report?.ceo_trade_book?.kelly?.recommended_notional_usd
+        ?? data.report?.trade_plan?.kelly?.recommended_notional_usd;
+      if (kellyAmt != null && Number(kellyAmt) >= 0) setRhNotional(String(kellyAmt));
       setDurationMs(data.duration_ms ?? null);
       if (data.sources) setSources((prev) => ({ ...(prev || {}), ...data.sources }));
       setTimeout(() => {
@@ -408,7 +412,8 @@ export default function EliteDeepDivePage() {
             )}
           </section>
 
-          {/* 3b. Agent playbook — exact Robinhood directions */}
+          {/* 3b. CEO Kelly book + agent playbook */}
+          {report.ceo_trade_book && <CeoTradeBook book={report.ceo_trade_book} />}
           {report.agent_playbook && (
             <AgentPlaybook
               playbook={report.agent_playbook}

@@ -8,13 +8,14 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import AgentPlaybook from "@/components/AgentPlaybook";
+import CeoTradeBook from "@/components/CeoTradeBook";
 
 const TEAM = [
   { role: "Chief Analyst", name: "Elite / Equity Analyst", href: "/elite-deep-dive", note: "Thesis · desk voice · contrarian · ROI plan" },
   { role: "Token / On-chain", name: "Token Analyst + Alpha", href: "/team", note: "Liquidity, whales, early signals" },
   { role: "Wallet / Flow", name: "Wallet Profiler", href: "/team", note: "Holdings, smart money, DCA" },
   { role: "Macro / Nodes", name: "LocalIntel Node Model", href: "/macro", note: "FRED · ZIP · market intel → desk" },
-  { role: "CEO Orchestrator", name: "ACP CEO", href: "/team", note: "Cook swarm · Virtuals hire" },
+  { role: "Lead Trader", name: "CEO · Kelly size", href: "/#engage-strategies", note: "Edge ÷ odds · fractional Kelly · Review→Place" },
   { role: "Execution", name: "Robinhood · Copy · THROW", href: "/execute", note: "Review → place · copy · Tempo tape" },
 ];
 
@@ -79,6 +80,9 @@ export default function DeskHomePage() {
       }
       if (!data.report) throw new Error("No report returned — Railway elite-analysis may have failed");
       setReport(data.report);
+      const kellyAmt = data.report?.ceo_trade_book?.kelly?.recommended_notional_usd
+        ?? data.report?.trade_plan?.kelly?.recommended_notional_usd;
+      if (kellyAmt != null && Number(kellyAmt) >= 0) setRhNotional(String(kellyAmt));
       if (data.sources) setSources((prev: any) => ({ ...(prev || {}), ...data.sources }));
       setTimeout(() => {
         document.getElementById("desk-summation")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -309,7 +313,7 @@ export default function DeskHomePage() {
             {/* 5. Agent playbook + engage */}
             <div id="engage-strategies" className="scroll-mt-4 space-y-4">
               <div className="flex flex-wrap items-end justify-between gap-3">
-                <h2 className="text-xl font-semibold">5. Engage — agent directions</h2>
+                <h2 className="text-xl font-semibold">5. Engage — CEO Kelly → agent directions</h2>
                 <div className="flex gap-2 items-center">
                   <select
                     value={rhHorizon}
@@ -325,10 +329,12 @@ export default function DeskHomePage() {
                     value={rhNotional}
                     onChange={(e) => setRhNotional(e.target.value)}
                     className="w-24 rounded-md border border-border bg-secondary px-3 py-2 text-sm"
-                    title="Notional USD"
+                    title="Notional USD (prefilled from CEO Kelly)"
                   />
                 </div>
               </div>
+
+              <CeoTradeBook book={report.ceo_trade_book} />
 
               <AgentPlaybook
                 playbook={report.agent_playbook}
