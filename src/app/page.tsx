@@ -149,6 +149,10 @@ export default function DeskHomePage() {
         },
       },
     }));
+    setTimeout(() => {
+      document.getElementById("ticker-context")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      document.getElementById("desk-active-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 60);
   }
 
   function selectPosition(positionId: string) {
@@ -168,6 +172,10 @@ export default function DeskHomePage() {
         },
       },
     }));
+    setTimeout(() => {
+      document.getElementById("ticker-context")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      document.getElementById("armed-plan")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 60);
   }
 
   async function runDesk(symbolOverride?: string) {
@@ -534,6 +542,7 @@ export default function DeskHomePage() {
               />
             )}
 
+            <div id="desk-active-panel" className="scroll-mt-4 space-y-4">
             {active && showConcepts && (
               <>
                 <ResearchSessionCard
@@ -553,11 +562,13 @@ export default function DeskHomePage() {
                 />
 
                 <section className="space-y-3">
-                  <div>
-                    <h2 className="text-xl font-semibold">Concepts</h2>
+                  <div className="rounded-md border border-primary/30 bg-primary/10 px-3 py-2">
+                    <h2 className="text-xl font-semibold">
+                      {active.symbol} concepts
+                    </h2>
                     <p className="text-sm text-foreground/75">
-                      Every option below. Execute one → it becomes a position button; the rest collapse into the ticker
-                      but keep paper-monitoring to expiry.
+                      Showing because you selected the <strong>{active.symbol}</strong> ticker.
+                      Execute one → it becomes a position chip; other concepts stay paper-monitored.
                     </p>
                   </div>
                   <div className="space-y-3">
@@ -628,6 +639,7 @@ export default function DeskHomePage() {
             {activeSymbol && (
               <ConceptOutcomesPanel outcomes={store.outcomes} symbol={activeSymbol} />
             )}
+            </div>
           </div>
         )}
 
