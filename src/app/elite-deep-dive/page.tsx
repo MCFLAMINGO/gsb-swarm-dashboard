@@ -193,6 +193,16 @@ export default function EliteDeepDivePage() {
       }
       setRhResult(data);
       const waiting = data.plan?.status === "waiting_trigger";
+      const triggerDetail = data.plan?.steps?.find((s: any) => s.phase === "wait")?.detail;
+      // Visible confirmation — Execute often arms wait (no order yet)
+      console.info("[elite] arm-plan", data.plan?.id, data.plan?.status, data.message);
+      if (waiting) {
+        setRhError(null);
+      }
+      // Scroll result into view
+      setTimeout(() => {
+        document.getElementById("elite-exec-result")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }, 80);
       if (waiting) {
         // Poll so trigger→place advances without another click
         const planId = data.plan.id;
@@ -204,7 +214,7 @@ export default function EliteDeepDivePage() {
               body: JSON.stringify({ action: "tick-plan", planId }),
             });
             const td = await tr.json();
-            if (td?.plan) setRhResult((prev: any) => ({ ...prev, ...td }));
+            if (td?.plan) setRhResult((prev: any) => ({ ...prev, ...td, message: td.actions?.[0]?.type === "still_waiting" ? `Still waiting for trigger${triggerDetail ? `: ${triggerDetail}` : ""}` : prev?.message }));
           } catch {
             /* ignore */
           }
@@ -705,16 +715,47 @@ export default function EliteDeepDivePage() {
               </div>
               {rhError && <p className="text-base text-red-300">{rhError}</p>}
               {rhResult && (
-                <pre className="text-sm text-foreground/90 whitespace-pre-wrap max-h-56 overflow-auto rounded border border-border bg-secondary/40 p-3">
-                  {JSON.stringify({
-                    mode: rhResult.mode,
-                    message: rhResult.message,
-                    order: rhResult.order || rhResult.order_preview,
-                    meta: rhResult.meta,
-                    review: rhResult.review?.parsed || rhResult.review?.text || rhResult.review,
-                    placed: rhResult.placed?.parsed || rhResult.placed?.text || rhResult.placed,
-                  }, null, 2)}
-                </pre>
+                <div id="elite-exec-result" className="space-y-2 scroll-mt-4">
+                  <div className="rounded-md border border-accent/40 bg-accent/10 px-3 py-3 text-base text-foreground">
+                    <div className="font-semibold">
+                      {rhResult.plan?.status === "waiting_trigger"
+                        ? "Execute worked — waiting for trigger (no order yet)"
+                        : rhResult.ok === false
+                          ? "Execute failed"
+                          : "Execute worked — plan armed on server"}
+                    </div>
+                    <p className="text-sm text-foreground/80 mt-1">
+                      {rhResult.message || rhResult.error || "See plan steps below."}
+                    </p>
+                    {rhResult.plan?.status && (
+                      <p className="text-sm text-foreground/70 mt-1">
+                        Status: <strong>{String(rhResult.plan.status).replace(/_/g, " ")}</strong>
+                        {rhResult.plan.id ? ` · plan ${String(rhResult.plan.id).slice(0, 8)}` : ""}
+                      </p>
+                    )}
+                    {rhResult.plan?.status === "waiting_trigger" && (
+                      <p className="text-sm text-amber-200 mt-2">
+                        This is expected for contrarian / trigger ideas. The worker places only after the trigger prints, then monitors stop/target.
+                      </p>
+                    )}
+                  </div>
+                  <pre className="text-sm text-foreground/90 whitespace-pre-wrap max-h-56 overflow-auto rounded border border-border bg-secondary/40 p-3">
+                    {JSON.stringify({
+                      mode: rhResult.mode,
+                      message: rhResult.message,
+                      plan_status: rhResult.plan?.status,
+                      plan_id: rhResult.plan?.id,
+                      steps: rhResult.plan?.steps?.map((s: any) => ({
+                        id: s.id,
+                        status: s.status,
+                        title: s.title,
+                      })),
+                      actions: rhResult.actions,
+                      order: rhResult.order || rhResult.order_preview,
+                      review: rhResult.review?.parsed || rhResult.review?.text || rhResult.review,
+                    }, null, 2)}
+                  </pre>
+                </div>
               )}
             </section>
           )}
