@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  Brain, Crosshair, Network, Bot, Search, RefreshCw,
-  CheckCircle2, AlertTriangle, GitBranch, Zap, Activity
+  Brain, Network, Bot, Search, RefreshCw,
+  CheckCircle2, AlertTriangle, GitBranch
 } from "lucide-react";
 import { toast } from "sonner";
 import AgentPlaybook from "@/components/AgentPlaybook";
