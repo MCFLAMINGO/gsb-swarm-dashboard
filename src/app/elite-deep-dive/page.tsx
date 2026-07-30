@@ -119,6 +119,35 @@ export default function EliteDeepDivePage() {
     }
   }
 
+  async function executeOptionOverlay(overlay: any, live: boolean) {
+    if (!overlay) return;
+    setRhError(null);
+    setRhResult(null);
+    setRhBusy(true);
+    try {
+      const res = await fetch("/api/robinhood", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "options",
+          overlay,
+          dryRun: !live,
+          confirm: live,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok && !data.order && !data.order_preview && !data.review) {
+        throw new Error(data.error || data.message || `HTTP ${res.status}`);
+      }
+      setRhResult(data);
+      await loadRhStatus();
+    } catch (e) {
+      setRhError((e as Error).message);
+    } finally {
+      setRhBusy(false);
+    }
+  }
+
   async function run() {
     const q = query.trim().toUpperCase();
     if (!q) {
@@ -385,11 +414,23 @@ export default function EliteDeepDivePage() {
               playbook={report.agent_playbook}
               rhBusy={rhBusy}
               liveEnabled={Boolean(rhStatus?.live_trading_enabled)}
+              optionsEnabled={rhStatus?.options_trading_enabled !== false}
               biasNeutral={report.trade_plan?.bias === "NEUTRAL"}
               onReview={() => executeOnRobinhood(false)}
               onLive={() => {
                 if (window.confirm(`Place LIVE Robinhood buy for ${report.resolved_symbol}?`)) {
                   executeOnRobinhood(true);
+                }
+              }}
+              onOptionReview={(overlay) => executeOptionOverlay(overlay, false)}
+              onOptionLive={(overlay) => {
+                const preview = overlay?.what_flows_to_robinhood?.order_preview;
+                const leg = preview?.legs?.[0];
+                const label = leg
+                  ? `${preview.strategy || overlay.id}: ${leg.side} ${leg.right} ${leg.strike} ${leg.expiration}`
+                  : overlay?.title || overlay?.id;
+                if (window.confirm(`Place LIVE options order?\n${label}`)) {
+                  executeOptionOverlay(overlay, true);
                 }
               }}
             />

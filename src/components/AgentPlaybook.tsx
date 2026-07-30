@@ -3,20 +3,27 @@
 import { Crosshair, GitBranch, Lightbulb, Shield, Clock } from "lucide-react";
 
 type Playbook = any;
+type Overlay = any;
 
 export default function AgentPlaybook({
   playbook,
   onReview,
   onLive,
+  onOptionReview,
+  onOptionLive,
   rhBusy,
   liveEnabled,
+  optionsEnabled = true,
   biasNeutral,
 }: {
   playbook: Playbook | null | undefined;
   onReview?: () => void;
   onLive?: () => void;
+  onOptionReview?: (overlay: Overlay) => void;
+  onOptionLive?: (overlay: Overlay) => void;
   rhBusy?: boolean;
   liveEnabled?: boolean;
+  optionsEnabled?: boolean;
   biasNeutral?: boolean;
 }) {
   if (!playbook) return null;
@@ -24,6 +31,10 @@ export default function AgentPlaybook({
   const overlays = playbook.option_overlays || [];
   const angles = playbook.unconventional_angles || [];
   const asym = playbook.asymmetric_book || [];
+  const optionRows = [
+    ...overlays,
+    ...asym.filter((a: Overlay) => !overlays.find((o: Overlay) => o.id === a.id)),
+  ];
 
   return (
     <section className="rounded-lg border border-emerald-500/40 bg-emerald-500/5 p-5 md:p-6 space-y-5">
@@ -32,8 +43,8 @@ export default function AgentPlaybook({
           <Crosshair className="h-5 w-5 text-emerald-400" /> What Robinhood Agentic will do
         </h2>
         <p className="text-base text-foreground/80">
-          Exact agent instructions — not vague bias. Equity Review/Place live is wired now;
-          option overlays show the intended order + due date (staged until options MCP is on).
+          Exact agent instructions — not vague bias. Equity and option Review/Place both hit Robinhood
+          Agentic MCP (options dry-run by default; live needs confirm + live trading on).
         </p>
         {(playbook.how_to_read || []).length > 0 && (
           <ol className="list-decimal pl-5 text-sm text-foreground/75 space-y-1 pt-1">
@@ -82,8 +93,8 @@ export default function AgentPlaybook({
             </button>
           )}
           <p className="text-sm text-foreground/70 w-full">
-            These buttons send the <span className="font-semibold">primary equity</span> directive only.
-            Covered calls / puts are listed below as agent scripts until options place is enabled.
+            Primary buttons send the <span className="font-semibold">equity</span> directive.
+            Covered calls / puts have their own Review / Place on each overlay card below.
           </p>
         </div>
       )}
@@ -108,22 +119,55 @@ export default function AgentPlaybook({
           <Shield className="h-4 w-4 text-amber-300" /> Option overlays & asymmetric book
         </h3>
         <div className="grid md:grid-cols-1 gap-3">
-          {[...overlays, ...asym.filter((a: any) => !overlays.find((o: any) => o.id === a.id))].map((o: any) => (
-            <DirectiveCard
-              key={o.id}
-              tone="overlay"
-              title={o.title}
-              badge={o.what_flows_to_robinhood?.executable_now ? "EXECUTABLE" : "STAGED · OPTIONS"}
-              instruction={o.agent_instruction_plain}
-              will={o.agent_will}
-              method={o.method}
-              asymmetry={o.asymmetry}
-              schedule={o.schedule}
-              levels={o.levels}
-              flow={o.what_flows_to_robinhood}
-              requires={o.requires}
-            />
-          ))}
+          {optionRows.map((o: Overlay) => {
+            const executable = Boolean(o.what_flows_to_robinhood?.executable_now && o.what_flows_to_robinhood?.order_preview);
+            return (
+              <div key={o.id} className="space-y-2">
+                <DirectiveCard
+                  tone="overlay"
+                  title={o.title}
+                  badge={executable ? "EXECUTABLE · OPTIONS" : "STAGED · OPTIONS"}
+                  instruction={o.agent_instruction_plain}
+                  will={o.agent_will}
+                  method={o.method}
+                  asymmetry={o.asymmetry}
+                  schedule={o.schedule}
+                  levels={o.levels}
+                  flow={o.what_flows_to_robinhood}
+                  requires={o.requires}
+                />
+                {(onOptionReview || onOptionLive) && executable && (
+                  <div className="flex flex-wrap gap-2 pl-1">
+                    {onOptionReview && (
+                      <button
+                        type="button"
+                        disabled={rhBusy || !optionsEnabled}
+                        onClick={() => onOptionReview(o)}
+                        className="rounded-md border border-amber-500/50 bg-amber-500/15 text-amber-100 px-3 py-2 text-sm font-semibold disabled:opacity-50"
+                      >
+                        {rhBusy ? "Working…" : "Review options order"}
+                      </button>
+                    )}
+                    {onOptionLive && (
+                      <button
+                        type="button"
+                        disabled={rhBusy || !liveEnabled || !optionsEnabled}
+                        onClick={() => onOptionLive(o)}
+                        className="rounded-md border border-red-500/50 bg-red-500/15 text-red-200 px-3 py-2 text-sm font-semibold disabled:opacity-40"
+                      >
+                        Place options live
+                      </button>
+                    )}
+                    {!optionsEnabled && (
+                      <span className="text-xs text-foreground/60 self-center">
+                        Options MCP off on Railway (ROBINHOOD_OPTIONS_TRADING=0)
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 
