@@ -11,6 +11,7 @@ import ResearchSessionCard from "@/components/ResearchSessionCard";
 import ExecutionIdeaCard from "@/components/ExecutionIdeaCard";
 import DeskTickerRail from "@/components/DeskTickerRail";
 import AiMacroWatchlist from "@/components/AiMacroWatchlist";
+import ArmedPlanPanel from "@/components/ArmedPlanPanel";
 import { ConceptOutcomesPanel, RunComparisonCard } from "@/components/DeskOutcomes";
 import {
   buildDeskSession,
@@ -321,12 +322,27 @@ export default function DeskHomePage() {
       }));
 
       const waiting = data.plan?.status === "waiting_trigger";
+      const triggerDetail =
+        data.plan?.steps?.find((s: any) => s.phase === "wait")?.detail ||
+        idea.schedule?.trigger ||
+        null;
       toast.success(
-        waiting ? "Position armed — waiting for trigger" : live ? "Live position armed" : "Position armed (dry-run)",
+        waiting ? "Armed — waiting for trigger (no order yet)" : live ? "Live position armed" : "Position armed (dry-run)",
         {
-          description: "Research collapsed into ticker button. Other concepts keep paper-monitoring to expiry.",
+          description: waiting
+            ? triggerDetail
+              ? `Waiting: ${String(triggerDetail).slice(0, 120)}`
+              : "Agent will place only when the trigger prints"
+            : data.plan?.id
+              ? `Plan ${data.plan.id} · ${data.plan.status} — worker is monitoring`
+              : data.message,
+          duration: 8000,
         }
       );
+
+      setTimeout(() => {
+        document.getElementById("armed-plan")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 100);
 
       const planId = data.plan?.id;
       if (planId && (waiting || data.plan?.status === "monitoring")) {
@@ -504,6 +520,20 @@ export default function DeskHomePage() {
               <RunComparisonCard comparison={store.lastComparison} />
             )}
 
+            {/* Always show armed plan feedback after Execute — even if concepts collapsed */}
+            {focusPosition && (
+              <ArmedPlanPanel
+                position={focusPosition}
+                onExpandTicker={() => activeSymbol && selectTicker(activeSymbol)}
+              />
+            )}
+            {!focusPosition && activeOpenPositions[0] && collapsed && (
+              <ArmedPlanPanel
+                position={activeOpenPositions[0]}
+                onExpandTicker={() => activeSymbol && selectTicker(activeSymbol)}
+              />
+            )}
+
             {active && showConcepts && (
               <>
                 <ResearchSessionCard
@@ -556,17 +586,9 @@ export default function DeskHomePage() {
               <section className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <h2 className="text-xl font-semibold">Active position</h2>
+                    <h2 className="text-xl font-semibold">Active position card</h2>
                     <p className="text-sm text-foreground/75">
                       {focusPosition.title} · {focusPosition.status.replace(/_/g, " ")}
-                      {" · "}
-                      <button
-                        type="button"
-                        className="text-accent hover:underline"
-                        onClick={() => selectTicker(active.symbol)}
-                      >
-                        Expand ticker concepts
-                      </button>
                     </p>
                   </div>
                 </div>
@@ -582,6 +604,16 @@ export default function DeskHomePage() {
                   }}
                 />
               </section>
+            )}
+
+            {active && collapsed && focusPosition && !focusedIdea && (
+              <p className="text-sm text-foreground/70">
+                Position is armed (see status above).{" "}
+                <button type="button" className="text-accent hover:underline" onClick={() => selectTicker(active.symbol)}>
+                  Expand ticker
+                </button>{" "}
+                to see the full concept card.
+              </p>
             )}
 
             {active && collapsed && !focusPosition && activeOpenPositions.length === 0 && (

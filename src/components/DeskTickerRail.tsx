@@ -19,7 +19,6 @@ export default function DeskTickerRail({
   onSelectTicker: (symbol: string) => void;
   onSelectPosition: (positionId: string) => void;
 }) {
-  // Unique symbols in session order
   const seen = new Set<string>();
   const symbols: string[] = [];
   for (const s of sessions) {
@@ -27,22 +26,41 @@ export default function DeskTickerRail({
     seen.add(s.symbol);
     symbols.push(s.symbol);
   }
+  for (const p of positions) {
+    if (!seen.has(p.symbol)) {
+      seen.add(p.symbol);
+      symbols.push(p.symbol);
+    }
+  }
 
   if (!symbols.length) return null;
+
+  const anyOpen = positions.some(
+    (p) => p.status !== "folded" && p.status !== "completed" && p.status !== "expired"
+  );
 
   return (
     <div className="space-y-2">
       <p className="text-xs uppercase tracking-wider text-foreground/60">
         Tickers · active positions
+        {anyOpen ? " · click WAIT/POS to see armed plan" : ""}
       </p>
       <div className="flex flex-wrap gap-2">
         {symbols.map((sym) => {
-          const session = sessions.find((s) => s.symbol === sym)!;
+          const session = sessions.find((s) => s.symbol === sym);
           const ui = tickerUi[sym];
           const activePos = positions.filter(
-            (p) => p.symbol === sym && p.status !== "folded" && p.status !== "completed" && p.status !== "expired"
+            (p) =>
+              p.symbol === sym &&
+              p.status !== "folded" &&
+              p.status !== "completed" &&
+              p.status !== "expired"
           );
-          const folded = positions.filter((p) => p.symbol === sym && (p.status === "folded" || p.status === "completed" || p.status === "expired"));
+          const folded = positions.filter(
+            (p) =>
+              p.symbol === sym &&
+              (p.status === "folded" || p.status === "completed" || p.status === "expired")
+          );
           const tickerActive = activeSymbol === sym && (!ui || ui.focus === "ticker");
 
           return (
@@ -55,7 +73,7 @@ export default function DeskTickerRail({
                     ? "border-primary/60 bg-primary/20 text-foreground"
                     : "border-border bg-secondary text-foreground/85 hover:border-primary/35"
                 }`}
-                title={sessionTitle(session)}
+                title={session ? sessionTitle(session) : sym}
               >
                 {sym}
                 {ui?.collapsed ? " ▸" : ""}
@@ -67,18 +85,21 @@ export default function DeskTickerRail({
                     key={p.id}
                     type="button"
                     onClick={() => onSelectPosition(p.id)}
-                    className={`rounded-md border px-3 py-2 text-xs font-semibold transition-colors max-w-[14rem] truncate ${
+                    className={`rounded-md border px-3 py-2 text-xs font-semibold transition-colors max-w-[16rem] truncate ${
                       focused
-                        ? "border-accent/60 bg-accent/20 text-accent"
-                        : p.side === "long"
-                          ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-100"
-                          : p.side === "short"
-                            ? "border-red-500/40 bg-red-500/10 text-red-100"
-                            : "border-amber-500/40 bg-amber-500/10 text-amber-100"
+                        ? "border-accent/60 bg-accent/20 text-accent ring-1 ring-accent/40"
+                        : p.status === "waiting_trigger"
+                          ? "border-amber-500/50 bg-amber-500/15 text-amber-100"
+                          : p.side === "long"
+                            ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-100"
+                            : p.side === "short"
+                              ? "border-red-500/40 bg-red-500/10 text-red-100"
+                              : "border-amber-500/40 bg-amber-500/10 text-amber-100"
                     }`}
                     title={`${p.title} · ${p.status}`}
                   >
-                    POS · {p.badge || p.side} · {p.status.replace(/_/g, " ")}
+                    {p.status === "waiting_trigger" ? "WAIT" : "POS"} · {p.badge || p.side} ·{" "}
+                    {p.status.replace(/_/g, " ")}
                   </button>
                 );
               })}
