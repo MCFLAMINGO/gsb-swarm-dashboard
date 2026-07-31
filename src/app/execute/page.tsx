@@ -33,7 +33,6 @@ export default function ExecutePage() {
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
       if (!data.authorize_url) throw new Error("No authorize_url from Swarm");
       toast.message("Redirecting to Robinhood — tap Allow for GSB Swarm");
-      // Same-tab — avoids popup blockers that look like a failed connect
       window.location.assign(data.authorize_url);
     } catch (e) {
       setBusy(false);
@@ -47,91 +46,111 @@ export default function ExecutePage() {
     <div className="flex-1 overflow-y-auto">
       <Header
         title="Execute"
-        subtitle="One rail: Robinhood Agentic → Copy strategies → THROW / Tempo tape."
+        subtitle="Robinhood Agentic → Copy strategies → THROW / Tempo tape."
       />
-      <main className="p-5 max-w-3xl mx-auto space-y-4">
-        <section className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4 space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-sm font-medium flex items-center gap-2">
-              <Crosshair className="h-4 w-4 text-emerald-400" /> Robinhood Agentic
+      <main className="p-6 md:p-8 max-w-5xl space-y-5">
+        <section className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-5 md:p-6 space-y-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <h2 className="text-xl font-semibold flex items-center gap-2.5 text-foreground">
+              <Crosshair className="h-6 w-6 text-emerald-400" /> Robinhood Agentic
             </h2>
-            <span className={`text-[11px] ${connected ? "text-emerald-300" : "text-amber-300"}`}>
+            <span
+              className={`text-base font-semibold px-3 py-1 rounded-md border ${
+                connected
+                  ? "text-emerald-200 bg-emerald-500/20 border-emerald-500/40"
+                  : "text-amber-200 bg-amber-500/20 border-amber-500/40"
+              }`}
+            >
               {connected ? "Connected" : "Not connected"}
             </span>
           </div>
-          <p className="text-xs text-muted-foreground">
-            MCP <code className="text-[10px]">https://agent.robinhood.com/mcp/trading</code> ·
-            trades hit your funded Agentic account only. Live place needs Railway{" "}
-            <code className="text-[10px]">ROBINHOOD_LIVE_TRADING=1</code>.
+
+          <p className="text-base leading-relaxed text-foreground/90">
+            Trades hit your funded Agentic account only. Live place needs Railway{" "}
+            <code className="text-sm text-accent">ROBINHOOD_LIVE_TRADING=1</code>.
           </p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-            <div className="rounded border border-border bg-card/70 px-2 py-1.5">
-              <div className="text-[10px] text-muted-foreground">Live</div>
-              <div>{rhStatus?.live_trading_enabled ? "ON" : "off"}</div>
-            </div>
-            <div className="rounded border border-border bg-card/70 px-2 py-1.5">
-              <div className="text-[10px] text-muted-foreground">Max notional</div>
-              <div>${rhStatus?.max_notional_usd ?? 250}</div>
-            </div>
-            <div className="rounded border border-border bg-card/70 px-2 py-1.5">
-              <div className="text-[10px] text-muted-foreground">Default size</div>
-              <div>${rhStatus?.default_notional_usd ?? 50}</div>
-            </div>
-            <div className="rounded border border-border bg-card/70 px-2 py-1.5">
-              <div className="text-[10px] text-muted-foreground">Token source</div>
-              <div>{rhStatus?.token_source || "none"}</div>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              disabled={busy}
-              onClick={connect}
-              className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 px-3 py-1.5 text-xs disabled:opacity-50"
-            >
-              <Link2 className="h-3 w-3" />
-              {connected ? "Reconnect" : "Connect Robinhood"}
-            </button>
-            <button
-              onClick={async () => {
-                await refresh();
-                toast.success("Status refreshed");
-              }}
-              className="rounded-md border border-border bg-card px-3 py-1.5 text-xs"
-            >
-              Refresh
-            </button>
-            <Link
-              href="/elite-deep-dive"
-              className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-3 py-1.5 text-xs"
-            >
-              <Brain className="h-3 w-3" /> Review from Elite plan →
-            </Link>
-            <Link
-              href="/connections"
-              className="rounded-md border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground"
-            >
-              Connections
-            </Link>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { label: "Live", value: rhStatus?.live_trading_enabled ? "ON" : "off" },
+              { label: "Max notional", value: `$${rhStatus?.max_notional_usd ?? 250}` },
+              { label: "Default size", value: `$${rhStatus?.default_notional_usd ?? 50}` },
+              { label: "Token source", value: rhStatus?.token_source || "none" },
+            ].map((cell) => (
+              <div
+                key={cell.label}
+                className="rounded-md border border-border bg-card px-3 py-3"
+              >
+                <div className="text-sm text-foreground/70 mb-1">{cell.label}</div>
+                <div className="text-lg font-semibold text-foreground">{cell.value}</div>
+              </div>
+            ))}
           </div>
 
           {!connected && (
-            <div className="rounded-md border border-border bg-card/60 p-3 space-y-2">
-              <div className="text-xs font-medium text-foreground">Fallback: paste Swarm tokens</div>
-              <p className="text-[11px] text-muted-foreground">
-                If Robinhood shows “Uh oh” after Allow, OAuth is failing on their side for our redirect.
-                One-time: paste an access token into Railway via this form (does not use Cursor chat tokens afterward).
+            <div className="rounded-md border border-amber-500/40 bg-amber-500/15 p-4 space-y-2">
+              <div className="text-base font-semibold text-amber-100">
+                Prefer Mac localhost bridge (avoids Robinhood “Uh oh”)
+              </div>
+              <p className="text-base text-foreground/85 leading-relaxed">
+                On your Mac, in gsb-swarm:
+              </p>
+              <pre className="text-sm mono rounded border border-border bg-background px-3 py-3 overflow-x-auto whitespace-pre-wrap text-foreground">
+{`node scripts/robinhood-connect-local.js`}
+              </pre>
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={async () => {
+                await refresh();
+                toast.success(connected ? "Still connected" : "Status refreshed");
+              }}
+              className="inline-flex items-center rounded-md border border-emerald-500/50 bg-emerald-500/15 text-emerald-200 px-4 py-2.5 text-base font-medium"
+            >
+              Refresh status
+            </button>
+            <Link
+              href="/elite-deep-dive"
+              className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-4 py-2.5 text-base font-medium text-foreground hover:border-primary/50"
+            >
+              <Brain className="h-4 w-4" /> Review from Elite plan →
+            </Link>
+            <Link
+              href="/connections"
+              className="rounded-md border border-border bg-card px-4 py-2.5 text-base font-medium text-foreground/90 hover:border-primary/50"
+            >
+              Connections
+            </Link>
+            <button
+              disabled={busy}
+              onClick={connect}
+              title="Often fails with Robinhood Uh oh — prefer localhost bridge"
+              className="inline-flex items-center gap-2 rounded-md border border-border bg-secondary px-4 py-2.5 text-sm text-foreground/80 disabled:opacity-50"
+            >
+              <Link2 className="h-4 w-4" />
+              {connected ? "Reconnect (HTTPS)" : "Legacy HTTPS connect"}
+            </button>
+          </div>
+
+          {!connected && (
+            <div className="rounded-md border border-border bg-card p-4 space-y-3">
+              <div className="text-base font-semibold text-foreground">Fallback: paste tokens</div>
+              <p className="text-base text-foreground/85 leading-relaxed">
+                Paste an access token from the localhost script if import did not finish.
               </p>
               <input
                 value={pasteToken}
                 onChange={(e) => setPasteToken(e.target.value)}
                 placeholder="access_token"
-                className="w-full rounded-md border border-border bg-secondary px-2 py-1.5 text-xs mono"
+                className="w-full rounded-md border border-border bg-secondary px-3 py-2.5 text-base mono text-foreground"
               />
               <input
                 value={pasteRefresh}
                 onChange={(e) => setPasteRefresh(e.target.value)}
                 placeholder="refresh_token (optional)"
-                className="w-full rounded-md border border-border bg-secondary px-2 py-1.5 text-xs mono"
+                className="w-full rounded-md border border-border bg-secondary px-3 py-2.5 text-base mono text-foreground"
               />
               <button
                 disabled={busy || !pasteToken.trim()}
@@ -159,7 +178,7 @@ export default function ExecutePage() {
                     setBusy(false);
                   }
                 }}
-                className="rounded-md border border-border bg-secondary px-3 py-1.5 text-xs disabled:opacity-50"
+                className="rounded-md border border-border bg-secondary px-4 py-2.5 text-base font-medium disabled:opacity-50"
               >
                 Import to Swarm
               </button>
@@ -167,33 +186,38 @@ export default function ExecutePage() {
           )}
         </section>
 
-        <Link
-          href="/copy-trader"
-          className="rounded-lg border border-border bg-card p-4 flex gap-3 hover:border-primary/40 transition-colors block"
-        >
-          <Activity className="h-4 w-4 text-accent mt-0.5" />
-          <div>
-            <div className="text-sm font-medium">Copy Trader</div>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Yield / signal copy strategies — fold into this rail (backend consolidation still open).
-            </p>
-          </div>
-        </Link>
+        <div className="grid md:grid-cols-2 gap-4">
+          <Link
+            href="/copy-trader"
+            className="rounded-lg border border-border bg-card p-5 flex gap-4 hover:border-primary/50 transition-colors"
+          >
+            <Activity className="h-6 w-6 text-accent shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <div className="text-lg font-semibold text-foreground">Copy Trader</div>
+              <p className="text-base text-foreground/85 mt-1 leading-relaxed">
+                Yield / signal copy strategies on this same execute rail.
+              </p>
+            </div>
+          </Link>
+
+          <Link
+            href="/throw"
+            className="rounded-lg border border-border bg-card p-5 flex gap-4 hover:border-primary/50 transition-colors"
+          >
+            <Zap className="h-6 w-6 shrink-0 mt-0.5" style={{ color: "#00e5a0" }} />
+            <div className="min-w-0">
+              <div className="text-lg font-semibold text-foreground">THROW / Tempo</div>
+              <p className="text-base text-foreground/85 mt-1 leading-relaxed">
+                On-chain tape and Tempo rails under Execute.
+              </p>
+            </div>
+          </Link>
+        </div>
 
         <Link
-          href="/throw"
-          className="rounded-lg border border-border bg-card p-4 flex gap-3 hover:border-primary/40 transition-colors block"
+          href="/"
+          className="inline-block text-base font-medium text-foreground/90 hover:text-foreground underline-offset-4 hover:underline"
         >
-          <Zap className="h-4 w-4 mt-0.5" style={{ color: "#00e5a0" }} />
-          <div>
-            <div className="text-sm font-medium">THROW / Tempo</div>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              On-chain tape + Tempo rails — ops strip under Execute, not a peer product.
-            </p>
-          </div>
-        </Link>
-
-        <Link href="/" className="text-xs text-muted-foreground hover:text-foreground inline-block">
           ← Back to Desk
         </Link>
       </main>
