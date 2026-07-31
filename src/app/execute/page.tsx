@@ -8,14 +8,25 @@ import { toast } from "sonner";
 
 export default function ExecutePage() {
   const [rhStatus, setRhStatus] = useState<any>(null);
+  const [portfolio, setPortfolio] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [pasteToken, setPasteToken] = useState("");
   const [pasteRefresh, setPasteRefresh] = useState("");
+  const [testSymbol, setTestSymbol] = useState("F");
+  const [testNotional, setTestNotional] = useState("10");
+  const [reviewResult, setReviewResult] = useState<any>(null);
 
   async function refresh() {
     try {
       const res = await fetch("/api/robinhood?action=status", { cache: "no-store" });
-      setRhStatus(await res.json());
+      const next = await res.json();
+      setRhStatus(next);
+      if (next?.configured) {
+        const p = await fetch("/api/robinhood?action=portfolio", { cache: "no-store" });
+        if (p.ok) setPortfolio(await p.json());
+      } else {
+        setPortfolio(null);
+      }
     } catch (e) {
       setRhStatus({ configured: false, error: (e as Error).message });
     }
@@ -24,6 +35,33 @@ export default function ExecutePage() {
   useEffect(() => {
     refresh();
   }, []);
+
+  async function testDryRunReview() {
+    setBusy(true);
+    setReviewResult(null);
+    try {
+      const res = await fetch("/api/robinhood", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          symbol: testSymbol.trim().toUpperCase(),
+          dryRun: true,
+          confirm: false,
+          notionalUsd: Number(testNotional) || 10,
+          orderType: "market",
+          trade_plan: { bias: "LONG" },
+        }),
+      });
+      const data = await res.json();
+      setReviewResult(data);
+      if (data.ok) toast.success("Robinhood review OK (dry-run)");
+      else toast.error("Review failed", { description: data.message || data.error });
+    } catch (e) {
+      toast.error("Review failed", { description: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function connect() {
     setBusy(true);
@@ -70,12 +108,18 @@ export default function ExecutePage() {
             <code className="text-sm text-accent">ROBINHOOD_LIVE_TRADING=1</code>.
           </p>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             {[
               { label: "Live", value: rhStatus?.live_trading_enabled ? "ON" : "off" },
               { label: "Max notional", value: `$${rhStatus?.max_notional_usd ?? 250}` },
               { label: "Default size", value: `$${rhStatus?.default_notional_usd ?? 50}` },
               { label: "Token source", value: rhStatus?.token_source || "none" },
+              {
+                label: "Account",
+                value: rhStatus?.account_number
+                  ? `••${String(rhStatus.account_number).slice(-4)}`
+                  : "—",
+              },
             ].map((cell) => (
               <div
                 key={cell.label}
@@ -86,6 +130,25 @@ export default function ExecutePage() {
               </div>
             ))}
           </div>
+
+          {connected && portfolio && (
+            <div className="rounded-md border border-border bg-card px-4 py-3 text-base text-foreground/90">
+              Agentic buying power:{" "}
+              <span className="font-semibold text-foreground">
+                $
+                {portfolio?.portfolio?.parsed?.data?.buying_power?.buying_power
+                  || portfolio?.portfolio?.parsed?.data?.cash
+                  || portfolio?.parsed?.data?.buying_power?.buying_power
+                  || "—"}
+              </span>
+              {" · "}
+              Place / Execute from{" "}
+              <Link href="/" className="text-accent hover:underline">Desk</Link>
+              {" or "}
+              <Link href="/elite-deep-dive" className="text-accent hover:underline">Elite</Link>
+              .
+            </div>
+          )}
 
           {!connected && (
             <div className="rounded-md border border-amber-500/40 bg-amber-500/15 p-4 space-y-2">
@@ -112,6 +175,12 @@ export default function ExecutePage() {
               Refresh status
             </button>
             <Link
+              href="/"
+              className="inline-flex items-center gap-2 rounded-md border border-accent/40 bg-accent/10 text-accent px-4 py-2.5 text-base font-medium hover:bg-accent/20"
+            >
+              <Crosshair className="h-4 w-4" /> Desk Execute →
+            </Link>
+            <Link
               href="/elite-deep-dive"
               className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-4 py-2.5 text-base font-medium text-foreground hover:border-primary/50"
             >
@@ -133,6 +202,57 @@ export default function ExecutePage() {
               {connected ? "Reconnect (HTTPS)" : "Legacy HTTPS connect"}
             </button>
           </div>
+
+          {connected && (
+            <div className="rounded-md border border-border bg-card p-4 space-y-3">
+              <div className="text-base font-semibold text-foreground">Talk to Robinhood (dry-run review)</div>
+              <p className="text-base text-foreground/85 leading-relaxed">
+                Hits Agentic <code className="text-sm">review_equity_order</code> — does not place.
+              </p>
+              <div className="flex flex-wrap gap-3 items-end">
+                <div className="space-y-1">
+                  <label className="text-sm text-foreground/70">Symbol</label>
+                  <input
+                    value={testSymbol}
+                    onChange={(e) => setTestSymbol(e.target.value)}
+                    className="w-28 rounded-md border border-border bg-secondary px-3 py-2.5 text-base mono uppercase"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm text-foreground/70">Notional $</label>
+                  <input
+                    value={testNotional}
+                    onChange={(e) => setTestNotional(e.target.value)}
+                    className="w-28 rounded-md border border-border bg-secondary px-3 py-2.5 text-base mono"
+                  />
+                </div>
+                <button
+                  disabled={busy || !testSymbol.trim()}
+                  onClick={testDryRunReview}
+                  className="rounded-md border border-emerald-500/50 bg-emerald-500/15 text-emerald-200 px-4 py-2.5 text-base font-medium disabled:opacity-50"
+                >
+                  {busy ? "Reviewing…" : "Test review"}
+                </button>
+              </div>
+              {reviewResult && (
+                <pre className="text-sm text-foreground/85 whitespace-pre-wrap max-h-56 overflow-auto rounded border border-border bg-secondary/40 p-3">
+                  {JSON.stringify(
+                    {
+                      ok: reviewResult.ok,
+                      mode: reviewResult.mode,
+                      error: reviewResult.error,
+                      message: reviewResult.message,
+                      order: reviewResult.order || reviewResult.order_shaped,
+                      shape: reviewResult.meta?.shape,
+                      review: reviewResult.review?.parsed || reviewResult.review?.text || reviewResult.review,
+                    },
+                    null,
+                    2
+                  )}
+                </pre>
+              )}
+            </div>
+          )}
 
           {!connected && (
             <div className="rounded-md border border-border bg-card p-4 space-y-3">
