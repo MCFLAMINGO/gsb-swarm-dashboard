@@ -589,6 +589,11 @@ export default function DeskHomePage() {
                       />
                     ))}
                   </div>
+                  <p className="text-sm text-foreground/70">
+                    Execute arms the full multistep plan on the server worker (wait/open → monitor → add → close).
+                    You can walk away — the agent follows through. Place live needs Robinhood live trading on.
+                    <Link href="/execute" className="text-accent ml-1 hover:underline">Execute rail →</Link>
+                  </p>
                 </section>
               </>
             )}

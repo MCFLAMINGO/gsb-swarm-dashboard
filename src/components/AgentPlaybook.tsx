@@ -46,7 +46,8 @@ export default function AgentPlaybook({
           <Crosshair className="h-5 w-5 text-emerald-400" /> What the agent will do
         </h2>
         <p className="text-base text-foreground/80">
-          Every idea has Execute — arms the full plan (wait/open → monitor → add → close), not a one-shot order.
+          Every idea has Execute — arms the full plan on the server (wait/open → monitor → add → close).
+          You can walk away; the worker follows through.
         </p>
         {(playbook.how_to_read || []).length > 0 && (
           <ol className="list-decimal pl-5 text-sm text-foreground/75 space-y-1 pt-1">
