@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import Link from "next/link";
 import {
   Brain, Search, RefreshCw, AlertTriangle, CheckCircle2,
   TrendingUp, Newspaper, Users, Building2, LineChart, Globe2, GitBranch
@@ -70,24 +71,6 @@ export default function EliteDeepDivePage() {
     const t = setInterval(() => setElapsedSec((s) => s + 1), 1000);
     return () => clearInterval(t);
   }, [pending]);
-
-  async function connectRobinhood() {
-    setRhError(null);
-    setRhBusy(true);
-    try {
-      const res = await fetch("/api/robinhood?action=connect", { cache: "no-store" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-      if (!data.authorize_url) {
-        throw new Error("No authorize_url returned — deploy gsb-swarm Robinhood routes first");
-      }
-      window.location.assign(data.authorize_url);
-    } catch (e) {
-      setRhError((e as Error).message);
-    } finally {
-      setRhBusy(false);
-    }
-  }
 
   async function executeOnRobinhood(live: boolean) {
     if (!report?.resolved_symbol && !query.trim()) return;
@@ -656,14 +639,12 @@ export default function EliteDeepDivePage() {
                   {rhStatus?.configured ? (
                     <span className="text-emerald-300 font-semibold">Connected</span>
                   ) : (
-                    <button
-                      type="button"
-                      disabled={rhBusy}
-                      onClick={connectRobinhood}
-                      className="text-amber-300 font-semibold underline-offset-2 hover:underline disabled:opacity-50"
+                    <Link
+                      href="/execute"
+                      className="text-amber-300 font-semibold underline-offset-2 hover:underline"
                     >
-                      Connect Robinhood
-                    </button>
+                      Connect via Execute →
+                    </Link>
                   )}
                   {rhStatus?.live_trading_enabled ? (
                     <span className="text-red-300 font-semibold">LIVE ON</span>

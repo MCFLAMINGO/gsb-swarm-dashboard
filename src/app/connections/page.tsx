@@ -157,6 +157,16 @@ function RobinhoodConnectCard() {
           Default mode is dry-run review; live place needs Railway <code className="text-[10px]">ROBINHOOD_LIVE_TRADING=1</code>.
         </p>
 
+        {!connected && (
+          <div className="rounded-md border border-amber-500/35 bg-amber-500/10 px-3 py-2 space-y-1">
+            <p className="text-xs text-amber-200">
+              HTTPS Connect often fails with Robinhood&apos;s &quot;Uh oh&quot;. Preferred path: Mac localhost bridge
+              <code className="text-[10px] mono ml-1">node scripts/robinhood-connect-local.js</code>
+              {" "}in gsb-swarm — see Execute for full steps.
+            </p>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
           <div className="rounded-md border border-border bg-card/70 px-2 py-1.5">
             <div className="text-[10px] text-muted-foreground">OAuth</div>
@@ -185,15 +195,23 @@ function RobinhoodConnectCard() {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          <a
+            href="/execute"
+            className="inline-flex h-8 items-center rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/80"
+          >
+            Open Execute (connect guide)
+          </a>
           <Button
             size="sm"
+            variant="secondary"
             className="h-8 gap-1.5 text-xs"
             disabled={busy}
             onClick={connect}
             data-testid="btn-connect-robinhood"
+            title="Often fails with Robinhood Uh oh"
           >
             <Link2 size={12} />
-            {busy ? "Opening…" : connected ? "Reconnect Robinhood" : "Connect Robinhood"}
+            {busy ? "Opening…" : "Legacy HTTPS connect"}
           </Button>
           <Button
             size="sm"
@@ -243,7 +261,7 @@ function RobinhoodConnectCard() {
 
         <ol className="text-[11px] text-muted-foreground space-y-1 list-decimal pl-4">
           <li>Robinhood primary account in good standing + Agentic beta access</li>
-          <li>Click Connect → complete OAuth on desktop</li>
+          <li>Prefer Execute → Mac localhost bridge (avoids Robinhood Uh oh); Legacy HTTPS Connect is fallback</li>
           <li>Fund the Agentic account (separate from primary)</li>
           <li>Elite Deep Dive → Review order (dry-run) before enabling live</li>
         </ol>
