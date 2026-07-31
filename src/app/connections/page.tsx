@@ -161,13 +161,13 @@ function RobinhoodConnectCard() {
           <div className="rounded-md border border-amber-500/35 bg-amber-500/10 px-3 py-2 space-y-1">
             <p className="text-xs text-amber-200">
               HTTPS Connect often fails with Robinhood&apos;s &quot;Uh oh&quot;. Preferred path: Mac localhost bridge
-              (<code className="text-[10px] mono ml-1">node scripts/robinhood-connect-local.js</code>
+              <code className="text-[10px] mono ml-1">node scripts/robinhood-connect-local.js</code>
               {" "}in gsb-swarm — see Execute for full steps.
             </p>
           </div>
         )}
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
           <div className="rounded-md border border-border bg-card/70 px-2 py-1.5">
             <div className="text-[10px] text-muted-foreground">OAuth</div>
             <div className={connected ? "text-emerald-300" : "text-amber-300"}>{connected ? "tokens stored" : "required"}</div>
@@ -185,6 +185,12 @@ function RobinhoodConnectCard() {
           <div className="rounded-md border border-border bg-card/70 px-2 py-1.5">
             <div className="text-[10px] text-muted-foreground">Default size</div>
             <div className="text-foreground">${status?.default_notional_usd ?? 50}</div>
+          </div>
+          <div className="rounded-md border border-border bg-card/70 px-2 py-1.5 col-span-2 md:col-span-1">
+            <div className="text-[10px] text-muted-foreground">Account</div>
+            <div className="text-foreground mono truncate" title={status?.account_number || portfolio?.account_number || ""}>
+              {status?.account_number || portfolio?.account_number || "—"}
+            </div>
           </div>
         </div>
 
@@ -240,14 +246,22 @@ function RobinhoodConnectCard() {
         {error && <p className="text-xs text-red-400">{error}</p>}
 
         {connected && portfolio && (
-          <pre className="text-[10px] text-foreground/80 whitespace-pre-wrap max-h-40 overflow-auto rounded border border-border bg-secondary/40 p-2">
-            {JSON.stringify(portfolio.parsed || portfolio.text || portfolio, null, 2)}
+          <pre className="text-xs text-foreground/90 whitespace-pre-wrap max-h-48 overflow-auto rounded border border-border bg-secondary/40 p-3">
+            {JSON.stringify(
+              {
+                account_number: portfolio.account_number,
+                portfolio: portfolio.portfolio?.parsed || portfolio.portfolio?.text || portfolio.portfolio,
+                positions: portfolio.positions?.parsed || portfolio.positions?.text || portfolio.positions,
+              },
+              null,
+              2
+            )}
           </pre>
         )}
 
         <ol className="text-[11px] text-muted-foreground space-y-1 list-decimal pl-4">
           <li>Robinhood primary account in good standing + Agentic beta access</li>
-          <li>Click Connect → complete OAuth on desktop</li>
+          <li>Prefer Execute → Mac localhost bridge (avoids Robinhood Uh oh); Legacy HTTPS Connect is fallback</li>
           <li>Fund the Agentic account (separate from primary)</li>
           <li>Elite Deep Dive → Review order (dry-run) before enabling live</li>
         </ol>

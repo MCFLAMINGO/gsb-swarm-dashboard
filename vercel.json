@@ -10,6 +10,9 @@
     }
   ],
   "functions": {
+    "src/app/api/elite-analysis/route.ts": {
+      "maxDuration": 300
+    },
     "src/app/api/dispatch/route.ts": {
       "maxDuration": 60
     },

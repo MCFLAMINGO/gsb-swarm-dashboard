@@ -31,6 +31,17 @@ async function railwayFetch(path: string, init: RequestInit = {}, token?: string
   return fetch(`${RAILWAY_BASE}${path}`, { ...init, headers, cache: "no-store" });
 }
 
+async function railwayAuthed(path: string, init: RequestInit = {}) {
+  let token = await getRailwayToken();
+  let res = await railwayFetch(path, init, token);
+  if (res.status === 401) {
+    _railwayToken = null;
+    token = await getRailwayToken();
+    res = await railwayFetch(path, init, token);
+  }
+  return res;
+}
+
 export async function GET(req: NextRequest) {
   const action = req.nextUrl.searchParams.get("action") || "status";
   try {
@@ -41,36 +52,28 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(data, { status: res.status });
     }
 
-    const token = await getRailwayToken();
     if (action === "connect") {
-      let res = await railwayFetch("/api/robinhood/connect", {}, token);
-      if (res.status === 401) {
-        _railwayToken = null;
-        const fresh = await getRailwayToken();
-        res = await railwayFetch("/api/robinhood/connect", {}, fresh);
-      }
+      const res = await railwayAuthed("/api/robinhood/connect");
       const data = await res.json().catch(() => ({}));
       return NextResponse.json(data, { status: res.status });
     }
 
-    if (action === "portfolio") {
-      let res = await railwayFetch("/api/robinhood/portfolio", {}, token);
-      if (res.status === 401) {
-        _railwayToken = null;
-        const fresh = await getRailwayToken();
-        res = await railwayFetch("/api/robinhood/portfolio", {}, fresh);
-      }
+    if (action === "portfolio" || action === "accounts") {
+      const path = action === "accounts" ? "/api/robinhood/accounts" : "/api/robinhood/portfolio";
+      const res = await railwayAuthed(path);
       const data = await res.json().catch(() => ({}));
       return NextResponse.json(data, { status: res.status });
     }
 
     if (action === "health") {
-      let res = await railwayFetch("/api/robinhood/health", {}, token);
-      if (res.status === 401) {
-        _railwayToken = null;
-        const fresh = await getRailwayToken();
-        res = await railwayFetch("/api/robinhood/health", {}, fresh);
-      }
+      const res = await railwayAuthed("/api/robinhood/health");
+      const data = await res.json().catch(() => ({}));
+      return NextResponse.json(data, { status: res.status });
+    }
+
+    if (action === "tools") {
+      const refresh = req.nextUrl.searchParams.get("refresh") === "1" ? "?refresh=1" : "";
+      const res = await railwayAuthed(`/api/robinhood/tools${refresh}`);
       const data = await res.json().catch(() => ({}));
       return NextResponse.json(data, { status: res.status });
     }
@@ -87,38 +90,26 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
-    let token = await getRailwayToken();
     const action = String(body.action || "execute");
-    const path = action === "import-tokens" ? "/api/robinhood/import-tokens" : "/api/robinhood/execute";
-    const payload = action === "import-tokens"
-      ? {
-          access_token: body.access_token || body.accessToken,
-          refresh_token: body.refresh_token || body.refreshToken,
-          client_id: body.client_id || body.clientId,
-        }
-      : body;
-    let res = await railwayFetch(
-      path,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      },
-      token
-    );
-    if (res.status === 401) {
-      _railwayToken = null;
-      token = await getRailwayToken();
-      res = await railwayFetch(
-        path,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        },
-        token
-      );
-    }
+    const path =
+      action === "import-tokens"
+        ? "/api/robinhood/import-tokens"
+        : action === "options"
+          ? "/api/robinhood/options"
+          : "/api/robinhood/execute";
+    const payload =
+      action === "import-tokens"
+        ? {
+            access_token: body.access_token || body.accessToken,
+            refresh_token: body.refresh_token || body.refreshToken,
+            client_id: body.client_id || body.clientId,
+          }
+        : body;
+    const res = await railwayAuthed(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
     const data = await res.json().catch(() => ({}));
     return NextResponse.json(data, { status: res.status });
   } catch (err) {
