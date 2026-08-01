@@ -12,6 +12,9 @@ export type PlanStep = {
   title?: string;
   detail?: string;
   agent_action?: string;
+  /** equity | options | none — required so swarm arm-plan opens instead of skipping to monitor */
+  order_kind?: "equity" | "options" | "none";
+  notional_usd?: number | null;
   status?: string;
 };
 
@@ -139,6 +142,7 @@ function buildClientPlan(meta: {
       title: trigger ? "Place put after trigger prints" : "Open put (short expression)",
       detail: `Equity short blocked — review/place put for ${sym}`,
       agent_action: "review_option_order_then_place",
+      order_kind: "options",
     });
   } else if (isAngle) {
     steps.push({
@@ -147,6 +151,7 @@ function buildClientPlan(meta: {
       title: "Arm watch / satellite checklist",
       detail: "No forced order — track levels before any satellite fill",
       agent_action: "arm_watch_only",
+      order_kind: "none",
     });
   } else if (isIncome || isPut || /call|option/i.test(meta.kind || "")) {
     steps.push({
@@ -155,6 +160,7 @@ function buildClientPlan(meta: {
       title: "Open options leg",
       detail: `Review/place option order for ${sym}`,
       agent_action: "review_option_order_then_place",
+      order_kind: "options",
     });
   } else {
     steps.push({
@@ -165,6 +171,8 @@ function buildClientPlan(meta: {
         ? `ONLY after trigger: buy ~$${meta.notional ?? "—"} ${sym}`
         : `Review then buy ~$${meta.notional ?? "—"} ${sym}`,
       agent_action: "review_equity_order_then_place",
+      order_kind: "equity",
+      notional_usd: meta.notional != null ? Number(meta.notional) : null,
     });
   }
   steps.push({
