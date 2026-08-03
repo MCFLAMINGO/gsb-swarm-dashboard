@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Header from "@/components/layout/Header";
+import PlayByPlayRail from "@/components/PlayByPlayRail";
 import { Crosshair, Activity, Zap, Brain, Link2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -320,6 +321,8 @@ export default function ExecutePage() {
             </div>
           )}
         </section>
+
+        <PlayByPlayRail />
 
         <div className="grid md:grid-cols-2 gap-4">
           <Link
