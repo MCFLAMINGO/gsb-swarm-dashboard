@@ -35,11 +35,53 @@ type ArmedPlan = {
   levels?: PlanLevels;
   filled_notional?: number | null;
   open_filled?: boolean;
-  steps?: PlanStep[];
+  open_submitted?: boolean;
+  order_state?: string | null;
+  filled_qty?: number | null;
+  steps?: Array<PlanStep & {
+    result?: {
+      placed?: {
+        parsed?: {
+          data?: {
+            order?: {
+              state?: string;
+              cumulative_quantity?: string | number;
+            };
+          };
+        };
+      };
+    };
+  }>;
   events?: PlanEvent[];
   updated_at?: string;
   strategy?: string;
 };
+
+function fillTruth(plan: ArmedPlan): { kind: "dry" | "filled" | "submitted_unfilled" | "unknown"; label: string } {
+  const open = plan.steps?.find((s) => s.phase === "open");
+  if (!plan.live || plan.dry_run || open?.status === "dry_run_done") {
+    return { kind: "dry", label: "Dry-run · not placed" };
+  }
+  const order = open?.result?.placed?.parsed?.data?.order;
+  const state = String(plan.order_state || order?.state || "").toLowerCase() || null;
+  const cum = Number(plan.filled_qty ?? order?.cumulative_quantity ?? 0);
+  if (cum > 0 || state === "filled" || state === "partially_filled") {
+    return {
+      kind: "filled",
+      label: plan.filled_notional != null ? `Filled ~$${plan.filled_notional}` : "Filled in Robinhood",
+    };
+  }
+  if (state === "queued" || state === "unconfirmed" || state === "confirmed" || open?.status === "done") {
+    return {
+      kind: "submitted_unfilled",
+      label: `Submitted · ${state || "queued"} · not filled (no position)`,
+    };
+  }
+  if (plan.open_filled && plan.filled_notional != null) {
+    return { kind: "unknown", label: `Marked ~$${plan.filled_notional} (verify in RH)` };
+  }
+  return { kind: "unknown", label: "No fill yet" };
+}
 
 const PHASES = ["wait", "open", "monitor", "add", "close"] as const;
 
@@ -127,9 +169,17 @@ function PlayCard({ plan }: { plan: ArmedPlan }) {
   const lastTick = [...(plan.events || [])].reverse().find((e) => e.event === "tick" || e.event === "tick_wait");
   const live = Boolean(plan.live);
   const monitoring = plan.status === "monitoring" || plan.status === "waiting_trigger";
+  const fill = fillTruth(plan);
+  const hasPosition = fill.kind === "filled";
 
   const pnlTone =
-    pnl == null ? "text-foreground/70" : pnl >= 0 ? "text-emerald-300" : "text-red-300";
+    !hasPosition && fill.kind !== "dry"
+      ? "text-foreground/70"
+      : pnl == null
+        ? "text-foreground/70"
+        : pnl >= 0
+          ? "text-emerald-300"
+          : "text-red-300";
 
   const toStop =
     mark != null && stop != null && entry != null
@@ -166,11 +216,24 @@ function PlayCard({ plan }: { plan: ArmedPlan }) {
             {" · "}Stop <span className="font-mono">{fmtPx(stop)}</span>
             {" · "}Target <span className="font-mono">{fmtPx(target)}</span>
           </p>
+          <p
+            className={`text-xs mt-1 font-medium ${
+              fill.kind === "submitted_unfilled" ? "text-red-300" : "text-foreground/65"
+            }`}
+          >
+            {fill.label}
+          </p>
         </div>
         <div className="text-right">
-          <div className={`text-2xl font-semibold tabular-nums ${pnlTone}`}>{fmtPct(pnl)}</div>
+          <div className={`text-2xl font-semibold tabular-nums ${pnlTone}`}>
+            {hasPosition || fill.kind === "dry" ? fmtPct(pnl) : "—"}
+          </div>
           <div className="text-xs text-foreground/60">
-            {plan.filled_notional != null ? `~$${plan.filled_notional} filled` : "sizing / paper"}
+            {fill.kind === "filled"
+              ? "Position P&L vs entry"
+              : fill.kind === "dry"
+                ? "Paper mark"
+                : "No position yet"}
           </div>
         </div>
       </div>
