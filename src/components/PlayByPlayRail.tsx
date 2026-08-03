@@ -309,7 +309,7 @@ export default function PlayByPlayRail() {
           </h2>
           <p className="text-sm text-foreground/80 mt-1 max-w-2xl">
             Real-time status for dry-runs and live Agentic plans — mark vs stop/target, phase, and
-            latest worker tick. Lab first; graduate to Industry Desk when it feels right.
+            latest worker tick. Pre-launch: keep this lab rail in sync with Industry Desk product.
           </p>
         </div>
         <button
