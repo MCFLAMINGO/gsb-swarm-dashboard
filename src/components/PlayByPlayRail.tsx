@@ -415,9 +415,8 @@ export default function PlayByPlayRail() {
           </h2>
           <p className="text-sm text-foreground/80 mt-1 max-w-2xl">
             Real-time status for dry-runs and live Agentic plans — mark vs stop/target, phase, and
-            latest worker tick. Desk Refresh now synthesizes global macro + micro Elite intel into
-            ranks before Approve. Off-hours Approve arms now and places at next Mon–Fri 9:30 ET open
-            (Sunday think → Monday fill). Pre-launch: keep in sync with Industry Desk.
+            desk-armed plans only (dry-run ≠ RH fill). Real Agentic holdings show in Industry Desk
+            “Your Robinhood book.” Desk Refresh = fiduciary cards + FINRA/SEC alt-data. Sync with product.
           </p>
         </div>
         <button
