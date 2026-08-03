@@ -416,8 +416,8 @@ export default function PlayByPlayRail() {
           <p className="text-sm text-foreground/80 mt-1 max-w-2xl">
             Real-time status for dry-runs and live Agentic plans — mark vs stop/target, phase, and
             latest worker tick. Desk Refresh builds fiduciary decision cards (edge/Kelly, agree vs
-            disagree, thesis + kill criteria) — not a Yahoo badge. Off-hours Approve arms for next
-            Mon–Fri 9:30 ET open. Pre-launch: keep in sync with Industry Desk.
+            disagree, FINRA ATS/RegSHO + Form 4, thesis + kill criteria). Public delayed transparency
+            only — no dark-web feeds. Off-hours Approve → next Mon–Fri 9:30 ET. Sync with Industry Desk.
           </p>
         </div>
         <button
