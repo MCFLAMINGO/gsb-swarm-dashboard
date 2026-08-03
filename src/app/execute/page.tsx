@@ -142,9 +142,16 @@ export default function ExecutePage() {
                   || "—"}
               </span>
               {" · "}
-              Place / Execute from{" "}
-              <Link href="/" className="text-accent hover:underline">Desk</Link>
-              {" or "}
+              Lab Execute here first, then ship to{" "}
+              <a
+                href="https://industry-desk.vercel.app/desk?book=ai"
+                target="_blank"
+                rel="noreferrer"
+                className="text-accent hover:underline"
+              >
+                Industry Desk
+              </a>
+              {" "}(product) or{" "}
               <Link href="/elite-deep-dive" className="text-accent hover:underline">Elite</Link>
               .
             </div>
@@ -174,11 +181,19 @@ export default function ExecutePage() {
             >
               Refresh status
             </button>
-            <Link
-              href="/"
+            <a
+              href="https://industry-desk.vercel.app/desk?book=ai"
+              target="_blank"
+              rel="noreferrer"
               className="inline-flex items-center gap-2 rounded-md border border-accent/40 bg-accent/10 text-accent px-4 py-2.5 text-base font-medium hover:bg-accent/20"
             >
-              <Crosshair className="h-4 w-4" /> Desk Execute →
+              <Crosshair className="h-4 w-4" /> Industry Desk (product) →
+            </a>
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-4 py-2.5 text-base font-medium text-foreground hover:border-primary/50"
+            >
+              Lab Desk →
             </Link>
             <Link
               href="/elite-deep-dive"
