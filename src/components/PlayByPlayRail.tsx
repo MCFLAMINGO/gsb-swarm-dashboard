@@ -36,6 +36,8 @@ type ArmedPlan = {
   filled_notional?: number | null;
   open_filled?: boolean;
   open_submitted?: boolean;
+  open_when?: string | null;
+  earliest_open_at?: number | null;
   order_state?: string | null;
   filled_qty?: number | null;
   steps?: Array<PlanStep & {
@@ -171,6 +173,22 @@ function PlayCard({ plan }: { plan: ArmedPlan }) {
   const monitoring = plan.status === "monitoring" || plan.status === "waiting_trigger";
   const fill = fillTruth(plan);
   const hasPosition = fill.kind === "filled";
+  const waitingSession =
+    plan.status === "waiting_trigger" &&
+    (plan.open_when === "next_rth" ||
+      Boolean(plan.earliest_open_at && Date.now() < plan.earliest_open_at));
+  const openAtLabel =
+    plan.earliest_open_at != null
+      ? new Date(plan.earliest_open_at).toLocaleString("en-US", {
+          timeZone: "America/New_York",
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+          timeZoneName: "short",
+        })
+      : null;
 
   const pnlTone =
     !hasPosition && fill.kind !== "dry"
@@ -208,7 +226,13 @@ function PlayCard({ plan }: { plan: ArmedPlan }) {
             >
               {live ? "LIVE" : "DRY-RUN"}
             </span>
-            <span className="text-xs text-foreground/60">{plan.status?.replace(/_/g, " ")}</span>
+            {waitingSession ? (
+              <span className="text-xs rounded px-1.5 py-0.5 border border-sky-500/40 bg-sky-500/15 text-sky-100">
+                Armed · opens {openAtLabel || "next RTH"}
+              </span>
+            ) : (
+              <span className="text-xs text-foreground/60">{plan.status?.replace(/_/g, " ")}</span>
+            )}
           </div>
           <p className="text-sm text-foreground/70 mt-1">
             Mark <span className="font-mono text-foreground">{fmtPx(mark)}</span>
@@ -372,7 +396,8 @@ export default function PlayByPlayRail() {
           </h2>
           <p className="text-sm text-foreground/80 mt-1 max-w-2xl">
             Real-time status for dry-runs and live Agentic plans — mark vs stop/target, phase, and
-            latest worker tick. Pre-launch: keep this lab rail in sync with Industry Desk product.
+            latest worker tick. Off-hours Approve arms now and places at next Mon–Fri 9:30 ET open
+            (Sunday think → Monday fill). Pre-launch: keep in sync with Industry Desk.
           </p>
         </div>
         <button
