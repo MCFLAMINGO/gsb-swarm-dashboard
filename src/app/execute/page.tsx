@@ -4,32 +4,61 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import Header from "@/components/layout/Header";
 import PlayByPlayRail from "@/components/PlayByPlayRail";
-import { Crosshair, Activity, Zap, Brain, Link2 } from "lucide-react";
+import { Crosshair, Activity, Zap, Brain, Link2, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 export default function ExecutePage() {
   const [rhStatus, setRhStatus] = useState<any>(null);
   const [portfolio, setPortfolio] = useState<any>(null);
   const [busy, setBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [pasteToken, setPasteToken] = useState("");
   const [pasteRefresh, setPasteRefresh] = useState("");
   const [testSymbol, setTestSymbol] = useState("F");
   const [testNotional, setTestNotional] = useState("10");
   const [reviewResult, setReviewResult] = useState<any>(null);
 
-  async function refresh() {
+  async function refresh(opts?: { manual?: boolean }) {
+    const manual = Boolean(opts?.manual);
+    if (manual) setRefreshing(true);
     try {
       const res = await fetch("/api/robinhood?action=status", { cache: "no-store" });
       const next = await res.json();
       setRhStatus(next);
+      let bp: string | null = null;
       if (next?.configured) {
         const p = await fetch("/api/robinhood?action=portfolio", { cache: "no-store" });
-        if (p.ok) setPortfolio(await p.json());
+        if (p.ok) {
+          const body = await p.json();
+          setPortfolio(body);
+          bp =
+            body?.portfolio?.parsed?.data?.buying_power?.buying_power ||
+            body?.portfolio?.parsed?.data?.cash ||
+            null;
+        }
       } else {
         setPortfolio(null);
       }
+      if (manual) {
+        const acct = next?.account_number
+          ? `••${String(next.account_number).slice(-4)}`
+          : null;
+        toast.success(next?.configured ? "Robinhood status updated" : "Status refreshed", {
+          description: [
+            next?.configured ? (acct ? `Account ${acct}` : "Connected") : "Not connected",
+            next?.live_trading_enabled ? "live ON" : "live off",
+            bp ? `BP $${bp}` : null,
+            new Date().toLocaleTimeString(),
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        });
+      }
     } catch (e) {
       setRhStatus({ configured: false, error: (e as Error).message });
+      if (manual) toast.error("Refresh failed", { description: (e as Error).message });
+    } finally {
+      if (manual) setRefreshing(false);
     }
   }
 
@@ -174,13 +203,17 @@ export default function ExecutePage() {
 
           <div className="flex flex-wrap gap-3">
             <button
-              onClick={async () => {
-                await refresh();
-                toast.success(connected ? "Still connected" : "Status refreshed");
-              }}
-              className="inline-flex items-center rounded-md border border-emerald-500/50 bg-emerald-500/15 text-emerald-200 px-4 py-2.5 text-base font-medium"
+              type="button"
+              disabled={refreshing || busy}
+              onClick={() => refresh({ manual: true })}
+              className="inline-flex items-center gap-2 rounded-md border border-emerald-500/50 bg-emerald-500/15 text-emerald-200 px-4 py-2.5 text-base font-medium disabled:opacity-50"
             >
-              Refresh status
+              {refreshing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              {refreshing ? "Refreshing…" : "Refresh status"}
             </button>
             <a
               href="https://industry-desk.vercel.app/desk?book=ai"
@@ -209,13 +242,18 @@ export default function ExecutePage() {
               Connections
             </Link>
             <button
-              disabled={busy}
+              type="button"
+              disabled={busy || refreshing}
               onClick={connect}
               title="Often fails with Robinhood Uh oh — prefer localhost bridge"
               className="inline-flex items-center gap-2 rounded-md border border-border bg-secondary px-4 py-2.5 text-sm text-foreground/80 disabled:opacity-50"
             >
-              <Link2 className="h-4 w-4" />
-              {connected ? "Reconnect (HTTPS)" : "Legacy HTTPS connect"}
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
+              {busy
+                ? "Opening Robinhood…"
+                : connected
+                  ? "Reconnect (HTTPS)"
+                  : "Legacy HTTPS connect"}
             </button>
           </div>
 

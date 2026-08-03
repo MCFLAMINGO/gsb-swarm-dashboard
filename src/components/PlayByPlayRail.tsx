@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Activity, Loader2, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 
 type PlanStep = {
   id?: string;
@@ -348,28 +349,44 @@ export default function PlayByPlayRail() {
   const [plans, setPlans] = useState<ArmedPlan[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { manual?: boolean }) => {
+    const manual = Boolean(opts?.manual);
+    if (manual) setRefreshing(true);
     try {
       const res = await fetch("/api/ceo", { cache: "no-store" });
       const text = await res.text();
       if (!text.trim()) throw new Error(`Empty plans response (${res.status})`);
       const data = JSON.parse(text) as { plans?: ArmedPlan[]; error?: string };
       if (data.error) throw new Error(data.error);
-      setPlans(data.plans || []);
+      const next = data.plans || [];
+      setPlans(next);
       setError(null);
-      setUpdatedAt(new Date().toISOString());
+      const at = new Date().toISOString();
+      setUpdatedAt(at);
+      if (manual) {
+        const open = next.filter((p) => p.status !== "completed" && p.status !== "cancelled");
+        toast.success("Play-by-play updated", {
+          description: `${open.length} open plan${open.length === 1 ? "" : "s"} · ${new Date(at).toLocaleTimeString()}`,
+        });
+      }
     } catch (e) {
-      setError((e as Error).message);
+      const msg = (e as Error).message;
+      setError(msg);
+      if (manual) {
+        toast.error("Play-by-play refresh failed", { description: msg });
+      }
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
     load();
-    const iv = window.setInterval(load, 10_000);
+    const iv = window.setInterval(() => load(), 10_000);
     return () => window.clearInterval(iv);
   }, [load]);
 
@@ -385,6 +402,8 @@ export default function PlayByPlayRail() {
     });
     return open;
   }, [plans]);
+
+  const spinning = loading || refreshing;
 
   return (
     <section className="rounded-lg border border-sky-500/35 bg-sky-500/10 p-5 md:p-6 space-y-4">
@@ -402,11 +421,12 @@ export default function PlayByPlayRail() {
         </div>
         <button
           type="button"
-          onClick={load}
-          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground/85 hover:border-primary/50"
+          disabled={spinning}
+          onClick={() => load({ manual: true })}
+          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground/85 hover:border-primary/50 disabled:opacity-50"
         >
-          {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-          Refresh
+          {spinning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+          {refreshing ? "Refreshing…" : "Refresh open book"}
         </button>
       </div>
 
