@@ -183,7 +183,8 @@ export default function ExecutePage() {
               </a>
               {" "}(product). Entry is{" "}
               <span className="text-foreground font-medium">NIM fusion</span> over the full desk
-              pack — not a public uptape script. Kelly only sizes after. Use{" "}
+              pack — not a public uptape script. Hints are watched across sessions; week/month
+              recurrence unlocks a larger-move strategy. Kelly only sizes after. Use{" "}
               <span className="text-foreground font-medium">Protect live</span> for naked holds or{" "}
               <Link href="/elite-deep-dive" className="text-accent hover:underline">Elite</Link>
               .
