@@ -156,7 +156,15 @@ function phaseIndex(steps: PlanStep[] | undefined, status?: string) {
   return 1;
 }
 
-function PlayCard({ plan }: { plan: ArmedPlan }) {
+function PlayCard({
+  plan,
+  busyPhase,
+  onPhase,
+}: {
+  plan: ArmedPlan;
+  busyPhase: string | null;
+  onPhase: (planId: string, phase: string) => void;
+}) {
   const levels = plan.levels || {};
   const entry = num(levels.entry) ?? num(plan.last_mark);
   const stop = num(levels.stop);
@@ -174,6 +182,7 @@ function PlayCard({ plan }: { plan: ArmedPlan }) {
   const monitoring = plan.status === "monitoring" || plan.status === "waiting_trigger";
   const fill = fillTruth(plan);
   const hasPosition = fill.kind === "filled";
+  const doneOrCancelled = plan.status === "completed" || plan.status === "cancelled";
   const waitingSession =
     plan.status === "waiting_trigger" &&
     (plan.open_when === "next_rth" ||
@@ -305,31 +314,46 @@ function PlayCard({ plan }: { plan: ArmedPlan }) {
         </div>
       </div>
 
-      {/* Phase strip */}
+      {/* Phase strip — actionable */}
       <ol className="grid grid-cols-5 gap-1">
         {PHASES.map((phase, i) => {
           const step = plan.steps?.find((s) => s.phase === phase);
           const done = step?.status === "done" || step?.status === "dry_run_done";
           const active = i === activePhase;
           const skipped = !step && phase === "wait";
+          const busy = busyPhase === `${plan.id}:${phase}`;
           return (
-            <li
-              key={phase}
-              className={`rounded-md border px-1.5 py-1.5 text-center text-[11px] capitalize ${
-                active
-                  ? "border-accent/50 bg-accent/15 text-foreground font-semibold"
-                  : done
-                    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-100/90"
-                    : skipped
-                      ? "border-border/30 bg-background/20 text-foreground/35"
-                      : "border-border/40 bg-background/30 text-foreground/55"
-              }`}
-            >
-              {phase}
+            <li key={phase}>
+              <button
+                type="button"
+                disabled={doneOrCancelled || busy}
+                title={
+                  phase === "open" && !hasPosition
+                    ? "Retry / force open (short = long put on Agentic)"
+                    : phase === "close" && !hasPosition
+                      ? "No fill — cancels this armed plan"
+                      : `Run ${phase} now`
+                }
+                onClick={() => onPhase(plan.id, phase)}
+                className={`w-full rounded-md border px-1.5 py-1.5 text-center text-[11px] capitalize transition-colors hover:border-accent/60 disabled:cursor-not-allowed disabled:opacity-50 ${
+                  active
+                    ? "border-accent/50 bg-accent/15 text-foreground font-semibold"
+                    : done
+                      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-100/90"
+                      : skipped
+                        ? "border-border/30 bg-background/20 text-foreground/35"
+                        : "border-border/40 bg-background/30 text-foreground/55"
+                } ${busy ? "animate-pulse" : ""}`}
+              >
+                {busy ? "…" : phase}
+              </button>
             </li>
           );
         })}
       </ol>
+      <p className="text-[11px] text-foreground/55">
+        Tap a phase to act — wait/monitor ticks; open retries fill; add sizes in; close exits (or cancels if no fill).
+      </p>
 
       {latest && (
         <p className="text-xs text-foreground/70">
@@ -351,6 +375,7 @@ export default function PlayByPlayRail() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+  const [busyPhase, setBusyPhase] = useState<string | null>(null);
 
   const load = useCallback(async (opts?: { manual?: boolean }) => {
     const manual = Boolean(opts?.manual);
@@ -389,6 +414,49 @@ export default function PlayByPlayRail() {
     const iv = window.setInterval(() => load(), 10_000);
     return () => window.clearInterval(iv);
   }, [load]);
+
+  const handlePhase = useCallback(
+    async (planId: string, phase: string) => {
+      const key = `${planId}:${phase}`;
+      setBusyPhase(key);
+      try {
+        const res = await fetch("/api/ceo", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "tick-plan", planId, phase }),
+        });
+        const text = await res.text();
+        if (!text.trim()) throw new Error(`Empty tick response (${res.status})`);
+        const out = JSON.parse(text) as {
+          ok?: boolean;
+          error?: string;
+          detail?: string;
+          actions?: Array<{ type?: string; result?: string }>;
+          plan?: ArmedPlan;
+        };
+        if (out.error) throw new Error(out.error);
+        if (out.plan) {
+          setPlans((prev) => prev.map((p) => (p.id === planId ? (out.plan as ArmedPlan) : p)));
+        } else {
+          await load();
+        }
+        const action = out.actions?.[0]?.type || phase;
+        const detail = out.detail || out.actions?.[0]?.result || out.plan?.status || "ok";
+        if (action === "cancelled_no_fill" || action === "cancelled_unsupported_no_fill") {
+          toast.message("Plan cancelled", { description: String(detail) });
+        } else if (String(detail).includes("EQUITY_SHORT") || String(detail).includes("UNSUPPORTED")) {
+          toast.error(`${phase} blocked`, { description: String(detail) });
+        } else {
+          toast.success(`${phase} · ${action}`, { description: String(detail).slice(0, 160) });
+        }
+      } catch (e) {
+        toast.error(`${phase} failed`, { description: (e as Error).message });
+      } finally {
+        setBusyPhase(null);
+      }
+    },
+    [load]
+  );
 
   const active = useMemo(() => {
     const open = plans.filter(
@@ -442,7 +510,7 @@ export default function PlayByPlayRail() {
 
       <div className="space-y-3">
         {active.map((p) => (
-          <PlayCard key={p.id} plan={p} />
+          <PlayCard key={p.id} plan={p} busyPhase={busyPhase} onPhase={handlePhase} />
         ))}
       </div>
 
