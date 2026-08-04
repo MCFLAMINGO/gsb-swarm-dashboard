@@ -181,7 +181,9 @@ export default function ExecutePage() {
               >
                 Industry Desk
               </a>
-              {" "}(product) or{" "}
+              {" "}(product). Bare RH holds are not a strategy — use{" "}
+              <span className="text-foreground font-medium">Protect live</span> on Live positions
+              (stop ~1.5% + trail, no new buy) or{" "}
               <Link href="/elite-deep-dive" className="text-accent hover:underline">Elite</Link>
               .
             </div>
