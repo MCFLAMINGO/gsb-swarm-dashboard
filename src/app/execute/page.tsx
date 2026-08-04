@@ -181,9 +181,10 @@ export default function ExecutePage() {
               >
                 Industry Desk
               </a>
-              {" "}(product). Bare RH holds are not a strategy — use{" "}
-              <span className="text-foreground font-medium">Protect live</span> on Live positions
-              (stop ~1.5% + trail, no new buy) or{" "}
+              {" "}(product). Agents must{" "}
+              <span className="text-foreground font-medium">bank the 1% day band</span> (protect/trail,
+              stop spraying) — not buy-and-hope. Use{" "}
+              <span className="text-foreground font-medium">Protect live</span> for naked holds or{" "}
               <Link href="/elite-deep-dive" className="text-accent hover:underline">Elite</Link>
               .
             </div>
