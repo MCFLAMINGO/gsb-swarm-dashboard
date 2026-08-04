@@ -181,9 +181,13 @@ export default function ExecutePage() {
               >
                 Industry Desk
               </a>
-              {" "}(product). Bare RH holds are not a strategy — use{" "}
-              <span className="text-foreground font-medium">Protect live</span> on Live positions
-              (stop ~1.5% + trail, no new buy) or{" "}
+              {" "}(product). Entry is{" "}
+              <span className="text-foreground font-medium">NIM fusion</span> over the full desk
+              pack — not a public uptape script. Hints are watched across sessions; week/month
+              recurrence unlocks a larger-move strategy. A daily letter emails the account owner
+              the continuing book (yesterday → today → tomorrow → further out). Kelly only sizes
+              after. Use{" "}
+              <span className="text-foreground font-medium">Protect live</span> for naked holds or{" "}
               <Link href="/elite-deep-dive" className="text-accent hover:underline">Elite</Link>
               .
             </div>
