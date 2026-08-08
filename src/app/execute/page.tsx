@@ -181,12 +181,14 @@ export default function ExecutePage() {
               >
                 Industry Desk
               </a>
-              {" "}(product). Entry is{" "}
+              {" "}(product). Agents must{" "}
+              <span className="text-foreground font-medium">bank the 1% day band</span>{" "}
+              (protect/trail, stop spraying) — not buy-and-hope. Entry is{" "}
               <span className="text-foreground font-medium">NIM fusion</span> over the full desk
-              pack — not a public uptape script. Hints are watched across sessions; week/month
-              recurrence unlocks a larger-move strategy. A daily letter emails the account owner
-              the continuing book (yesterday → today → tomorrow → further out). Kelly only sizes
-              after. Use{" "}
+              pack; initial size rails are{" "}
+              <span className="text-foreground font-medium">$50 standard / $150 high-conviction</span>.
+              Hints are watched across sessions; week/month recurrence unlocks a larger-move strategy.
+              Kelly only sizes after. Use{" "}
               <span className="text-foreground font-medium">Protect live</span> for naked holds or{" "}
               <Link href="/elite-deep-dive" className="text-accent hover:underline">Elite</Link>
               .
