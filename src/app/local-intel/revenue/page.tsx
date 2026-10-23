@@ -225,10 +225,10 @@ function BarRow({ label, value, max, amount, color = "#00e5a0" }: {
 const VISIBILITY_CARDS = [
   {
     name: "Smithery",
-    category: "MCP Registry",
-    status: "submitted",
+    category: "Directory only",
+    status: "direct MCP",
     statusColor: "#22c55e",
-    link: "https://smithery.ai",
+    link: "https://gsb-swarm-production.up.railway.app/api/local-intel/mcp",
     icon: Globe
   },
   {
